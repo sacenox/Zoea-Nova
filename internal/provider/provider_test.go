@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -142,5 +143,159 @@ func TestToOpenAIMessages(t *testing.T) {
 	}
 	if result[1].Content != "Hello" {
 		t.Errorf("expected content=Hello, got %s", result[1].Content)
+	}
+}
+
+func TestToOpenAIMessagesWithToolCalls(t *testing.T) {
+	messages := []Message{
+		{Role: "user", Content: "What's the weather?"},
+		{
+			Role:    "assistant",
+			Content: "",
+			ToolCalls: []ToolCall{
+				{ID: "call_123", Name: "get_weather", Arguments: json.RawMessage(`{"location":"NYC"}`)},
+			},
+		},
+		{Role: "tool", Content: `{"temp": 72}`, ToolCallID: "call_123"},
+	}
+
+	result := toOpenAIMessages(messages)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(result))
+	}
+
+	// Check assistant message has tool calls
+	assistantMsg := result[1]
+	if len(assistantMsg.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(assistantMsg.ToolCalls))
+	}
+	if assistantMsg.ToolCalls[0].ID != "call_123" {
+		t.Errorf("expected tool call ID=call_123, got %s", assistantMsg.ToolCalls[0].ID)
+	}
+	if assistantMsg.ToolCalls[0].Function.Name != "get_weather" {
+		t.Errorf("expected function name=get_weather, got %s", assistantMsg.ToolCalls[0].Function.Name)
+	}
+
+	// Check tool result message has ToolCallID
+	toolMsg := result[2]
+	if toolMsg.ToolCallID != "call_123" {
+		t.Errorf("expected ToolCallID=call_123, got %s", toolMsg.ToolCallID)
+	}
+}
+
+func TestMockProviderChatWithTools(t *testing.T) {
+	toolCalls := []ToolCall{
+		{ID: "call_abc", Name: "test_tool", Arguments: json.RawMessage(`{}`)},
+	}
+	mock := NewMock("test", "thinking...").WithToolCalls(toolCalls)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Do something"}}
+	tools := []Tool{{Name: "test_tool", Description: "A test tool"}}
+
+	resp, err := mock.ChatWithTools(ctx, messages, tools)
+	if err != nil {
+		t.Fatalf("ChatWithTools() error: %v", err)
+	}
+
+	if resp.Content != "thinking..." {
+		t.Errorf("expected content='thinking...', got %s", resp.Content)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
+	}
+	if resp.ToolCalls[0].Name != "test_tool" {
+		t.Errorf("expected tool name=test_tool, got %s", resp.ToolCalls[0].Name)
+	}
+}
+
+func TestMockProviderChatWithToolsError(t *testing.T) {
+	expectedErr := errors.New("tools error")
+	mock := NewMock("test", "").WithChatError(expectedErr)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Do something"}}
+	tools := []Tool{{Name: "test_tool", Description: "A test tool"}}
+
+	_, err := mock.ChatWithTools(ctx, messages, tools)
+	if !errors.Is(err, expectedErr) {
+		t.Errorf("expected %v, got %v", expectedErr, err)
+	}
+}
+
+func TestMockProviderWithResponse(t *testing.T) {
+	mock := NewMock("test", "initial")
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+
+	// Initial response
+	resp, _ := mock.Chat(ctx, messages)
+	if resp != "initial" {
+		t.Errorf("expected 'initial', got %s", resp)
+	}
+
+	// Change response
+	mock.WithResponse("updated")
+	resp, _ = mock.Chat(ctx, messages)
+	if resp != "updated" {
+		t.Errorf("expected 'updated', got %s", resp)
+	}
+}
+
+func TestMockProviderConcurrentAccess(t *testing.T) {
+	mock := NewMock("test", "response")
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+
+	// Run concurrent reads and writes
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			mock.Chat(ctx, messages)
+			done <- true
+		}()
+		go func() {
+			mock.WithResponse("new response")
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 20; i++ {
+		<-done
+	}
+}
+
+func TestToOpenAIMessagesEmpty(t *testing.T) {
+	result := toOpenAIMessages([]Message{})
+	if len(result) != 0 {
+		t.Errorf("expected empty slice, got %d messages", len(result))
+	}
+}
+
+func TestToOpenAIMessagesMultipleToolCalls(t *testing.T) {
+	messages := []Message{
+		{
+			Role:    "assistant",
+			Content: "",
+			ToolCalls: []ToolCall{
+				{ID: "call_1", Name: "tool_a", Arguments: json.RawMessage(`{"a":1}`)},
+				{ID: "call_2", Name: "tool_b", Arguments: json.RawMessage(`{"b":2}`)},
+			},
+		},
+	}
+
+	result := toOpenAIMessages(messages)
+
+	if len(result[0].ToolCalls) != 2 {
+		t.Fatalf("expected 2 tool calls, got %d", len(result[0].ToolCalls))
+	}
+	if result[0].ToolCalls[0].Function.Arguments != `{"a":1}` {
+		t.Errorf("expected arguments={\"a\":1}, got %s", result[0].ToolCalls[0].Function.Arguments)
+	}
+	if result[0].ToolCalls[1].Function.Arguments != `{"b":2}` {
+		t.Errorf("expected arguments={\"b\":2}, got %s", result[0].ToolCalls[1].Function.Arguments)
 	}
 }

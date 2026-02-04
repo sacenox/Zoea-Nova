@@ -199,7 +199,7 @@ func (m *mockOrchestrator) MaxAgents() int {
 	return 16
 }
 
-func (m *mockOrchestrator) SendMessage(agentID, message string) error {
+func (m *mockOrchestrator) SendMessageAsync(agentID, message string) error {
 	for _, a := range m.agents {
 		if a.ID == agentID {
 			return nil
@@ -208,8 +208,16 @@ func (m *mockOrchestrator) SendMessage(agentID, message string) error {
 	return errors.New("agent not found")
 }
 
-func (m *mockOrchestrator) Broadcast(message string) error {
+func (m *mockOrchestrator) BroadcastAsync(message string) error {
 	return nil
+}
+
+func (m *mockOrchestrator) SearchMessages(agentID, query string, limit int) ([]SearchResult, error) {
+	return []SearchResult{}, nil
+}
+
+func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]BroadcastResult, error) {
+	return []BroadcastResult{}, nil
 }
 
 func TestOrchestratorTools(t *testing.T) {
@@ -224,9 +232,9 @@ func TestOrchestratorTools(t *testing.T) {
 	proxy := NewProxy("")
 	RegisterOrchestratorTools(proxy, orchestrator)
 
-	// Should have 5 orchestrator tools registered
-	if proxy.LocalToolCount() != 5 {
-		t.Errorf("expected 5 local tools, got %d", proxy.LocalToolCount())
+	// Should have 7 orchestrator tools registered
+	if proxy.LocalToolCount() != 7 {
+		t.Errorf("expected 7 local tools, got %d", proxy.LocalToolCount())
 	}
 
 	ctx := context.Background()

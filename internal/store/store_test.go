@@ -1,8 +1,20 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 )
+
+func setupStoreTest(t *testing.T) (*Store, func()) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	return s, func() { s.Close() }
+}
 
 func TestOpenMemory(t *testing.T) {
 	s, err := OpenMemory()
@@ -24,11 +36,8 @@ func TestOpenMemory(t *testing.T) {
 }
 
 func TestAgentCRUD(t *testing.T) {
-	s, err := OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
 
 	// Create
 	agent, err := s.CreateAgent("test-agent", "ollama", "llama3")
@@ -101,11 +110,8 @@ func TestAgentCRUD(t *testing.T) {
 }
 
 func TestMemoryCRUD(t *testing.T) {
-	s, err := OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
 
 	// Create agent first
 	agent, err := s.CreateAgent("memory-test", "ollama", "llama3")
@@ -183,11 +189,8 @@ func TestMemoryCRUD(t *testing.T) {
 }
 
 func TestCascadeDelete(t *testing.T) {
-	s, err := OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
 
 	agent, _ := s.CreateAgent("cascade-test", "ollama", "llama3")
 	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "test message")
@@ -208,13 +211,10 @@ func TestCascadeDelete(t *testing.T) {
 }
 
 func TestUpdateNonExistentAgent(t *testing.T) {
-	s, err := OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
 
-	err = s.UpdateAgentState("nonexistent-id", AgentStateRunning)
+	err := s.UpdateAgentState("nonexistent-id", AgentStateRunning)
 	if err == nil {
 		t.Error("expected error updating non-existent agent")
 	}

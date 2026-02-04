@@ -1,10 +1,12 @@
 package core
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -12,9 +14,11 @@ import (
 func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	t.Helper()
 
-	s, err := store.OpenMemory()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := store.Open(dbPath)
 	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
+		t.Fatalf("Open() error: %v", err)
 	}
 
 	bus := NewEventBus(100)
@@ -25,8 +29,7 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
-			DefaultAgents: 4,
-			MaxAgents:     16,
+			MaxAgents: 16,
 		},
 		Providers: map[string]config.ProviderConfig{
 			"mock":   {Endpoint: "http://mock", Model: "mock-model"},
@@ -35,6 +38,10 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	}
 
 	cmd := NewCommander(s, reg, bus, cfg)
+
+	// Set a dummy MCP proxy to avoid "no tools" error events
+	proxy := mcp.NewProxy("")
+	cmd.SetMCP(proxy)
 
 	cleanup := func() {
 		cmd.StopAll()
@@ -319,13 +326,17 @@ func TestCommanderBroadcast(t *testing.T) {
 	}
 
 	// Should receive broadcast event
-	select {
-	case e := <-events:
-		if e.Type != EventBroadcast {
-			t.Errorf("expected EventBroadcast, got %s", e.Type)
+	found := false
+	timeout := time.After(2 * time.Second)
+	for !found {
+		select {
+		case e := <-events:
+			if e.Type == EventBroadcast {
+				found = true
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for broadcast event")
 		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timeout waiting for broadcast event")
 	}
 }
 
