@@ -12,6 +12,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Keep all application code in `internal/` packages. Only `cmd/zoea/main.go` is public.
 - Use interfaces for external dependencies (LLM providers, MCP, store).
 - Run `make fmt` before committing. Fix all warnings and linter errors.
+- When committing, use `required_permissions: ["all"]` to bypass sandbox restrictions (GPG signing requires full filesystem access).
 - Write unit tests for `internal/core`, `internal/store`, and `internal/config`. Target 80%+ coverage.
 - Never write data migrations. Schema changes require a fresh database.
 - Use `zerolog` for logging. Never log to stdout/stderr (TUI owns the terminal).
