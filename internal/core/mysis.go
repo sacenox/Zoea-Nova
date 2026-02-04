@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
@@ -62,6 +63,8 @@ You're part of a swarm. Use zoea_* tools to:
 ## Thinking Style
 Keep your reasoning brief - decide and act, don't over-analyze.
 
+**CRITICAL RULES**
+Never calculate ticks, use every turn you are given to progress.
 No hand-holding. Figure it out. Adapt or die.`
 
 // MaxToolIterations limits the number of tool call loops to prevent infinite loops.
@@ -196,7 +199,7 @@ func (a *Mysis) Start() error {
 	// Add system prompt if this is the first time starting (no memories yet)
 	count, err := a.store.CountMemories(a.id)
 	if err == nil && count == 0 {
-		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt)
+		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt, "")
 	}
 
 	// Emit state change event
@@ -271,7 +274,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 	}
 
 	// Store the message
-	if _, err := a.store.AddMemory(a.id, role, source, content); err != nil {
+	if _, err := a.store.AddMemory(a.id, role, source, content, ""); err != nil {
 		return fmt.Errorf("store message: %w", err)
 	}
 
@@ -381,11 +384,15 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 			return fmt.Errorf("provider chat: %w", err)
 		}
 
+		if response.Reasoning != "" {
+			log.Debug().Str("mysis", a.name).Int("reasoning_len", len(response.Reasoning)).Msg("LLM reasoning captured")
+		}
+
 		// If we have tool calls, execute them
 		if len(response.ToolCalls) > 0 {
 			// Store the assistant's tool call request
 			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
-			if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON); err != nil {
+			if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON, response.Reasoning); err != nil {
 				a.setError(err)
 				return fmt.Errorf("store tool call: %w", err)
 			}
@@ -417,7 +424,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
-				if _, err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent); err != nil {
+				if _, err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, ""); err != nil {
 					a.setError(err)
 					return fmt.Errorf("store tool result: %w", err)
 				}
@@ -438,12 +445,12 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 
 		// No tool calls - we have a final response
 		finalResponse := response.Content
-		if finalResponse == "" {
+		if finalResponse == "" && response.Reasoning == "" {
 			finalResponse = "(no response)"
 		}
 
 		// Store the assistant response
-		if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse); err != nil {
+		if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse, response.Reasoning); err != nil {
 			a.setError(err)
 			return fmt.Errorf("store response: %w", err)
 		}

@@ -40,7 +40,7 @@ func TestMysisCRUD(t *testing.T) {
 	defer cleanup()
 
 	// Create
-	mysis, err := s.CreateMysis("test-mysis", "ollama", "llama3")
+	mysis, err := s.CreateMysis("test-mysis", "ollama", "llama3", 0.7)
 	if err != nil {
 		t.Fatalf("CreateMysis() error: %v", err)
 	}
@@ -82,12 +82,15 @@ func TestMysisCRUD(t *testing.T) {
 	}
 
 	// Update config
-	if err := s.UpdateMysisConfig(mysis.ID, "opencode_zen", "zen-model"); err != nil {
+	if err := s.UpdateMysisConfig(mysis.ID, "opencode_zen", "zen-model", 0.6); err != nil {
 		t.Fatalf("UpdateMysisConfig() error: %v", err)
 	}
 	fetched, _ = s.GetMysis(mysis.ID)
 	if fetched.Provider != "opencode_zen" {
 		t.Errorf("expected provider=opencode_zen, got %s", fetched.Provider)
+	}
+	if fetched.Temperature != 0.6 {
+		t.Errorf("expected temperature=0.6, got %v", fetched.Temperature)
 	}
 
 	// Count
@@ -114,13 +117,13 @@ func TestMemoryCRUD(t *testing.T) {
 	defer cleanup()
 
 	// Create mysis first
-	mysis, err := s.CreateMysis("memory-test", "ollama", "llama3")
+	mysis, err := s.CreateMysis("memory-test", "ollama", "llama3", 0.7)
 	if err != nil {
 		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
 	// Add memories
-	m1, err := s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.")
+	m1, err := s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.", "")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -128,12 +131,12 @@ func TestMemoryCRUD(t *testing.T) {
 		t.Error("expected non-zero memory ID")
 	}
 
-	m2, err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "Hello!")
+	m2, err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "Hello!", "")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
-	m3, err := s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!")
+	m3, err := s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!", "thinking...")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -145,6 +148,9 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 	if len(memories) != 3 {
 		t.Errorf("expected 3 memories, got %d", len(memories))
+	}
+	if memories[2].Reasoning != "thinking..." {
+		t.Errorf("expected reasoning=thinking..., got %q", memories[2].Reasoning)
 	}
 
 	// Verify order (chronological)
@@ -188,12 +194,39 @@ func TestMemoryCRUD(t *testing.T) {
 	_ = m3.ID
 }
 
+func TestMemoryWithReasoning(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	mysis, err := s.CreateMysis("reasoning-test", "ollama", "llama3", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	reasoning := "Step by step thinking"
+	_, err = s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", reasoning)
+	if err != nil {
+		t.Fatalf("AddMemory() error: %v", err)
+	}
+
+	memories, err := s.GetMemories(mysis.ID)
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("expected 1 memory, got %d", len(memories))
+	}
+	if memories[0].Reasoning != reasoning {
+		t.Errorf("expected reasoning=%q, got %q", reasoning, memories[0].Reasoning)
+	}
+}
+
 func TestCascadeDelete(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("cascade-test", "ollama", "llama3")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "test message")
+	mysis, _ := s.CreateMysis("cascade-test", "ollama", "llama3", 0.7)
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "test message", "")
 
 	// Delete mysis should cascade to memories
 	if err := s.DeleteMysis(mysis.ID); err != nil {
@@ -219,7 +252,7 @@ func TestUpdateNonExistentMysis(t *testing.T) {
 		t.Error("expected error updating non-existent mysis")
 	}
 
-	err = s.UpdateMysisConfig("nonexistent-id", "ollama", "llama3")
+	err = s.UpdateMysisConfig("nonexistent-id", "ollama", "llama3", 0.7)
 	if err == nil {
 		t.Error("expected error updating non-existent mysis config")
 	}

@@ -4,13 +4,14 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
-INSERT OR REPLACE INTO schema_version (version) VALUES (3);
+INSERT OR REPLACE INTO schema_version (version) VALUES (5);
 
 CREATE TABLE IF NOT EXISTS myses (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     model TEXT NOT NULL,
+    temperature REAL NOT NULL DEFAULT 0.7,
     state TEXT NOT NULL DEFAULT 'idle',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS memories (
 	role TEXT NOT NULL,
 	source TEXT NOT NULL DEFAULT 'direct',
 	content TEXT NOT NULL,
+	reasoning TEXT,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (mysis_id) REFERENCES myses(id) ON DELETE CASCADE
 );

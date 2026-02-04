@@ -9,6 +9,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
+	"golang.org/x/time/rate"
 )
 
 func setupCommanderAsyncTest(t *testing.T) (*Commander, *store.Store, *EventBus, func()) {
@@ -24,9 +25,9 @@ func setupCommanderAsyncTest(t *testing.T) (*Commander, *store.Store, *EventBus,
 	bus := NewEventBus(100)
 	reg := provider.NewRegistry()
 	cfg := config.DefaultConfig()
-	cfg.Providers["mock"] = config.ProviderConfig{Model: "test-model"}
-	cfg.Providers["mock1"] = config.ProviderConfig{Model: "test-model"}
-	cfg.Providers["mock2"] = config.ProviderConfig{Model: "test-model"}
+	cfg.Providers["mock"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
+	cfg.Providers["mock1"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
+	cfg.Providers["mock2"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
 
 	c := NewCommander(s, reg, bus, cfg)
 
@@ -46,8 +47,8 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	c, _, bus, cleanup := setupCommanderAsyncTest(t)
 	defer cleanup()
 
-	mock := provider.NewMock("mock", "response")
-	c.registry.Register(mock)
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
 
 	mysis, _ := c.CreateMysis("async-mysis", "mock")
 
@@ -92,10 +93,9 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 	defer cleanup()
 
 	// Use separate mocks to avoid any potential contention
-	m1 := provider.NewMock("mock1", "response1")
-	m2 := provider.NewMock("mock2", "response2")
-	c.registry.Register(m1)
-	c.registry.Register(m2)
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock1", "response1", limiter))
+	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock2", "response2", limiter))
 
 	a1, err := c.CreateMysis("m1", "mock1")
 	if err != nil {

@@ -216,6 +216,10 @@ func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]S
 	return []SearchResult{}, nil
 }
 
+func (m *mockOrchestrator) SearchReasoning(mysisID, query string, limit int) ([]ReasoningResult, error) {
+	return []ReasoningResult{}, nil
+}
+
 func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]BroadcastResult, error) {
 	return []BroadcastResult{}, nil
 }
@@ -232,9 +236,8 @@ func TestOrchestratorTools(t *testing.T) {
 	proxy := NewProxy("")
 	RegisterOrchestratorTools(proxy, orchestrator)
 
-	// Should have 7 orchestrator tools registered
-	if proxy.LocalToolCount() != 7 {
-		t.Errorf("expected 7 local tools, got %d", proxy.LocalToolCount())
+	if proxy.LocalToolCount() != 8 {
+		t.Errorf("expected 8 local tools, got %d", proxy.LocalToolCount())
 	}
 
 	ctx := context.Background()

@@ -20,7 +20,7 @@ func TestGetSystemMemory(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
 	// No system memory yet
 	_, err := s.GetSystemMemory(mysis.ID)
@@ -30,10 +30,10 @@ func TestGetSystemMemory(t *testing.T) {
 
 	// Add system memory
 	expected := "You are a test."
-	s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, expected)
+	s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, expected, "")
 
 	// Add other memories
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "")
 
 	system, err := s.GetSystemMemory(mysis.ID)
 	if err != nil {
@@ -48,11 +48,11 @@ func TestSearchMemories(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "I like apples")
-	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "I like apples", "")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?", "")
 
 	// Search for "apples"
 	results, err := s.SearchMemories(mysis.ID, "apples", 10)
@@ -77,12 +77,12 @@ func TestSearchBroadcasts(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	mysis1, _ := s.CreateMysis("mysis1", "mock", "model")
-	mysis2, _ := s.CreateMysis("mysis2", "mock", "model")
+	mysis1, _ := s.CreateMysis("mysis1", "mock", "model", 0.7)
+	mysis2, _ := s.CreateMysis("mysis2", "mock", "model", 0.7)
 
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1")
-	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2")
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1", "")
+	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2", "")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message", "")
 
 	// Search for "Broadcast"
 	results, err := s.SearchBroadcasts("Broadcast", 10)
@@ -105,16 +105,35 @@ func TestSearchBroadcasts(t *testing.T) {
 	}
 }
 
+func TestSearchReasoning(t *testing.T) {
+	s, cleanup := setupMemoriesTest(t)
+	defer cleanup()
+
+	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
+
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "I am thinking about mining")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "Trading strategy")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "")
+
+	results, err := s.SearchReasoning(mysis.ID, "mining", 10)
+	if err != nil {
+		t.Fatalf("SearchReasoning() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(results))
+	}
+}
+
 func TestGetRecentBroadcasts(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B1")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B2")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B3")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "D1")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B1", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B2", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B3", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "D1", "")
 
 	results, err := s.GetRecentBroadcasts(2)
 	if err != nil {

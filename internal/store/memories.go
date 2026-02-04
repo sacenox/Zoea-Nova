@@ -33,17 +33,18 @@ type Memory struct {
 	Role      MemoryRole
 	Source    MemorySource
 	Content   string
+	Reasoning string
 	CreatedAt time.Time
 }
 
 // AddMemory adds a memory entry for a mysis.
-func (s *Store) AddMemory(mysisID string, role MemoryRole, source MemorySource, content string) (*Memory, error) {
+func (s *Store) AddMemory(mysisID string, role MemoryRole, source MemorySource, content string, reasoning string) (*Memory, error) {
 	now := time.Now().UTC()
 
 	result, err := s.db.Exec(`
-		INSERT INTO memories (mysis_id, role, source, content, created_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, mysisID, role, source, content, now)
+		INSERT INTO memories (mysis_id, role, source, content, reasoning, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, mysisID, role, source, content, reasoning, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
@@ -55,6 +56,7 @@ func (s *Store) AddMemory(mysisID string, role MemoryRole, source MemorySource, 
 		Role:      role,
 		Source:    source,
 		Content:   content,
+		Reasoning: reasoning,
 		CreatedAt: now,
 	}, nil
 }
@@ -62,7 +64,7 @@ func (s *Store) AddMemory(mysisID string, role MemoryRole, source MemorySource, 
 // GetMemories retrieves all memories for a mysis, ordered by creation time.
 func (s *Store) GetMemories(mysisID string) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, mysis_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, reasoning, created_at
 		FROM memories
 		WHERE mysis_id = ?
 		ORDER BY created_at ASC
@@ -75,7 +77,7 @@ func (s *Store) GetMemories(mysisID string) ([]*Memory, error) {
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.Reasoning, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)
@@ -88,12 +90,12 @@ func (s *Store) GetMemories(mysisID string) ([]*Memory, error) {
 func (s *Store) GetSystemMemory(mysisID string) (*Memory, error) {
 	var m Memory
 	err := s.db.QueryRow(`
-		SELECT id, mysis_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, reasoning, created_at
 		FROM memories
 		WHERE mysis_id = ? AND role = 'system' AND source = 'system'
 		ORDER BY created_at ASC
 		LIMIT 1
-	`, mysisID).Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt)
+	`, mysisID).Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.Reasoning, &m.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +105,7 @@ func (s *Store) GetSystemMemory(mysisID string) (*Memory, error) {
 // GetRecentMemories retrieves the most recent N memories for a mysis.
 func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, mysis_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, reasoning, created_at
 		FROM memories
 		WHERE mysis_id = ?
 		ORDER BY created_at DESC
@@ -117,7 +119,7 @@ func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error) 
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.Reasoning, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)
@@ -199,7 +201,7 @@ func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
 // Returns memories where content contains the query string (case-sensitive).
 func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, mysis_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, reasoning, created_at
 		FROM memories
 		WHERE mysis_id = ? AND content LIKE '%' || ? || '%'
 		ORDER BY created_at DESC
@@ -213,13 +215,42 @@ func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, err
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.Reasoning, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)
 	}
 
 	// Reverse to get chronological order (oldest first)
+	for i, j := 0, len(memories)-1; i < j; i, j = i+1, j-1 {
+		memories[i], memories[j] = memories[j], memories[i]
+	}
+
+	return memories, rows.Err()
+}
+
+func (s *Store) SearchReasoning(mysisID, query string, limit int) ([]*Memory, error) {
+	rows, err := s.db.Query(`
+		SELECT id, mysis_id, role, source, content, reasoning, created_at
+		FROM memories
+		WHERE mysis_id = ? AND reasoning LIKE '%' || ? || '%'
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, mysisID, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search reasoning: %w", err)
+	}
+	defer rows.Close()
+
+	var memories []*Memory
+	for rows.Next() {
+		var m Memory
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.Reasoning, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan memory: %w", err)
+		}
+		memories = append(memories, &m)
+	}
+
 	for i, j := 0, len(memories)-1; i < j; i, j = i+1, j-1 {
 		memories[i], memories[j] = memories[j], memories[i]
 	}

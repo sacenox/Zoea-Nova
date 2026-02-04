@@ -35,7 +35,7 @@ func TestMysisLifecycle(t *testing.T) {
 	defer cleanup()
 
 	// Create stored mysis
-	stored, err := s.CreateMysis("test-mysis", "mock", "test-model")
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
 	if err != nil {
 		t.Fatalf("CreateMysis() error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestMysisSendMessage(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("msg-mysis", "mock", "test-model")
+	stored, _ := s.CreateMysis("msg-mysis", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "I received your message!")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
@@ -174,7 +174,7 @@ func TestMysisSetErrorState(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("error-state-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("error-state-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
@@ -215,7 +215,7 @@ func TestMysisProviderName(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("provider-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("provider-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("test-provider", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
@@ -234,7 +234,7 @@ func TestMysisStateEvents(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("event-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("event-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
@@ -266,17 +266,17 @@ func TestMysisContextMemoryLimit(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("context-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("context-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
 
 	// Add more memories than MaxContextMessages
 	for i := 0; i < MaxContextMessages+10; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "")
 	}
 
 	// Get context memories
@@ -304,17 +304,17 @@ func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("context-test-2", "mock", "test-model")
+	stored, _ := s.CreateMysis("context-test-2", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
 
 	// Add fewer memories than MaxContextMessages
 	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "")
 	}
 
 	// Get context memories

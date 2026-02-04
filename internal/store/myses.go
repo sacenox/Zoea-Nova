@@ -20,43 +20,45 @@ const (
 
 // Mysis represents a stored mysis record.
 type Mysis struct {
-	ID        string
-	Name      string
-	Provider  string
-	Model     string
-	State     MysisState
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID          string
+	Name        string
+	Provider    string
+	Model       string
+	Temperature float64
+	State       MysisState
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // CreateMysis creates a new mysis record.
-func (s *Store) CreateMysis(name, provider, model string) (*Mysis, error) {
+func (s *Store) CreateMysis(name, provider, model string, temperature float64) (*Mysis, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
 	_, err := s.db.Exec(`
-		INSERT INTO myses (id, name, provider, model, state, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, id, name, provider, model, MysisStateIdle, now, now)
+		INSERT INTO myses (id, name, provider, model, temperature, state, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, name, provider, model, temperature, MysisStateIdle, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert mysis: %w", err)
 	}
 
 	return &Mysis{
-		ID:        id,
-		Name:      name,
-		Provider:  provider,
-		Model:     model,
-		State:     MysisStateIdle,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          id,
+		Name:        name,
+		Provider:    provider,
+		Model:       model,
+		Temperature: temperature,
+		State:       MysisStateIdle,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}, nil
 }
 
 // GetMysis retrieves a mysis by ID.
 func (s *Store) GetMysis(id string) (*Mysis, error) {
 	row := s.db.QueryRow(`
-		SELECT id, name, provider, model, state, created_at, updated_at
+		SELECT id, name, provider, model, temperature, state, created_at, updated_at
 		FROM myses WHERE id = ?
 	`, id)
 
@@ -66,7 +68,7 @@ func (s *Store) GetMysis(id string) (*Mysis, error) {
 // ListMyses returns all myses.
 func (s *Store) ListMyses() ([]*Mysis, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, provider, model, state, created_at, updated_at
+		SELECT id, name, provider, model, temperature, state, created_at, updated_at
 		FROM myses ORDER BY created_at ASC
 	`)
 	if err != nil {
@@ -103,10 +105,10 @@ func (s *Store) UpdateMysisState(id string, state MysisState) error {
 }
 
 // UpdateMysisConfig updates a mysis provider and model.
-func (s *Store) UpdateMysisConfig(id, provider, model string) error {
+func (s *Store) UpdateMysisConfig(id, provider, model string, temperature float64) error {
 	result, err := s.db.Exec(`
-		UPDATE myses SET provider = ?, model = ?, updated_at = ? WHERE id = ?
-	`, provider, model, time.Now().UTC(), id)
+		UPDATE myses SET provider = ?, model = ?, temperature = ?, updated_at = ? WHERE id = ?
+	`, provider, model, temperature, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("update mysis config: %w", err)
 	}
@@ -141,7 +143,7 @@ func (s *Store) CountMyses() (int, error) {
 
 func scanMysis(row *sql.Row) (*Mysis, error) {
 	var m Mysis
-	err := row.Scan(&m.ID, &m.Name, &m.Provider, &m.Model, &m.State, &m.CreatedAt, &m.UpdatedAt)
+	err := row.Scan(&m.ID, &m.Name, &m.Provider, &m.Model, &m.Temperature, &m.State, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +152,7 @@ func scanMysis(row *sql.Row) (*Mysis, error) {
 
 func scanMysisRows(rows *sql.Rows) (*Mysis, error) {
 	var m Mysis
-	err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.Model, &m.State, &m.CreatedAt, &m.UpdatedAt)
+	err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.Model, &m.Temperature, &m.State, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

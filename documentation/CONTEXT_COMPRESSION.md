@@ -31,6 +31,7 @@ Without compression, Mysis context grows unbounded:
 ├─────────────────────────────────────────────────────┤
 │  All messages since Mysis creation                  │
 │  Searchable via zoea_search_messages tool           │
+│  Reasoning searchable via zoea_search_reasoning     │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -129,6 +130,20 @@ Search past swarm broadcasts by text content.
 ```
 
 Returns matching broadcasts with content and timestamp.
+
+### zoea_search_reasoning
+
+Search a Mysis's past reasoning content by text.
+
+```json
+{
+  "mysis_id": "abc123",
+  "query": "travel cooldown",
+  "limit": 20
+}
+```
+
+Returns matching reasoning entries with role, source, content, reasoning, and timestamp.
 
 ## System Prompt Guidance
 

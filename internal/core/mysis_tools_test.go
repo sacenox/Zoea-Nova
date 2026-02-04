@@ -16,7 +16,7 @@ func TestMysisToolExecution(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("tool-mysis", "mock", "test-model")
+	stored, _ := s.CreateMysis("tool-mysis", "mock", "test-model", 0.7)
 
 	// Mock provider that returns a tool call first, then a text response
 	mock := provider.NewMock("mock", "Initial response")
@@ -126,7 +126,7 @@ func TestMysisToolError(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateMysis("tool-err-mysis", "mock", "test-model")
+	stored, _ := s.CreateMysis("tool-err-mysis", "mock", "test-model", 0.7)
 
 	mock := provider.NewMock("mock", "Initial response")
 
