@@ -13,8 +13,8 @@ type EventBus struct {
 
 // NewEventBus creates a new event bus.
 func NewEventBus(bufferSize int) *EventBus {
-	if bufferSize < 1 {
-		bufferSize = 100
+	if bufferSize < 1000 {
+		bufferSize = 1000
 	}
 	return &EventBus{
 		bufferSize: bufferSize,

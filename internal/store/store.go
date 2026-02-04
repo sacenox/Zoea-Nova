@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/xonecas/zoea-nova/internal/config"
 	_ "modernc.org/sqlite"
@@ -34,12 +35,22 @@ func New() (*Store, error) {
 
 // Open opens a database at the given path.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	// Add busy timeout to handle concurrent access
+	dsn := path
+	if !strings.Contains(path, "?") {
+		dsn += "?_busy_timeout=5000"
+	}
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Enable WAL mode for better concurrent access
+	// Limit to 1 connection to avoid "database is locked" errors with modernc.org/sqlite
+	// especially during tests with concurrent writes.
+	db.SetMaxOpenConns(1)
+
+	// Enable WAL mode for better concurrent access (though limited by MaxOpenConns=1)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("enable WAL: %w", err)
@@ -75,8 +86,8 @@ func (s *Store) migrate() error {
 	// Check current version
 	var version int
 	err := s.db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&version)
-	if err != nil && err != sql.ErrNoRows {
-		// Table doesn't exist, create fresh schema
+	if err != nil {
+		// Table doesn't exist or is empty, create fresh schema
 		if _, err := s.db.Exec(schema); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}
