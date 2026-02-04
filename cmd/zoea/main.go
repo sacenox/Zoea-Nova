@@ -86,11 +86,18 @@ func main() {
 	// Initialize commander
 	commander := core.NewCommander(s, registry, bus, cfg)
 
-	// Load existing agents
+	// Load existing agents from database
 	if err := commander.LoadAgents(); err != nil {
 		log.Warn().Err(err).Msg("Failed to load existing agents")
 	}
 	log.Debug().Int("agents", commander.AgentCount()).Msg("Agents loaded")
+
+	// Auto-start all existing agents on launch
+	for _, a := range commander.ListAgents() {
+		if err := a.Start(); err != nil {
+			log.Warn().Err(err).Str("agent", a.Name()).Msg("Failed to start agent")
+		}
+	}
 
 	// Initialize MCP proxy
 	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
@@ -242,12 +249,46 @@ func (a *commanderAdapter) MaxAgents() int {
 	return a.commander.MaxAgents()
 }
 
-func (a *commanderAdapter) SendMessage(agentID, message string) error {
-	return a.commander.SendMessage(agentID, message)
+func (a *commanderAdapter) SendMessageAsync(agentID, message string) error {
+	return a.commander.SendMessageAsync(agentID, message)
 }
 
-func (a *commanderAdapter) Broadcast(message string) error {
-	return a.commander.Broadcast(message)
+func (a *commanderAdapter) BroadcastAsync(message string) error {
+	return a.commander.BroadcastAsync(message)
+}
+
+func (a *commanderAdapter) SearchMessages(agentID, query string, limit int) ([]mcp.SearchResult, error) {
+	memories, err := a.commander.Store().SearchMemories(agentID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]mcp.SearchResult, len(memories))
+	for i, m := range memories {
+		results[i] = mcp.SearchResult{
+			Role:      string(m.Role),
+			Source:    string(m.Source),
+			Content:   m.Content,
+			CreatedAt: m.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+	return results, nil
+}
+
+func (a *commanderAdapter) SearchBroadcasts(query string, limit int) ([]mcp.BroadcastResult, error) {
+	broadcasts, err := a.commander.Store().SearchBroadcasts(query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]mcp.BroadcastResult, len(broadcasts))
+	for i, b := range broadcasts {
+		results[i] = mcp.BroadcastResult{
+			Content:   b.Content,
+			CreatedAt: b.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+	return results, nil
 }
 
 // runMCPTest tests the MCP connection and tool calling.
@@ -377,10 +418,18 @@ func (m *mockOrchestrator) MaxAgents() int {
 	return 16
 }
 
-func (m *mockOrchestrator) SendMessage(agentID, message string) error {
+func (m *mockOrchestrator) SendMessageAsync(agentID, message string) error {
 	return fmt.Errorf("not available in test mode")
 }
 
-func (m *mockOrchestrator) Broadcast(message string) error {
+func (m *mockOrchestrator) BroadcastAsync(message string) error {
 	return fmt.Errorf("not available in test mode")
+}
+
+func (m *mockOrchestrator) SearchMessages(agentID, query string, limit int) ([]mcp.SearchResult, error) {
+	return []mcp.SearchResult{}, nil
+}
+
+func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]mcp.BroadcastResult, error) {
+	return []mcp.BroadcastResult{}, nil
 }

@@ -9,9 +9,6 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Swarm.DefaultAgents != 4 {
-		t.Errorf("expected default_agents=4, got %d", cfg.Swarm.DefaultAgents)
-	}
 	if cfg.Swarm.MaxAgents != 16 {
 		t.Errorf("expected max_agents=16, got %d", cfg.Swarm.MaxAgents)
 	}
@@ -27,7 +24,6 @@ func TestLoadFromFile(t *testing.T) {
 
 	content := `
 [swarm]
-default_agents = 8
 max_agents = 32
 
 [providers.ollama]
@@ -46,9 +42,6 @@ upstream = "https://custom.mcp/endpoint"
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Swarm.DefaultAgents != 8 {
-		t.Errorf("expected default_agents=8, got %d", cfg.Swarm.DefaultAgents)
-	}
 	if cfg.Swarm.MaxAgents != 32 {
 		t.Errorf("expected max_agents=32, got %d", cfg.Swarm.MaxAgents)
 	}
@@ -62,11 +55,9 @@ upstream = "https://custom.mcp/endpoint"
 
 func TestLoadWithEnvOverrides(t *testing.T) {
 	// Set env vars
-	os.Setenv("ZOEA_DEFAULT_AGENTS", "2")
 	os.Setenv("ZOEA_MAX_AGENTS", "10")
 	os.Setenv("ZOEA_MCP_ENDPOINT", "https://env.mcp/endpoint")
 	defer func() {
-		os.Unsetenv("ZOEA_DEFAULT_AGENTS")
 		os.Unsetenv("ZOEA_MAX_AGENTS")
 		os.Unsetenv("ZOEA_MCP_ENDPOINT")
 	}()
@@ -76,9 +67,6 @@ func TestLoadWithEnvOverrides(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Swarm.DefaultAgents != 2 {
-		t.Errorf("expected env override default_agents=2, got %d", cfg.Swarm.DefaultAgents)
-	}
 	if cfg.Swarm.MaxAgents != 10 {
 		t.Errorf("expected env override max_agents=10, got %d", cfg.Swarm.MaxAgents)
 	}
@@ -94,8 +82,8 @@ func TestLoadNonExistentFile(t *testing.T) {
 	}
 
 	// Should return defaults
-	if cfg.Swarm.DefaultAgents != 4 {
-		t.Errorf("expected default_agents=4, got %d", cfg.Swarm.DefaultAgents)
+	if cfg.Swarm.MaxAgents != 16 {
+		t.Errorf("expected max_agents=16, got %d", cfg.Swarm.MaxAgents)
 	}
 }
 
