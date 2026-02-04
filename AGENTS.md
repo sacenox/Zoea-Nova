@@ -60,7 +60,7 @@ The application uses SQLite for persistence.
 
 - **Location**: `~/.zoea-nova/zoea.db`
 - **Querying**: Use `sqlite3 ~/.zoea-nova/zoea.db` to run manual queries.
-- **Wiping**: To reset state or apply schema changes (no migrations), run `make db-reset-accounts` to export usernames/passwords to `accounts-backup.sql`, wipe the DB, recreate schema, and reimport accounts.
+- **Wiping**: To reset state or apply schema changes (no migrations), run `make db-reset-accounts` to export usernames/passwords to `accounts-backup.sql`, wipe the DB, recreate schema, and reimport accounts. The backup file is created at repo root and is ignored by git.
 - **Testing**: Tests use `t.TempDir()` for isolated database files. Never use the production database path in tests.
 
 ## Terminology:

@@ -179,7 +179,7 @@ Suggested `config.toml` provider settings:
 
 ```toml
 [providers.ollama]
-base_url = "http://localhost:11434"
+endpoint = "http://localhost:11434"
 
 # For fast testing
 model = "qwen3:4b"

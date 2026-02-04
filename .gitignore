@@ -18,3 +18,5 @@ Thumbs.db
 
 # Local data (user-specific)
 # Note: $HOME/.zoea-nova/ is outside repo, no need to ignore
+
+accounts-backup.sql
