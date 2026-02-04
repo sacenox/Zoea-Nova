@@ -19,6 +19,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
 - Follow the Bubble Tea Elm Architecture: Model → Update → View.
 - No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
+- Keep track of known issues in `documentation/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
 
 ## TUI Testing:
 
