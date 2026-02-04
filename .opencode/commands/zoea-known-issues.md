@@ -16,3 +16,4 @@ Read `documentation/KNOWN_ISSUES.md` and:
 - Read the documentation before investigating.
 - Gather all required context first.
 - Use explorer subagents to gather information.
+- Use zoea_analyzer agents if you need database information.
