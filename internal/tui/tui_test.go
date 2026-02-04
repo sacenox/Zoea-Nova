@@ -13,6 +13,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
+	"golang.org/x/time/rate"
 )
 
 // ansiRegex matches ANSI escape codes
@@ -35,14 +36,15 @@ func setupTestModel(t *testing.T) (Model, func()) {
 	eventCh := bus.Subscribe()
 
 	reg := provider.NewRegistry()
-	reg.Register(provider.NewMock("ollama", "mock response"))
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
 			MaxMyses: 16,
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama": {Endpoint: "http://mock", Model: "mock-model"},
+			"ollama": {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 		},
 	}
 

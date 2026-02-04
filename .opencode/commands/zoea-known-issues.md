@@ -1,7 +1,6 @@
 ---
 description: Investigate the first item in the known issues document.
-agent: zoea-analyser
-model: opencode/gpt-5.2-codex
+agent: plan
 ---
 
 Instructions:
@@ -9,7 +8,7 @@ Instructions:
 Read `documentation/KNOWN_ISSUES.md` and:
 
 - Remove completed items first. If no items remain stop, and report back. Update KNOWN_ISSUES.md to reflect that no isses exist.
-- Then investigate the first item. Create a plan and a todo list for the fixes and tests required to verify the changes.
+- Then investigate the first item. Gather information first. Then create a plan and a todo list for the fixes and tests required to verify the changes.
 
 **IMPORTANT**:
 

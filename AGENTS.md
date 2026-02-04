@@ -21,6 +21,15 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
 - Keep track of known issues in `documentation/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
 - Not duplicate information between README.md and AGENTS.md files. Use AGENTS for technical information, and README for user facing information. Keep README minimal and concise.
+- Follow the versioning rules. See bellow
+
+## Versions
+
+Version format: `<UI>.<DB>.<MINOR>`
+Release tags: annotated git tags named `v<UI>.<DB>.<MINOR>` (example: `v1.4.12`).
+UI changes: increment the first number.
+DB schema changes: increment the middle number and require a fresh database.
+MINOR changes: increment on every commit.
 
 ## TUI Testing:
 
