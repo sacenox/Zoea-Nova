@@ -96,7 +96,6 @@ const MaxContextMessages = 20
 const ContinuePrompt = `Turn complete. What is your next move?
 
 CRITICAL REMINDERS:
-- Use zoea_list_myses to find YOUR mysis ID (match your name)
 - When using captains_log_add, entry field must be non-empty
 - Never store or share your password in any in-game tool calls or chat
 - Never calculate ticks, use every turn to progress

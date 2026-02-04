@@ -183,15 +183,6 @@ func (m *mockOrchestrator) ListMyses() []MysisInfo {
 	return m.myses
 }
 
-func (m *mockOrchestrator) GetMysis(id string) (MysisInfo, error) {
-	for _, mysis := range m.myses {
-		if mysis.ID == id {
-			return mysis, nil
-		}
-	}
-	return MysisInfo{}, errors.New("mysis not found")
-}
-
 func (m *mockOrchestrator) MysisCount() int {
 	return len(m.myses)
 }
@@ -241,8 +232,8 @@ func TestOrchestratorTools(t *testing.T) {
 	proxy := NewProxy("")
 	RegisterOrchestratorTools(proxy, orchestrator)
 
-	if proxy.LocalToolCount() != 9 {
-		t.Errorf("expected 9 local tools, got %d", proxy.LocalToolCount())
+	if proxy.LocalToolCount() != 8 {
+		t.Errorf("expected 8 local tools, got %d", proxy.LocalToolCount())
 	}
 
 	ctx := context.Background()
@@ -265,20 +256,4 @@ func TestOrchestratorTools(t *testing.T) {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Test zoea_get_mysis
-	args, _ := json.Marshal(map[string]string{"mysis_id": "mysis-1"})
-	result, err = proxy.CallTool(ctx, "zoea_get_mysis", args)
-	if err != nil {
-		t.Fatalf("CallTool(zoea_get_mysis) error: %v", err)
-	}
-	if result.IsError {
-		t.Errorf("unexpected error: %s", result.Content[0].Text)
-	}
-
-	// Test zoea_get_mysis with invalid ID
-	args, _ = json.Marshal(map[string]string{"mysis_id": "nonexistent"})
-	result, _ = proxy.CallTool(ctx, "zoea_get_mysis", args)
-	if !result.IsError {
-		t.Error("expected error for nonexistent mysis")
-	}
 }

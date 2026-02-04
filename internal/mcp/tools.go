@@ -47,7 +47,6 @@ type AccountInfo struct {
 // This interface breaks the import cycle between mcp and core packages.
 type Orchestrator interface {
 	ListMyses() []MysisInfo
-	GetMysis(id string) (MysisInfo, error)
 	MysisCount() int
 	MaxMyses() int
 	SendMessageAsync(mysisID, message string) error
@@ -80,55 +79,6 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			}
 
 			data, _ := json.MarshalIndent(result, "", "  ")
-			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: string(data)}},
-			}, nil
-		},
-	)
-
-	// Get mysis info tool
-	proxy.RegisterTool(
-		Tool{
-			Name:        "zoea_get_mysis",
-			Description: "Get detailed information about a specific mysis",
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"mysis_id": {"type": "string", "description": "The ID of the mysis"}
-				},
-				"required": ["mysis_id"]
-			}`),
-		},
-		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			var params struct {
-				MysisID string `json:"mysis_id"`
-			}
-			if err := json.Unmarshal(args, &params); err != nil {
-				return &ToolResult{
-					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
-					IsError: true,
-				}, nil
-			}
-
-			mysis, err := orchestrator.GetMysis(params.MysisID)
-			if err != nil {
-				return &ToolResult{
-					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("mysis not found: %s", params.MysisID)}},
-					IsError: true,
-				}, nil
-			}
-
-			info := map[string]interface{}{
-				"id":       mysis.ID,
-				"name":     mysis.Name,
-				"state":    mysis.State,
-				"provider": mysis.Provider,
-			}
-			if mysis.LastError != nil {
-				info["last_error"] = mysis.LastError.Error()
-			}
-
-			data, _ := json.MarshalIndent(info, "", "  ")
 			return &ToolResult{
 				Content: []ContentBlock{{Type: "text", Text: string(data)}},
 			}, nil

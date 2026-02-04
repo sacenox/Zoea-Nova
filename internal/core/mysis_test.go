@@ -347,9 +347,6 @@ func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
 }
 
 func TestContinuePromptContainsCriticalReminders(t *testing.T) {
-	if !strings.Contains(ContinuePrompt, "zoea_list_myses") {
-		t.Fatal("ContinuePrompt missing mysis ID reminder")
-	}
 	if !strings.Contains(ContinuePrompt, "captains_log_add") {
 		t.Fatal("ContinuePrompt missing captains_log_add reminder")
 	}

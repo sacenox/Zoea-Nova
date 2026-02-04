@@ -63,7 +63,6 @@ WRONG: captains_log_add({})
 const ContinuePrompt = `Turn complete. What is your next move?
 
 CRITICAL REMINDERS:
-- Use zoea_list_myses to find YOUR mysis ID (match your name)
 - When using captains_log_add, entry field must be non-empty
 - Never calculate ticks, use every turn to progress
 

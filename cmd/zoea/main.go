@@ -257,20 +257,6 @@ func (a *commanderAdapter) ListMyses() []mcp.MysisInfo {
 	return result
 }
 
-func (a *commanderAdapter) GetMysis(id string) (mcp.MysisInfo, error) {
-	mysis, err := a.commander.GetMysis(id)
-	if err != nil {
-		return mcp.MysisInfo{}, err
-	}
-	return mcp.MysisInfo{
-		ID:        mysis.ID(),
-		Name:      mysis.Name(),
-		State:     string(mysis.State()),
-		Provider:  mysis.ProviderName(),
-		LastError: mysis.LastError(),
-	}, nil
-}
-
 func (a *commanderAdapter) MysisCount() int {
 	return a.commander.MysisCount()
 }
@@ -465,10 +451,6 @@ type mockOrchestrator struct{}
 
 func (m *mockOrchestrator) ListMyses() []mcp.MysisInfo {
 	return []mcp.MysisInfo{}
-}
-
-func (m *mockOrchestrator) GetMysis(id string) (mcp.MysisInfo, error) {
-	return mcp.MysisInfo{}, fmt.Errorf("no myses in test mode")
 }
 
 func (m *mockOrchestrator) MysisCount() int {

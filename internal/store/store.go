@@ -15,7 +15,7 @@ import (
 //go:embed schema.sql
 var schema string
 
-const currentSchemaVersion = 6
+const currentSchemaVersion = 7
 
 // Store provides access to the SQLite database.
 type Store struct {
@@ -103,8 +103,8 @@ func (s *Store) migrate() error {
 	if version < currentSchemaVersion {
 		return fmt.Errorf(
 			"database schema version %d is outdated (current: %d)\n"+
-				"Delete the database to continue:\n"+
-				"  rm ~/.zoea-nova/zoea.db*",
+				"Reset the database to continue:\n"+
+				"  make db-reset-accounts",
 			version, currentSchemaVersion,
 		)
 	}
@@ -113,8 +113,8 @@ func (s *Store) migrate() error {
 	if version > currentSchemaVersion {
 		return fmt.Errorf(
 			"database schema version %d is newer than supported version %d\n"+
-				"Upgrade Zoea Nova or delete the database:\n"+
-				"  rm ~/.zoea-nova/zoea.db*",
+				"Upgrade Zoea Nova or reset the database:\n"+
+				"  make db-reset-accounts",
 			version, currentSchemaVersion,
 		)
 	}
