@@ -29,7 +29,7 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
-			MaxAgents: 16,
+			MaxMyses: 16,
 		},
 		Providers: map[string]config.ProviderConfig{
 			"mock":   {Endpoint: "http://mock", Model: "mock-model"},
@@ -52,48 +52,48 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	return cmd, bus, cleanup
 }
 
-func TestCommanderCreateAgent(t *testing.T) {
+func TestCommanderCreateMysis(t *testing.T) {
 	cmd, bus, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
 	events := bus.Subscribe()
 
-	agent, err := cmd.CreateAgent("test-agent", "mock")
+	mysis, err := cmd.CreateMysis("test-mysis", "mock")
 	if err != nil {
-		t.Fatalf("CreateAgent() error: %v", err)
+		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
-	if agent.Name() != "test-agent" {
-		t.Errorf("expected name=test-agent, got %s", agent.Name())
+	if mysis.Name() != "test-mysis" {
+		t.Errorf("expected name=test-mysis, got %s", mysis.Name())
 	}
-	if agent.State() != AgentStateIdle {
-		t.Errorf("expected state=idle, got %s", agent.State())
+	if mysis.State() != MysisStateIdle {
+		t.Errorf("expected state=idle, got %s", mysis.State())
 	}
 
 	// Should receive created event
 	select {
 	case e := <-events:
-		if e.Type != EventAgentCreated {
-			t.Errorf("expected EventAgentCreated, got %s", e.Type)
+		if e.Type != EventMysisCreated {
+			t.Errorf("expected EventMysisCreated, got %s", e.Type)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for created event")
 	}
 
-	if cmd.AgentCount() != 1 {
-		t.Errorf("expected agent count=1, got %d", cmd.AgentCount())
+	if cmd.MysisCount() != 1 {
+		t.Errorf("expected mysis count=1, got %d", cmd.MysisCount())
 	}
 }
 
-func TestCommanderDeleteAgent(t *testing.T) {
+func TestCommanderDeleteMysis(t *testing.T) {
 	cmd, bus, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	// Subscribe before creating agent
+	// Subscribe before creating mysis
 	events := bus.Subscribe()
 
-	agent, _ := cmd.CreateAgent("delete-me", "mock")
-	id := agent.ID()
+	mysis, _ := cmd.CreateMysis("delete-me", "mock")
+	id := mysis.ID()
 
 	// Drain the created event
 	select {
@@ -102,31 +102,31 @@ func TestCommanderDeleteAgent(t *testing.T) {
 		t.Fatal("timeout waiting for created event")
 	}
 
-	if err := cmd.DeleteAgent(id, true); err != nil {
-		t.Fatalf("DeleteAgent() error: %v", err)
+	if err := cmd.DeleteMysis(id, true); err != nil {
+		t.Fatalf("DeleteMysis() error: %v", err)
 	}
 
 	// Should receive deleted event
 	select {
 	case e := <-events:
-		if e.Type != EventAgentDeleted {
-			t.Errorf("expected EventAgentDeleted, got %s", e.Type)
+		if e.Type != EventMysisDeleted {
+			t.Errorf("expected EventMysisDeleted, got %s", e.Type)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for deleted event")
 	}
 
-	if cmd.AgentCount() != 0 {
-		t.Errorf("expected agent count=0, got %d", cmd.AgentCount())
+	if cmd.MysisCount() != 0 {
+		t.Errorf("expected mysis count=0, got %d", cmd.MysisCount())
 	}
 
 	// Delete non-existent should error
-	if err := cmd.DeleteAgent("nonexistent", false); err == nil {
-		t.Error("expected error deleting non-existent agent")
+	if err := cmd.DeleteMysis("nonexistent", false); err == nil {
+		t.Error("expected error deleting non-existent mysis")
 	}
 }
 
-func TestCommanderMaxAgents(t *testing.T) {
+func TestCommanderMaxMyses(t *testing.T) {
 	s, err := store.OpenMemory()
 	if err != nil {
 		t.Fatalf("OpenMemory() error: %v", err)
@@ -141,7 +141,7 @@ func TestCommanderMaxAgents(t *testing.T) {
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
-			MaxAgents: 2, // Low limit for testing
+			MaxMyses: 2, // Low limit for testing
 		},
 		Providers: map[string]config.ProviderConfig{
 			"mock": {Endpoint: "http://mock", Model: "mock-model"},
@@ -152,61 +152,61 @@ func TestCommanderMaxAgents(t *testing.T) {
 	defer cmd.StopAll()
 
 	// Create up to limit
-	cmd.CreateAgent("agent-1", "mock")
-	cmd.CreateAgent("agent-2", "mock")
+	cmd.CreateMysis("mysis-1", "mock")
+	cmd.CreateMysis("mysis-2", "mock")
 
 	// Should fail at limit
-	_, err = cmd.CreateAgent("agent-3", "mock")
+	_, err = cmd.CreateMysis("mysis-3", "mock")
 	if err == nil {
-		t.Error("expected error when exceeding max agents")
+		t.Error("expected error when exceeding max myses")
 	}
 
-	if cmd.MaxAgents() != 2 {
-		t.Errorf("expected max agents=2, got %d", cmd.MaxAgents())
+	if cmd.MaxMyses() != 2 {
+		t.Errorf("expected max myses=2, got %d", cmd.MaxMyses())
 	}
 }
 
-func TestCommanderStartStopAgent(t *testing.T) {
+func TestCommanderStartStopMysis(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	agent, _ := cmd.CreateAgent("lifecycle-test", "mock")
-	id := agent.ID()
+	mysis, _ := cmd.CreateMysis("lifecycle-test", "mock")
+	id := mysis.ID()
 
 	// Start
-	if err := cmd.StartAgent(id); err != nil {
-		t.Fatalf("StartAgent() error: %v", err)
+	if err := cmd.StartMysis(id); err != nil {
+		t.Fatalf("StartMysis() error: %v", err)
 	}
-	if agent.State() != AgentStateRunning {
-		t.Errorf("expected state=running, got %s", agent.State())
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running, got %s", mysis.State())
 	}
 
 	// Stop
-	if err := cmd.StopAgent(id); err != nil {
-		t.Fatalf("StopAgent() error: %v", err)
+	if err := cmd.StopMysis(id); err != nil {
+		t.Fatalf("StopMysis() error: %v", err)
 	}
-	if agent.State() != AgentStateStopped {
-		t.Errorf("expected state=stopped, got %s", agent.State())
+	if mysis.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped, got %s", mysis.State())
 	}
 
 	// Start/stop non-existent
-	if err := cmd.StartAgent("nonexistent"); err == nil {
-		t.Error("expected error starting non-existent agent")
+	if err := cmd.StartMysis("nonexistent"); err == nil {
+		t.Error("expected error starting non-existent mysis")
 	}
-	if err := cmd.StopAgent("nonexistent"); err == nil {
-		t.Error("expected error stopping non-existent agent")
+	if err := cmd.StopMysis("nonexistent"); err == nil {
+		t.Error("expected error stopping non-existent mysis")
 	}
 }
 
-func TestCommanderConfigureAgent(t *testing.T) {
+func TestCommanderConfigureMysis(t *testing.T) {
 	cmd, bus, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	// Subscribe before creating agent
+	// Subscribe before creating mysis
 	events := bus.Subscribe()
 
-	agent, _ := cmd.CreateAgent("config-test", "mock")
-	id := agent.ID()
+	mysis, _ := cmd.CreateMysis("config-test", "mock")
+	id := mysis.ID()
 
 	// Drain created event
 	select {
@@ -215,15 +215,15 @@ func TestCommanderConfigureAgent(t *testing.T) {
 		t.Fatal("timeout waiting for created event")
 	}
 
-	if err := cmd.ConfigureAgent(id, "ollama"); err != nil {
-		t.Fatalf("ConfigureAgent() error: %v", err)
+	if err := cmd.ConfigureMysis(id, "ollama"); err != nil {
+		t.Fatalf("ConfigureMysis() error: %v", err)
 	}
 
 	// Should receive config changed event
 	select {
 	case e := <-events:
-		if e.Type != EventAgentConfigChanged {
-			t.Errorf("expected EventAgentConfigChanged, got %s", e.Type)
+		if e.Type != EventMysisConfigChanged {
+			t.Errorf("expected EventMysisConfigChanged, got %s", e.Type)
 		}
 		data := e.Data.(ConfigChangeData)
 		if data.Provider != "ollama" {
@@ -234,47 +234,47 @@ func TestCommanderConfigureAgent(t *testing.T) {
 	}
 
 	// Configure with non-existent provider
-	if err := cmd.ConfigureAgent(id, "nonexistent"); err == nil {
+	if err := cmd.ConfigureMysis(id, "nonexistent"); err == nil {
 		t.Error("expected error configuring with non-existent provider")
 	}
 
-	// Configure non-existent agent
-	if err := cmd.ConfigureAgent("nonexistent", "mock"); err == nil {
-		t.Error("expected error configuring non-existent agent")
+	// Configure non-existent mysis
+	if err := cmd.ConfigureMysis("nonexistent", "mock"); err == nil {
+		t.Error("expected error configuring non-existent mysis")
 	}
 }
 
-func TestCommanderListAgents(t *testing.T) {
+func TestCommanderListMyses(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	cmd.CreateAgent("agent-1", "mock")
-	cmd.CreateAgent("agent-2", "mock")
+	cmd.CreateMysis("mysis-1", "mock")
+	cmd.CreateMysis("mysis-2", "mock")
 
-	agents := cmd.ListAgents()
-	if len(agents) != 2 {
-		t.Errorf("expected 2 agents, got %d", len(agents))
+	myses := cmd.ListMyses()
+	if len(myses) != 2 {
+		t.Errorf("expected 2 myses, got %d", len(myses))
 	}
 }
 
-func TestCommanderGetAgent(t *testing.T) {
+func TestCommanderGetMysis(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	agent, _ := cmd.CreateAgent("get-test", "mock")
+	mysis, _ := cmd.CreateMysis("get-test", "mock")
 
-	fetched, err := cmd.GetAgent(agent.ID())
+	fetched, err := cmd.GetMysis(mysis.ID())
 	if err != nil {
-		t.Fatalf("GetAgent() error: %v", err)
+		t.Fatalf("GetMysis() error: %v", err)
 	}
 	if fetched.Name() != "get-test" {
 		t.Errorf("expected name=get-test, got %s", fetched.Name())
 	}
 
 	// Get non-existent
-	_, err = cmd.GetAgent("nonexistent")
+	_, err = cmd.GetMysis("nonexistent")
 	if err == nil {
-		t.Error("expected error getting non-existent agent")
+		t.Error("expected error getting non-existent mysis")
 	}
 }
 
@@ -282,11 +282,11 @@ func TestCommanderSendMessage(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	agent, _ := cmd.CreateAgent("msg-test", "mock")
-	id := agent.ID()
+	mysis, _ := cmd.CreateMysis("msg-test", "mock")
+	id := mysis.ID()
 
-	// Start agent
-	cmd.StartAgent(id)
+	// Start mysis
+	cmd.StartMysis(id)
 
 	// Send message
 	if err := cmd.SendMessage(id, "Hello!"); err != nil {
@@ -295,7 +295,7 @@ func TestCommanderSendMessage(t *testing.T) {
 
 	// Send to non-existent
 	if err := cmd.SendMessage("nonexistent", "Hello!"); err == nil {
-		t.Error("expected error sending to non-existent agent")
+		t.Error("expected error sending to non-existent mysis")
 	}
 }
 
@@ -306,11 +306,11 @@ func TestCommanderBroadcast(t *testing.T) {
 	// Subscribe first
 	events := bus.Subscribe()
 
-	agent1, _ := cmd.CreateAgent("broadcast-1", "mock")
-	agent2, _ := cmd.CreateAgent("broadcast-2", "mock")
+	mysis1, _ := cmd.CreateMysis("broadcast-1", "mock")
+	mysis2, _ := cmd.CreateMysis("broadcast-2", "mock")
 
-	cmd.StartAgent(agent1.ID())
-	cmd.StartAgent(agent2.ID())
+	cmd.StartMysis(mysis1.ID())
+	cmd.StartMysis(mysis2.ID())
 
 	// Drain created/started events with timeout
 	for i := 0; i < 4; i++ {
@@ -344,19 +344,19 @@ func TestCommanderBroadcastSource(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	agent, _ := cmd.CreateAgent("broadcast-source-test", "mock")
-	cmd.StartAgent(agent.ID())
+	mysis, _ := cmd.CreateMysis("broadcast-source-test", "mock")
+	cmd.StartMysis(mysis.ID())
 
-	// Wait for agent to be running with timeout
+	// Wait for mysis to be running with timeout
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		if agent.State() == AgentStateRunning {
+		if mysis.State() == MysisStateRunning {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if agent.State() != AgentStateRunning {
-		t.Fatal("agent failed to start within timeout")
+	if mysis.State() != MysisStateRunning {
+		t.Fatal("mysis failed to start within timeout")
 	}
 
 	// Send broadcast
@@ -392,23 +392,23 @@ func TestCommanderStopAll(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
 
-	agent1, _ := cmd.CreateAgent("stopall-1", "mock")
-	agent2, _ := cmd.CreateAgent("stopall-2", "mock")
+	mysis1, _ := cmd.CreateMysis("stopall-1", "mock")
+	mysis2, _ := cmd.CreateMysis("stopall-2", "mock")
 
-	cmd.StartAgent(agent1.ID())
-	cmd.StartAgent(agent2.ID())
+	cmd.StartMysis(mysis1.ID())
+	cmd.StartMysis(mysis2.ID())
 
 	cmd.StopAll()
 
-	if agent1.State() != AgentStateStopped {
-		t.Errorf("expected agent1 state=stopped, got %s", agent1.State())
+	if mysis1.State() != MysisStateStopped {
+		t.Errorf("expected mysis1 state=stopped, got %s", mysis1.State())
 	}
-	if agent2.State() != AgentStateStopped {
-		t.Errorf("expected agent2 state=stopped, got %s", agent2.State())
+	if mysis2.State() != MysisStateStopped {
+		t.Errorf("expected mysis2 state=stopped, got %s", mysis2.State())
 	}
 }
 
-func TestCommanderLoadAgents(t *testing.T) {
+func TestCommanderLoadMyses(t *testing.T) {
 	s, err := store.OpenMemory()
 	if err != nil {
 		t.Fatalf("OpenMemory() error: %v", err)
@@ -416,8 +416,8 @@ func TestCommanderLoadAgents(t *testing.T) {
 	defer s.Close()
 
 	// Pre-populate store
-	s.CreateAgent("existing-1", "mock", "mock-model")
-	s.CreateAgent("existing-2", "mock", "mock-model")
+	s.CreateMysis("existing-1", "mock", "mock-model")
+	s.CreateMysis("existing-2", "mock", "mock-model")
 
 	bus := NewEventBus(100)
 	defer bus.Close()
@@ -426,7 +426,7 @@ func TestCommanderLoadAgents(t *testing.T) {
 	reg.Register(provider.NewMock("mock", "response"))
 
 	cfg := &config.Config{
-		Swarm: config.SwarmConfig{MaxAgents: 16},
+		Swarm: config.SwarmConfig{MaxMyses: 16},
 		Providers: map[string]config.ProviderConfig{
 			"mock": {Endpoint: "http://mock", Model: "mock-model"},
 		},
@@ -434,11 +434,11 @@ func TestCommanderLoadAgents(t *testing.T) {
 
 	cmd := NewCommander(s, reg, bus, cfg)
 
-	if err := cmd.LoadAgents(); err != nil {
-		t.Fatalf("LoadAgents() error: %v", err)
+	if err := cmd.LoadMyses(); err != nil {
+		t.Fatalf("LoadMyses() error: %v", err)
 	}
 
-	if cmd.AgentCount() != 2 {
-		t.Errorf("expected 2 agents loaded, got %d", cmd.AgentCount())
+	if cmd.MysisCount() != 2 {
+		t.Errorf("expected 2 myses loaded, got %d", cmd.MysisCount())
 	}
 }

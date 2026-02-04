@@ -9,8 +9,8 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Swarm.MaxAgents != 16 {
-		t.Errorf("expected max_agents=16, got %d", cfg.Swarm.MaxAgents)
+	if cfg.Swarm.MaxMyses != 16 {
+		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
 	}
 	if _, ok := cfg.Providers["ollama"]; !ok {
 		t.Error("expected ollama provider in defaults")
@@ -24,7 +24,7 @@ func TestLoadFromFile(t *testing.T) {
 
 	content := `
 [swarm]
-max_agents = 32
+max_myses = 32
 
 [providers.ollama]
 endpoint = "http://custom:11434"
@@ -42,8 +42,8 @@ upstream = "https://custom.mcp/endpoint"
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Swarm.MaxAgents != 32 {
-		t.Errorf("expected max_agents=32, got %d", cfg.Swarm.MaxAgents)
+	if cfg.Swarm.MaxMyses != 32 {
+		t.Errorf("expected max_myses=32, got %d", cfg.Swarm.MaxMyses)
 	}
 	if cfg.Providers["ollama"].Endpoint != "http://custom:11434" {
 		t.Errorf("expected custom ollama endpoint, got %s", cfg.Providers["ollama"].Endpoint)
@@ -55,10 +55,10 @@ upstream = "https://custom.mcp/endpoint"
 
 func TestLoadWithEnvOverrides(t *testing.T) {
 	// Set env vars
-	os.Setenv("ZOEA_MAX_AGENTS", "10")
+	os.Setenv("ZOEA_MAX_MYSES", "10")
 	os.Setenv("ZOEA_MCP_ENDPOINT", "https://env.mcp/endpoint")
 	defer func() {
-		os.Unsetenv("ZOEA_MAX_AGENTS")
+		os.Unsetenv("ZOEA_MAX_MYSES")
 		os.Unsetenv("ZOEA_MCP_ENDPOINT")
 	}()
 
@@ -67,8 +67,8 @@ func TestLoadWithEnvOverrides(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Swarm.MaxAgents != 10 {
-		t.Errorf("expected env override max_agents=10, got %d", cfg.Swarm.MaxAgents)
+	if cfg.Swarm.MaxMyses != 10 {
+		t.Errorf("expected env override max_myses=10, got %d", cfg.Swarm.MaxMyses)
 	}
 	if cfg.MCP.Upstream != "https://env.mcp/endpoint" {
 		t.Errorf("expected env override mcp endpoint, got %s", cfg.MCP.Upstream)
@@ -82,8 +82,8 @@ func TestLoadNonExistentFile(t *testing.T) {
 	}
 
 	// Should return defaults
-	if cfg.Swarm.MaxAgents != 16 {
-		t.Errorf("expected max_agents=16, got %d", cfg.Swarm.MaxAgents)
+	if cfg.Swarm.MaxMyses != 16 {
+		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
 	}
 }
 

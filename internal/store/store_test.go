@@ -24,9 +24,9 @@ func TestOpenMemory(t *testing.T) {
 	defer s.Close()
 
 	// Verify tables exist by querying them
-	_, err = s.db.Exec("SELECT 1 FROM agents LIMIT 1")
+	_, err = s.db.Exec("SELECT 1 FROM myses LIMIT 1")
 	if err != nil {
-		t.Errorf("agents table not created: %v", err)
+		t.Errorf("myses table not created: %v", err)
 	}
 
 	_, err = s.db.Exec("SELECT 1 FROM memories LIMIT 1")
@@ -35,75 +35,75 @@ func TestOpenMemory(t *testing.T) {
 	}
 }
 
-func TestAgentCRUD(t *testing.T) {
+func TestMysisCRUD(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
 	// Create
-	agent, err := s.CreateAgent("test-agent", "ollama", "llama3")
+	mysis, err := s.CreateMysis("test-mysis", "ollama", "llama3")
 	if err != nil {
-		t.Fatalf("CreateAgent() error: %v", err)
+		t.Fatalf("CreateMysis() error: %v", err)
 	}
-	if agent.ID == "" {
-		t.Error("expected non-empty agent ID")
+	if mysis.ID == "" {
+		t.Error("expected non-empty mysis ID")
 	}
-	if agent.Name != "test-agent" {
-		t.Errorf("expected name=test-agent, got %s", agent.Name)
+	if mysis.Name != "test-mysis" {
+		t.Errorf("expected name=test-mysis, got %s", mysis.Name)
 	}
-	if agent.State != AgentStateIdle {
-		t.Errorf("expected state=idle, got %s", agent.State)
+	if mysis.State != MysisStateIdle {
+		t.Errorf("expected state=idle, got %s", mysis.State)
 	}
 
 	// Get
-	fetched, err := s.GetAgent(agent.ID)
+	fetched, err := s.GetMysis(mysis.ID)
 	if err != nil {
-		t.Fatalf("GetAgent() error: %v", err)
+		t.Fatalf("GetMysis() error: %v", err)
 	}
-	if fetched.ID != agent.ID {
-		t.Errorf("expected ID=%s, got %s", agent.ID, fetched.ID)
+	if fetched.ID != mysis.ID {
+		t.Errorf("expected ID=%s, got %s", mysis.ID, fetched.ID)
 	}
 
 	// List
-	agents, err := s.ListAgents()
+	myses, err := s.ListMyses()
 	if err != nil {
-		t.Fatalf("ListAgents() error: %v", err)
+		t.Fatalf("ListMyses() error: %v", err)
 	}
-	if len(agents) != 1 {
-		t.Errorf("expected 1 agent, got %d", len(agents))
+	if len(myses) != 1 {
+		t.Errorf("expected 1 mysis, got %d", len(myses))
 	}
 
 	// Update state
-	if err := s.UpdateAgentState(agent.ID, AgentStateRunning); err != nil {
-		t.Fatalf("UpdateAgentState() error: %v", err)
+	if err := s.UpdateMysisState(mysis.ID, MysisStateRunning); err != nil {
+		t.Fatalf("UpdateMysisState() error: %v", err)
 	}
-	fetched, _ = s.GetAgent(agent.ID)
-	if fetched.State != AgentStateRunning {
+	fetched, _ = s.GetMysis(mysis.ID)
+	if fetched.State != MysisStateRunning {
 		t.Errorf("expected state=running, got %s", fetched.State)
 	}
 
 	// Update config
-	if err := s.UpdateAgentConfig(agent.ID, "opencode_zen", "zen-model"); err != nil {
-		t.Fatalf("UpdateAgentConfig() error: %v", err)
+	if err := s.UpdateMysisConfig(mysis.ID, "opencode_zen", "zen-model"); err != nil {
+		t.Fatalf("UpdateMysisConfig() error: %v", err)
 	}
-	fetched, _ = s.GetAgent(agent.ID)
+	fetched, _ = s.GetMysis(mysis.ID)
 	if fetched.Provider != "opencode_zen" {
 		t.Errorf("expected provider=opencode_zen, got %s", fetched.Provider)
 	}
 
 	// Count
-	count, err := s.CountAgents()
+	count, err := s.CountMyses()
 	if err != nil {
-		t.Fatalf("CountAgents() error: %v", err)
+		t.Fatalf("CountMyses() error: %v", err)
 	}
 	if count != 1 {
 		t.Errorf("expected count=1, got %d", count)
 	}
 
 	// Delete
-	if err := s.DeleteAgent(agent.ID); err != nil {
-		t.Fatalf("DeleteAgent() error: %v", err)
+	if err := s.DeleteMysis(mysis.ID); err != nil {
+		t.Fatalf("DeleteMysis() error: %v", err)
 	}
-	count, _ = s.CountAgents()
+	count, _ = s.CountMyses()
 	if count != 0 {
 		t.Errorf("expected count=0 after delete, got %d", count)
 	}
@@ -113,14 +113,14 @@ func TestMemoryCRUD(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	// Create agent first
-	agent, err := s.CreateAgent("memory-test", "ollama", "llama3")
+	// Create mysis first
+	mysis, err := s.CreateMysis("memory-test", "ollama", "llama3")
 	if err != nil {
-		t.Fatalf("CreateAgent() error: %v", err)
+		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
 	// Add memories
-	m1, err := s.AddMemory(agent.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.")
+	m1, err := s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -128,18 +128,18 @@ func TestMemoryCRUD(t *testing.T) {
 		t.Error("expected non-zero memory ID")
 	}
 
-	m2, err := s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "Hello!")
+	m2, err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "Hello!")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
-	m3, err := s.AddMemory(agent.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!")
+	m3, err := s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
 	// Get all memories
-	memories, err := s.GetMemories(agent.ID)
+	memories, err := s.GetMemories(mysis.ID)
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Get recent memories
-	recent, err := s.GetRecentMemories(agent.ID, 2)
+	recent, err := s.GetRecentMemories(mysis.ID, 2)
 	if err != nil {
 		t.Fatalf("GetRecentMemories() error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Count
-	count, err := s.CountMemories(agent.ID)
+	count, err := s.CountMemories(mysis.ID)
 	if err != nil {
 		t.Fatalf("CountMemories() error: %v", err)
 	}
@@ -175,10 +175,10 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Delete memories
-	if err := s.DeleteMemories(agent.ID); err != nil {
+	if err := s.DeleteMemories(mysis.ID); err != nil {
 		t.Fatalf("DeleteMemories() error: %v", err)
 	}
-	count, _ = s.CountMemories(agent.ID)
+	count, _ = s.CountMemories(mysis.ID)
 	if count != 0 {
 		t.Errorf("expected count=0 after delete, got %d", count)
 	}
@@ -192,16 +192,16 @@ func TestCascadeDelete(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	agent, _ := s.CreateAgent("cascade-test", "ollama", "llama3")
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "test message")
+	mysis, _ := s.CreateMysis("cascade-test", "ollama", "llama3")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "test message")
 
-	// Delete agent should cascade to memories
-	if err := s.DeleteAgent(agent.ID); err != nil {
-		t.Fatalf("DeleteAgent() error: %v", err)
+	// Delete mysis should cascade to memories
+	if err := s.DeleteMysis(mysis.ID); err != nil {
+		t.Fatalf("DeleteMysis() error: %v", err)
 	}
 
 	// Memories should be gone
-	memories, err := s.GetMemories(agent.ID)
+	memories, err := s.GetMemories(mysis.ID)
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
 	}
@@ -210,22 +210,22 @@ func TestCascadeDelete(t *testing.T) {
 	}
 }
 
-func TestUpdateNonExistentAgent(t *testing.T) {
+func TestUpdateNonExistentMysis(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	err := s.UpdateAgentState("nonexistent-id", AgentStateRunning)
+	err := s.UpdateMysisState("nonexistent-id", MysisStateRunning)
 	if err == nil {
-		t.Error("expected error updating non-existent agent")
+		t.Error("expected error updating non-existent mysis")
 	}
 
-	err = s.UpdateAgentConfig("nonexistent-id", "ollama", "llama3")
+	err = s.UpdateMysisConfig("nonexistent-id", "ollama", "llama3")
 	if err == nil {
-		t.Error("expected error updating non-existent agent config")
+		t.Error("expected error updating non-existent mysis config")
 	}
 
-	err = s.DeleteAgent("nonexistent-id")
+	err = s.DeleteMysis("nonexistent-id")
 	if err == nil {
-		t.Error("expected error deleting non-existent agent")
+		t.Error("expected error deleting non-existent mysis")
 	}
 }

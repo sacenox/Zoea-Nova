@@ -18,7 +18,7 @@ type Config struct {
 
 // SwarmConfig holds swarm-related settings.
 type SwarmConfig struct {
-	MaxAgents int `toml:"max_agents"`
+	MaxMyses int `toml:"max_myses"`
 }
 
 // ProviderConfig holds LLM provider settings.
@@ -36,7 +36,7 @@ type MCPConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Swarm: SwarmConfig{
-			MaxAgents: 16,
+			MaxMyses: 16,
 		},
 		Providers: map[string]ProviderConfig{
 			"ollama": {
@@ -71,9 +71,9 @@ func Load(path string) (*Config, error) {
 
 // applyEnvOverrides applies environment variable overrides to the configuration.
 func applyEnvOverrides(cfg *Config) {
-	if v := os.Getenv("ZOEA_MAX_AGENTS"); v != "" {
+	if v := os.Getenv("ZOEA_MAX_MYSES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			cfg.Swarm.MaxAgents = n
+			cfg.Swarm.MaxMyses = n
 		}
 	}
 

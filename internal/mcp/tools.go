@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-// AgentInfo represents agent information returned by the orchestrator.
-type AgentInfo struct {
+// MysisInfo represents mysis information returned by the orchestrator.
+type MysisInfo struct {
 	ID        string
 	Name      string
 	State     string
@@ -32,34 +32,34 @@ type BroadcastResult struct {
 // Orchestrator defines the interface for swarm orchestration.
 // This interface breaks the import cycle between mcp and core packages.
 type Orchestrator interface {
-	ListAgents() []AgentInfo
-	GetAgent(id string) (AgentInfo, error)
-	AgentCount() int
-	MaxAgents() int
-	SendMessageAsync(agentID, message string) error
+	ListMyses() []MysisInfo
+	GetMysis(id string) (MysisInfo, error)
+	MysisCount() int
+	MaxMyses() int
+	SendMessageAsync(mysisID, message string) error
 	BroadcastAsync(message string) error
-	SearchMessages(agentID, query string, limit int) ([]SearchResult, error)
+	SearchMessages(mysisID, query string, limit int) ([]SearchResult, error)
 	SearchBroadcasts(query string, limit int) ([]BroadcastResult, error)
 }
 
 // RegisterOrchestratorTools registers the internal orchestration tools with the proxy.
 func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
-	// List agents tool
+	// List myses tool
 	proxy.RegisterTool(
 		Tool{
-			Name:        "zoea_list_agents",
-			Description: "List all agents in the swarm with their current status",
+			Name:        "zoea_list_myses",
+			Description: "List all myses in the swarm with their current status",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			agents := orchestrator.ListAgents()
+			myses := orchestrator.ListMyses()
 			var result []map[string]interface{}
-			for _, a := range agents {
+			for _, m := range myses {
 				result = append(result, map[string]interface{}{
-					"id":       a.ID,
-					"name":     a.Name,
-					"state":    a.State,
-					"provider": a.Provider,
+					"id":       m.ID,
+					"name":     m.Name,
+					"state":    m.State,
+					"provider": m.Provider,
 				})
 			}
 
@@ -70,22 +70,22 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 		},
 	)
 
-	// Get agent info tool
+	// Get mysis info tool
 	proxy.RegisterTool(
 		Tool{
-			Name:        "zoea_get_agent",
-			Description: "Get detailed information about a specific agent",
+			Name:        "zoea_get_mysis",
+			Description: "Get detailed information about a specific mysis",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"agent_id": {"type": "string", "description": "The ID of the agent"}
+					"mysis_id": {"type": "string", "description": "The ID of the mysis"}
 				},
-				"required": ["agent_id"]
+				"required": ["mysis_id"]
 			}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
 			var params struct {
-				AgentID string `json:"agent_id"`
+				MysisID string `json:"mysis_id"`
 			}
 			if err := json.Unmarshal(args, &params); err != nil {
 				return &ToolResult{
@@ -94,22 +94,22 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			agent, err := orchestrator.GetAgent(params.AgentID)
+			mysis, err := orchestrator.GetMysis(params.MysisID)
 			if err != nil {
 				return &ToolResult{
-					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("agent not found: %s", params.AgentID)}},
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("mysis not found: %s", params.MysisID)}},
 					IsError: true,
 				}, nil
 			}
 
 			info := map[string]interface{}{
-				"id":       agent.ID,
-				"name":     agent.Name,
-				"state":    agent.State,
-				"provider": agent.Provider,
+				"id":       mysis.ID,
+				"name":     mysis.Name,
+				"state":    mysis.State,
+				"provider": mysis.Provider,
 			}
-			if agent.LastError != nil {
-				info["last_error"] = agent.LastError.Error()
+			if mysis.LastError != nil {
+				info["last_error"] = mysis.LastError.Error()
 			}
 
 			data, _ := json.MarshalIndent(info, "", "  ")
@@ -127,11 +127,11 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			agents := orchestrator.ListAgents()
+			myses := orchestrator.ListMyses()
 
 			var running, idle, stopped, errored int
-			for _, a := range agents {
-				switch a.State {
+			for _, m := range myses {
+				switch m.State {
 				case "running":
 					running++
 				case "idle":
@@ -144,8 +144,8 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			}
 
 			status := map[string]interface{}{
-				"total_agents": orchestrator.AgentCount(),
-				"max_agents":   orchestrator.MaxAgents(),
+				"total_myses": orchestrator.MysisCount(),
+				"max_myses":   orchestrator.MaxMyses(),
 				"states": map[string]int{
 					"running": running,
 					"idle":    idle,
@@ -161,23 +161,23 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 		},
 	)
 
-	// Send message to agent tool
+	// Send message to mysis tool
 	proxy.RegisterTool(
 		Tool{
 			Name:        "zoea_send_message",
-			Description: "Send a message to a specific agent",
+			Description: "Send a message to a specific mysis",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"agent_id": {"type": "string", "description": "The ID of the agent"},
+					"mysis_id": {"type": "string", "description": "The ID of the mysis"},
 					"message": {"type": "string", "description": "The message to send"}
 				},
-				"required": ["agent_id", "message"]
+				"required": ["mysis_id", "message"]
 			}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
 			var params struct {
-				AgentID string `json:"agent_id"`
+				MysisID string `json:"mysis_id"`
 				Message string `json:"message"`
 			}
 			if err := json.Unmarshal(args, &params); err != nil {
@@ -187,7 +187,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			if err := orchestrator.SendMessageAsync(params.AgentID, params.Message); err != nil {
+			if err := orchestrator.SendMessageAsync(params.MysisID, params.Message); err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to send message: %v", err)}},
 					IsError: true,
@@ -204,7 +204,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 	proxy.RegisterTool(
 		Tool{
 			Name:        "zoea_broadcast",
-			Description: "Send a message to all running agents",
+			Description: "Send a message to all running myses",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -232,7 +232,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			}
 
 			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: "broadcast queued for delivery to all running agents"}},
+				Content: []ContentBlock{{Type: "text", Text: "broadcast queued for delivery to all running myses"}},
 			}, nil
 		},
 	)
@@ -245,16 +245,16 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"agent_id": {"type": "string", "description": "The ID of the agent whose messages to search"},
+					"mysis_id": {"type": "string", "description": "The ID of the mysis whose messages to search"},
 					"query": {"type": "string", "description": "Text to search for in message content"},
 					"limit": {"type": "integer", "description": "Maximum results to return (default 20, max 100)"}
 				},
-				"required": ["agent_id", "query"]
+				"required": ["mysis_id", "query"]
 			}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
 			var params struct {
-				AgentID string `json:"agent_id"`
+				MysisID string `json:"mysis_id"`
 				Query   string `json:"query"`
 				Limit   int    `json:"limit"`
 			}
@@ -279,7 +279,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				limit = 100
 			}
 
-			results, err := orchestrator.SearchMessages(params.AgentID, params.Query, limit)
+			results, err := orchestrator.SearchMessages(params.MysisID, params.Query, limit)
 			if err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("search failed: %v", err)}},

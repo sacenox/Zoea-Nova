@@ -13,4 +13,4 @@ Read `documentation/KNOWN_ISSUES.md` and investigate the first item. Create a pl
 - Do not create files.
 - Read the documentation before investigating.
 - Gather all required context first.
-- Use explorer agents to gather information.
+- Use explorer subagents to gather information.

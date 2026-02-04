@@ -9,14 +9,14 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 )
 
-// AgentInfo holds display info for an agent.
-type AgentInfo struct {
+// MysisInfo holds display info for a mysis.
+type MysisInfo struct {
 	ID          string
 	Name        string
 	State       string
 	Provider    string
 	LastMessage string    // Most recent message (user or assistant)
-	CreatedAt   time.Time // When agent was created
+	CreatedAt   time.Time // When mysis was created
 }
 
 // SwarmMessageInfo holds display info for a broadcast message.
@@ -26,7 +26,7 @@ type SwarmMessageInfo struct {
 }
 
 // RenderDashboard renders the main dashboard view.
-func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string) string {
+func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string) string {
 	var sections []string
 
 	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
@@ -56,11 +56,11 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 
 	// Stats bar
 	var running, stopped, errored, loading int
-	for _, a := range agents {
-		if loadingSet[a.ID] {
+	for _, m := range myses {
+		if loadingSet[m.ID] {
 			loading++
 		}
-		switch a.State {
+		switch m.State {
 		case "running":
 			running++
 		case "stopped":
@@ -74,13 +74,13 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 		stateRunningStyle.Render("●"),
 		running,
 		stateIdleStyle.Render("○"),
-		len(agents)-running-stopped-errored,
+		len(myses)-running-stopped-errored,
 		stateStoppedStyle.Render("◌"),
 		stopped,
 		stateErroredStyle.Render("✖"),
 		errored,
 	)
-	// Add loading indicator if any agents are loading
+	// Add loading indicator if any myses are loading
 	if loading > 0 {
 		stats += fmt.Sprintf("  %s %d", spinnerView, loading)
 	}
@@ -110,62 +110,62 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 		sections = append(sections, swarmContent)
 	}
 
-	// Agent list header
-	agentHeader := renderSectionTitle("AGENT SWARM", width)
-	sections = append(sections, agentHeader)
+	// Mysis list header
+	mysisHeader := renderSectionTitle("MYSIS SWARM", width)
+	sections = append(sections, mysisHeader)
 
 	// Calculate height used by other elements to fill remaining space
-	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + messages, Agent header: 1 line, Footer: 1 line
-	usedHeight := 6 // header (3 + margin) + stats (1) + agent header (1) + footer (1)
+	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + messages, Mysis header: 1 line, Footer: 1 line
+	usedHeight := 6 // header (3 + margin) + stats (1) + mysis header (1) + footer (1)
 	if len(swarmMessages) > 0 {
 		usedHeight += 1 + len(swarmMessages) // swarm header + messages
 	}
 	// Account for panel borders (top + bottom = 2 lines)
 	usedHeight += 2
 
-	agentListHeight := height - usedHeight
-	if agentListHeight < 3 {
-		agentListHeight = 3
+	mysisListHeight := height - usedHeight
+	if mysisListHeight < 3 {
+		mysisListHeight = 3
 	}
 
-	// Agent list - DoubleBorder adds 2 chars each side, so content width is width-4
+	// Mysis list - DoubleBorder adds 2 chars each side, so content width is width-4
 	contentWidth := width - 4
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
 
-	if len(agents) == 0 {
-		emptyMsg := dimmedStyle.Render("No agents. Press 'n' to create one.")
-		agentList := agentListStyle.Width(width - 2).Height(agentListHeight).Render(emptyMsg)
-		sections = append(sections, agentList)
+	if len(myses) == 0 {
+		emptyMsg := dimmedStyle.Render("No myses. Press 'n' to create one.")
+		mysisList := mysisListStyle.Width(width - 2).Height(mysisListHeight).Render(emptyMsg)
+		sections = append(sections, mysisList)
 	} else {
-		var agentLines []string
-		for i, a := range agents {
-			isLoading := loadingSet[a.ID]
-			line := renderAgentLine(a, i == selectedIdx, isLoading, spinnerView, contentWidth)
-			agentLines = append(agentLines, line)
+		var mysisLines []string
+		for i, m := range myses {
+			isLoading := loadingSet[m.ID]
+			line := renderMysisLine(m, i == selectedIdx, isLoading, spinnerView, contentWidth)
+			mysisLines = append(mysisLines, line)
 		}
-		content := strings.Join(agentLines, "\n")
-		agentList := agentListStyle.Width(width - 2).Height(agentListHeight).Render(content)
-		sections = append(sections, agentList)
+		content := strings.Join(mysisLines, "\n")
+		mysisList := mysisListStyle.Width(width - 2).Height(mysisListHeight).Render(content)
+		sections = append(sections, mysisList)
 	}
 
 	// Footer with hint
-	hint := dimmedStyle.Render("[ ? ] HELP  ·  [ n ] NEW AGENT  ·  [ b ] BROADCAST")
+	hint := dimmedStyle.Render("[ ? ] HELP  ·  [ n ] NEW MYSIS  ·  [ b ] BROADCAST")
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, width int) string {
+func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int) string {
 	// State indicator: animated for running/loading, static for others
 	var stateIndicator string
 	if isLoading {
 		stateIndicator = spinnerView
 	} else {
-		switch a.State {
+		switch m.State {
 		case "running":
-			// Animated indicator for running agents
+			// Animated indicator for running myses
 			stateIndicator = spinnerView
 		case "idle":
 			stateIndicator = stateIdleStyle.Render("○")
@@ -179,13 +179,13 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 	}
 
 	// Build line - use display width for truncation
-	name := a.Name
+	name := m.Name
 	if lipgloss.Width(name) > 16 {
 		name = truncateToWidth(name, 13) + "..."
 	}
 
-	stateText := StateStyle(a.State).Render(fmt.Sprintf("%-8s", a.State))
-	provider := dimmedStyle.Render(fmt.Sprintf("[%s]", a.Provider))
+	stateText := StateStyle(m.State).Render(fmt.Sprintf("%-8s", m.State))
+	provider := dimmedStyle.Render(fmt.Sprintf("[%s]", m.Provider))
 
 	// First part: indicator + name + state + provider
 	firstPart := fmt.Sprintf("%s %-16s %s %s", stateIndicator, name, stateText, provider)
@@ -193,7 +193,7 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 	// Calculate remaining width for last message
 	// Account for the prefix "│ " for the message
 	// Use lipgloss.Width() for proper Unicode width calculation
-	providerWidth := lipgloss.Width(a.Provider)
+	providerWidth := lipgloss.Width(m.Provider)
 	usedWidth := 2 + 16 + 1 + 8 + 1 + providerWidth + 2 + 4 // rough estimate
 	msgWidth := width - usedWidth - 8
 	if msgWidth < 10 {
@@ -202,8 +202,8 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 
 	// Format last message (truncated) - use display width
 	var msgPart string
-	if a.LastMessage != "" {
-		msg := strings.ReplaceAll(a.LastMessage, "\n", " ")
+	if m.LastMessage != "" {
+		msg := strings.ReplaceAll(m.LastMessage, "\n", " ")
 		if lipgloss.Width(msg) > msgWidth {
 			msg = truncateToWidth(msg, msgWidth-3) + "..."
 		}
@@ -214,18 +214,18 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 
 	// Apply style with full width to ensure background fills the line
 	if selected {
-		return agentItemSelectedStyle.Width(width).Render(line)
+		return mysisItemSelectedStyle.Width(width).Render(line)
 	}
-	return agentItemStyle.Width(width).Render(line)
+	return mysisItemStyle.Width(width).Render(line)
 }
 
-// AgentInfoFromCore converts a core.Agent to AgentInfo.
-func AgentInfoFromCore(a *core.Agent) AgentInfo {
-	return AgentInfo{
-		ID:        a.ID(),
-		Name:      a.Name(),
-		State:     string(a.State()),
-		Provider:  a.ProviderName(),
-		CreatedAt: a.CreatedAt(),
+// MysisInfoFromCore converts a core.Mysis to MysisInfo.
+func MysisInfoFromCore(m *core.Mysis) MysisInfo {
+	return MysisInfo{
+		ID:        m.ID(),
+		Name:      m.Name(),
+		State:     string(m.State()),
+		Provider:  m.ProviderName(),
+		CreatedAt: m.CreatedAt(),
 	}
 }

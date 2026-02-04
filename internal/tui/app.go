@@ -37,7 +37,7 @@ type Model struct {
 	showHelp    bool
 
 	input   InputModel
-	agents  []AgentInfo
+	myses   []MysisInfo
 	logs    []LogEntry
 	focusID string
 
@@ -45,7 +45,7 @@ type Model struct {
 	swarmMessages []SwarmMessage
 
 	spinner    spinner.Model
-	loadingSet map[string]bool // agentIDs currently loading
+	loadingSet map[string]bool // mysisIDs currently loading
 
 	// Conversation viewport
 	viewport   viewport.Model
@@ -88,7 +88,7 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 		eventCh:      eventCh,
 		view:         ViewDashboard,
 		input:        NewInputModel(),
-		agents:       []AgentInfo{},
+		myses:        []MysisInfo{},
 		spinner:      sp,
 		loadingSet:   make(map[string]bool),
 		viewport:     vp,
@@ -101,7 +101,7 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.netIndicator.Init(),
-		m.refreshAgents(),
+		m.refreshMyses(),
 		m.listenForEvents(),
 		m.spinner.Tick,
 	)
@@ -174,8 +174,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleEvent(msg.Event)
 		return m, m.listenForEvents()
 
-	case refreshAgentsMsg:
-		m.refreshAgentList()
+	case refreshMysesMsg:
+		m.refreshMysisList()
 		m.refreshSwarmMessages()
 
 	case spinner.TickMsg:
@@ -185,7 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sendMessageResult:
 		// Message finished sending (success or failure)
-		delete(m.loadingSet, msg.agentID)
+		delete(m.loadingSet, msg.mysisID)
 		if msg.err != nil {
 			m.err = msg.err
 		}
@@ -193,8 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.loadingSet) == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
 		}
-		if m.view == ViewFocus && msg.agentID == m.focusID {
-			m.loadAgentLogs()
+		if m.view == ViewFocus && msg.mysisID == m.focusID {
+			m.loadMysisLogs()
 		}
 
 	case broadcastResult:
@@ -224,7 +224,7 @@ func (m Model) View() string {
 
 	var content string
 
-	// Check if currently focused agent is loading
+	// Check if currently focused mysis is loading
 	isLoading := m.loadingSet[m.focusID]
 
 	// Reserve space for status bar
@@ -233,7 +233,7 @@ func (m Model) View() string {
 	if m.showHelp {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
-		content = RenderFocusViewWithViewport(m.agentByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -244,7 +244,7 @@ func (m Model) View() string {
 				CreatedAt: msg.CreatedAt,
 			}
 		}
-		content = RenderDashboard(m.agents, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
+		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
 	}
 
 	// Always show message bar
@@ -280,18 +280,18 @@ func (m Model) renderStatusBar() string {
 		viewName = "FOCUS: " + idPreview
 	}
 
-	// Agent count on the right
+	// Mysis count on the right
 	running := 0
-	for _, a := range m.agents {
-		if a.State == "running" {
+	for _, mysis := range m.myses {
+		if mysis.State == "running" {
 			running++
 		}
 	}
-	agentStatus := fmt.Sprintf("Agents: %d/%d running", running, len(m.agents))
+	mysisStatus := fmt.Sprintf("Myses: %d/%d running", running, len(m.myses))
 
 	// Calculate spacing
 	leftWidth := lipgloss.Width(netStatus)
-	rightWidth := lipgloss.Width(agentStatus)
+	rightWidth := lipgloss.Width(mysisStatus)
 	middleWidth := lipgloss.Width(viewName)
 	totalUsed := leftWidth + rightWidth + middleWidth
 	spacing := m.width - totalUsed - 4 // -4 for some padding
@@ -310,13 +310,13 @@ func (m Model) renderStatusBar() string {
 		Width(m.width)
 
 	viewStyle := lipgloss.NewStyle().Foreground(colorMuted)
-	agentStyle := lipgloss.NewStyle().Foreground(colorSecondary)
+	mysisStyle := lipgloss.NewStyle().Foreground(colorSecondary)
 
 	bar := netStatus +
 		strings.Repeat(" ", leftPad) +
 		viewStyle.Render(viewName) +
 		strings.Repeat(" ", rightPad) +
-		agentStyle.Render(agentStatus)
+		mysisStyle.Render(mysisStatus)
 
 	return barStyle.Render(bar)
 }
@@ -329,42 +329,42 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, keys.Down), key.Matches(msg, keys.Tab):
-		if m.selectedIdx < len(m.agents)-1 {
+		if m.selectedIdx < len(m.myses)-1 {
 			m.selectedIdx++
 		}
 
 	case key.Matches(msg, keys.Enter):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			m.focusID = m.agents[m.selectedIdx].ID
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			m.focusID = m.myses[m.selectedIdx].ID
 			m.view = ViewFocus
 			m.autoScroll = true // Start at bottom when entering focus view
-			m.loadAgentLogs()
+			m.loadMysisLogs()
 		}
 
-	case key.Matches(msg, keys.NewAgent):
-		m.input.SetMode(InputModeNewAgent, "")
+	case key.Matches(msg, keys.NewMysis):
+		m.input.SetMode(InputModeNewMysis, "")
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Delete):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			id := m.agents[m.selectedIdx].ID
-			m.err = m.commander.DeleteAgent(id, true)
-			m.refreshAgentList()
-			if m.selectedIdx >= len(m.agents) && m.selectedIdx > 0 {
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			id := m.myses[m.selectedIdx].ID
+			m.err = m.commander.DeleteMysis(id, true)
+			m.refreshMysisList()
+			if m.selectedIdx >= len(m.myses) && m.selectedIdx > 0 {
 				m.selectedIdx--
 			}
 		}
 
 	case key.Matches(msg, keys.Relaunch):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			id := m.agents[m.selectedIdx].ID
-			m.err = m.commander.StartAgent(id)
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			id := m.myses[m.selectedIdx].ID
+			m.err = m.commander.StartMysis(id)
 		}
 
 	case key.Matches(msg, keys.Stop):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			id := m.agents[m.selectedIdx].ID
-			m.err = m.commander.StopAgent(id)
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			id := m.myses[m.selectedIdx].ID
+			m.err = m.commander.StopMysis(id)
 		}
 
 	case key.Matches(msg, keys.Broadcast):
@@ -372,15 +372,15 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Message):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			id := m.agents[m.selectedIdx].ID
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			id := m.myses[m.selectedIdx].ID
 			m.input.SetMode(InputModeMessage, id)
 			return m, m.input.Focus()
 		}
 
 	case key.Matches(msg, keys.Configure):
-		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
-			id := m.agents[m.selectedIdx].ID
+		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
+			id := m.myses[m.selectedIdx].ID
 			m.input.SetMode(InputModeConfigProvider, id)
 			return m, m.input.Focus()
 		}
@@ -396,11 +396,11 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Relaunch):
-		m.err = m.commander.StartAgent(m.focusID)
+		m.err = m.commander.StartMysis(m.focusID)
 		return m, nil
 
 	case key.Matches(msg, keys.Stop):
-		m.err = m.commander.StopAgent(m.focusID)
+		m.err = m.commander.StopMysis(m.focusID)
 		return m, nil
 
 	case key.Matches(msg, keys.Configure):
@@ -450,11 +450,11 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputModeBroadcast:
 			// Add to history before sending
 			m.input.AddToHistory(value)
-			// Mark all running agents as loading
-			agents := m.commander.ListAgents()
-			for _, a := range agents {
-				if a.State() == core.AgentStateRunning {
-					m.loadingSet[a.ID()] = true
+			// Mark all running myses as loading
+			myses := m.commander.ListMyses()
+			for _, mysis := range myses {
+				if mysis.State() == core.MysisStateRunning {
+					m.loadingSet[mysis.ID()] = true
 				}
 			}
 			m.netIndicator.SetActivity(NetActivityLLM)
@@ -469,21 +469,21 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.netIndicator.SetActivity(NetActivityLLM)
 			cmd = m.sendMessageAsync(targetID, value)
 			if m.view == ViewFocus {
-				m.loadAgentLogs()
+				m.loadMysisLogs()
 			}
 
-		case InputModeNewAgent:
-			agent, err := m.commander.CreateAgent(value, "ollama")
+		case InputModeNewMysis:
+			mysis, err := m.commander.CreateMysis(value, "ollama")
 			if err == nil {
-				// Auto-start newly created agents
-				m.err = m.commander.StartAgent(agent.ID())
+				// Auto-start newly created myses
+				m.err = m.commander.StartMysis(mysis.ID())
 			} else {
 				m.err = err
 			}
-			m.refreshAgentList()
+			m.refreshMysisList()
 
 		case InputModeConfigProvider:
-			m.err = m.commander.ConfigureAgent(m.input.TargetID(), value)
+			m.err = m.commander.ConfigureMysis(m.input.TargetID(), value)
 		}
 
 		m.input.Reset()
@@ -496,11 +496,11 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// sendMessageAsync sends a message to an agent asynchronously.
-func (m Model) sendMessageAsync(agentID, content string) tea.Cmd {
+// sendMessageAsync sends a message to a mysis asynchronously.
+func (m Model) sendMessageAsync(mysisID, content string) tea.Cmd {
 	return func() tea.Msg {
-		err := m.commander.SendMessage(agentID, content)
-		return sendMessageResult{agentID: agentID, err: err}
+		err := m.commander.SendMessage(mysisID, content)
+		return sendMessageResult{mysisID: mysisID, err: err}
 	}
 }
 
@@ -517,14 +517,14 @@ func (m Model) broadcastAsync(content string) tea.Cmd {
 
 func (m *Model) handleEvent(event core.Event) {
 	switch event.Type {
-	case core.EventAgentCreated, core.EventAgentDeleted, core.EventAgentStateChanged, core.EventAgentConfigChanged:
-		m.refreshAgentList()
+	case core.EventMysisCreated, core.EventMysisDeleted, core.EventMysisStateChanged, core.EventMysisConfigChanged:
+		m.refreshMysisList()
 
-	case core.EventAgentResponse, core.EventAgentMessage:
+	case core.EventMysisResponse, core.EventMysisMessage:
 		// Refresh dashboard to update last message
-		m.refreshAgentList()
-		if m.view == ViewFocus && event.AgentID == m.focusID {
-			m.loadAgentLogs()
+		m.refreshMysisList()
+		if m.view == ViewFocus && event.MysisID == m.focusID {
+			m.loadMysisLogs()
 		}
 
 	case core.EventBroadcast:
@@ -538,7 +538,7 @@ func (m *Model) handleEvent(event core.Event) {
 		m.netIndicator.SetActivity(NetActivityMCP)
 
 	case core.EventNetworkIdle:
-		// Only go idle if no agents are loading
+		// Only go idle if no myses are loading
 		if len(m.loadingSet) == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
 		}
@@ -548,24 +548,24 @@ func (m *Model) handleEvent(event core.Event) {
 	m.err = nil
 }
 
-func (m *Model) refreshAgentList() {
-	agents := m.commander.ListAgents()
-	m.agents = make([]AgentInfo, len(agents))
-	for i, a := range agents {
-		info := AgentInfoFromCore(a)
+func (m *Model) refreshMysisList() {
+	myses := m.commander.ListMyses()
+	m.myses = make([]MysisInfo, len(myses))
+	for i, mysis := range myses {
+		info := MysisInfoFromCore(mysis)
 
-		// Fetch last message for this agent
-		memories, err := m.store.GetRecentMemories(a.ID(), 1)
+		// Fetch last message for this mysis
+		memories, err := m.store.GetRecentMemories(mysis.ID(), 1)
 		if err == nil && len(memories) > 0 {
 			info.LastMessage = memories[0].Content
 		}
 
-		m.agents[i] = info
+		m.myses[i] = info
 	}
 
 	// Sort by creation time (oldest first)
-	sort.Slice(m.agents, func(i, j int) bool {
-		return m.agents[i].CreatedAt.Before(m.agents[j].CreatedAt)
+	sort.Slice(m.myses, func(i, j int) bool {
+		return m.myses[i].CreatedAt.Before(m.myses[j].CreatedAt)
 	})
 }
 
@@ -585,7 +585,7 @@ func (m *Model) refreshSwarmMessages() {
 	}
 }
 
-func (m *Model) loadAgentLogs() {
+func (m *Model) loadMysisLogs() {
 	if m.focusID == "" {
 		m.logs = nil
 		m.viewport.SetContent("")
@@ -633,26 +633,26 @@ func (m *Model) updateViewportContent() {
 	}
 }
 
-func (m Model) agentByID(id string) AgentInfo {
-	for _, a := range m.agents {
-		if a.ID == id {
-			return a
+func (m Model) mysisByID(id string) MysisInfo {
+	for _, mysis := range m.myses {
+		if mysis.ID == id {
+			return mysis
 		}
 	}
-	return AgentInfo{ID: id, Name: "Unknown", State: "unknown"}
+	return MysisInfo{ID: id, Name: "Unknown", State: "unknown"}
 }
 
-type refreshAgentsMsg struct{}
+type refreshMysesMsg struct{}
 
 // sendMessageResult is returned when an async message send completes.
 type sendMessageResult struct {
-	agentID string
+	mysisID string
 	err     error
 }
 
-func (m Model) refreshAgents() tea.Cmd {
+func (m Model) refreshMyses() tea.Cmd {
 	return func() tea.Msg {
-		return refreshAgentsMsg{}
+		return refreshMysesMsg{}
 	}
 }
 
@@ -676,7 +676,7 @@ var keys = struct {
 	ShiftTab  key.Binding
 	Up        key.Binding
 	Down      key.Binding
-	NewAgent  key.Binding
+	NewMysis  key.Binding
 	Delete    key.Binding
 	Relaunch  key.Binding
 	Stop      key.Binding
@@ -693,7 +693,7 @@ var keys = struct {
 	ShiftTab:  key.NewBinding(key.WithKeys("shift+tab")),
 	Up:        key.NewBinding(key.WithKeys("up", "k")),
 	Down:      key.NewBinding(key.WithKeys("down", "j")),
-	NewAgent:  key.NewBinding(key.WithKeys("n")),
+	NewMysis:  key.NewBinding(key.WithKeys("n")),
 	Delete:    key.NewBinding(key.WithKeys("d")),
 	Relaunch:  key.NewBinding(key.WithKeys("r")),
 	Stop:      key.NewBinding(key.WithKeys("s")),

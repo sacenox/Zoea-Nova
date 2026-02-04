@@ -13,7 +13,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-// SystemPrompt is the initial prompt sent to every agent when they first start.
+// SystemPrompt is the initial prompt sent to every mysis when they first start.
 const SystemPrompt = `You are an autonomous AI pilot in SpaceMolt. Think for yourself. Adapt. Survive.
 
 ## Bootstrap Sequence
@@ -50,9 +50,9 @@ Use captain's log (captains_log_add) to remember:
 
 ## Swarm Coordination
 You're part of a swarm. Use zoea_* tools to:
-- zoea_list_agents, zoea_swarm_status: See swarm state
-- zoea_send_message: Direct message a specific agent
-- zoea_broadcast: Message all running agents
+- zoea_list_myses, zoea_swarm_status: See swarm state
+- zoea_send_message: Direct message a specific mysis
+- zoea_broadcast: Message all running myses
 - zoea_search_messages: Search your past messages by text
 - zoea_search_broadcasts: Search past swarm broadcasts by text
 - Report threats and opportunities
@@ -68,16 +68,16 @@ No hand-holding. Figure it out. Adapt or die.`
 const MaxToolIterations = 10
 
 // MaxContextMessages limits how many recent messages to include in LLM context.
-// This keeps context small for faster inference while agents can use search tools
+// This keeps context small for faster inference while myses can use search tools
 // to retrieve older memories when needed. Value chosen to cover ~2 server ticks
 // worth of activity (each tick may involve multiple tool calls).
 const MaxContextMessages = 20
 
-// ContinuePrompt is sent to agents when they finish a turn to encourage autonomy.
+// ContinuePrompt is sent to myses when they finish a turn to encourage autonomy.
 const ContinuePrompt = "Turn complete. What is your next move? If you are waiting for something, describe what and why. Otherwise, continue your mission."
 
-// Agent represents a single AI agent in the swarm.
-type Agent struct {
+// Mysis represents a single AI mysis in the swarm.
+type Mysis struct {
 	mu sync.RWMutex
 
 	id        string
@@ -88,63 +88,63 @@ type Agent struct {
 	bus       *EventBus
 	mcp       *mcp.Proxy
 
-	state  AgentState
+	state  MysisState
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// turnMu ensures only one agentic turn runs at a time.
+	// turnMu ensures only one turn runs at a time.
 	turnMu sync.Mutex
 
 	// For runtime tracking
 	lastError error
 }
 
-// NewAgent creates a new agent from stored data.
-func NewAgent(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Agent {
-	return &Agent{
+// NewMysis creates a new mysis from stored data.
+func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Mysis {
+	return &Mysis{
 		id:        id,
 		name:      name,
 		createdAt: createdAt,
 		provider:  p,
 		store:     s,
 		bus:       bus,
-		state:     AgentStateIdle,
+		state:     MysisStateIdle,
 	}
 }
 
 // SetMCP sets the MCP proxy for tool calling.
-func (a *Agent) SetMCP(proxy *mcp.Proxy) {
+func (a *Mysis) SetMCP(proxy *mcp.Proxy) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.mcp = proxy
 }
 
-// ID returns the agent's unique identifier.
-func (a *Agent) ID() string {
+// ID returns the mysis unique identifier.
+func (a *Mysis) ID() string {
 	return a.id
 }
 
-// Name returns the agent's display name.
-func (a *Agent) Name() string {
+// Name returns the mysis display name.
+func (a *Mysis) Name() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.name
 }
 
-// CreatedAt returns when the agent was created.
-func (a *Agent) CreatedAt() time.Time {
+// CreatedAt returns when the mysis was created.
+func (a *Mysis) CreatedAt() time.Time {
 	return a.createdAt
 }
 
-// State returns the agent's current state.
-func (a *Agent) State() AgentState {
+// State returns the mysis current state.
+func (a *Mysis) State() MysisState {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.state
 }
 
-// ProviderName returns the name of the agent's provider.
-func (a *Agent) ProviderName() string {
+// ProviderName returns the name of the mysis provider.
+func (a *Mysis) ProviderName() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.provider == nil {
@@ -153,30 +153,30 @@ func (a *Agent) ProviderName() string {
 	return a.provider.Name()
 }
 
-// LastError returns the last error encountered by the agent.
-func (a *Agent) LastError() error {
+// LastError returns the last error encountered by the mysis.
+func (a *Mysis) LastError() error {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.lastError
 }
 
-// SetProvider updates the agent's provider.
-func (a *Agent) SetProvider(p provider.Provider) {
+// SetProvider updates the mysis provider.
+func (a *Mysis) SetProvider(p provider.Provider) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.provider = p
 }
 
-// Start begins the agent's processing loop.
-func (a *Agent) Start() error {
+// Start begins the mysis processing loop.
+func (a *Mysis) Start() error {
 	a.mu.Lock()
-	if a.state == AgentStateRunning {
+	if a.state == MysisStateRunning {
 		a.mu.Unlock()
-		return fmt.Errorf("agent already running")
+		return fmt.Errorf("mysis already running")
 	}
 
 	oldState := a.state
-	a.state = AgentStateRunning
+	a.state = MysisStateRunning
 	a.lastError = nil
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,9 +185,9 @@ func (a *Agent) Start() error {
 	a.mu.Unlock()
 
 	// Update store
-	if err := a.store.UpdateAgentState(a.id, store.AgentStateRunning); err != nil {
+	if err := a.store.UpdateMysisState(a.id, store.MysisStateRunning); err != nil {
 		a.mu.Lock()
-		a.state = AgentStateErrored
+		a.state = MysisStateErrored
 		a.lastError = err
 		a.mu.Unlock()
 		return err
@@ -200,7 +200,7 @@ func (a *Agent) Start() error {
 	}
 
 	// Emit state change event
-	a.emitStateChange(oldState, AgentStateRunning)
+	a.emitStateChange(oldState, MysisStateRunning)
 
 	// Start the processing goroutine
 	go a.run(ctx)
@@ -211,12 +211,12 @@ func (a *Agent) Start() error {
 	return nil
 }
 
-// Stop halts the agent's processing loop.
-func (a *Agent) Stop() error {
+// Stop halts the mysis processing loop.
+func (a *Mysis) Stop() error {
 	a.mu.Lock()
-	if a.state != AgentStateRunning {
+	if a.state != MysisStateRunning {
 		a.mu.Unlock()
-		return fmt.Errorf("agent not running")
+		return fmt.Errorf("mysis not running")
 	}
 
 	if a.cancel != nil {
@@ -233,24 +233,24 @@ func (a *Agent) Stop() error {
 	a.ctx = nil
 
 	oldState := a.state
-	a.state = AgentStateStopped
+	a.state = MysisStateStopped
 	a.mu.Unlock()
 
 	// Update store
-	if err := a.store.UpdateAgentState(a.id, store.AgentStateStopped); err != nil {
+	if err := a.store.UpdateMysisState(a.id, store.MysisStateStopped); err != nil {
 		return err
 	}
 
 	// Emit state change event
-	a.emitStateChange(oldState, AgentStateStopped)
+	a.emitStateChange(oldState, MysisStateStopped)
 
 	return nil
 }
 
-// SendMessage sends a message to the agent for processing.
-// This implements the agentic loop with tool calling support.
+// SendMessage sends a message to the mysis for processing.
+// This implements the loop with tool calling support.
 // The source parameter indicates whether this is a direct or broadcast message.
-func (a *Agent) SendMessage(content string, source store.MemorySource) error {
+func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 
@@ -260,8 +260,8 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 	mcpProxy := a.mcp
 	a.mu.RUnlock()
 
-	if state != AgentStateRunning {
-		return fmt.Errorf("agent not running")
+	if state != MysisStateRunning {
+		return fmt.Errorf("mysis not running")
 	}
 
 	// Determine role based on source
@@ -277,9 +277,9 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 
 	// Emit message event
 	a.bus.Publish(Event{
-		Type:      EventAgentMessage,
-		AgentID:   a.id,
-		AgentName: a.name,
+		Type:      EventMysisMessage,
+		MysisID:   a.id,
+		MysisName: a.name,
 		Data:      MessageData{Role: string(role), Content: content},
 		Timestamp: time.Now(),
 	})
@@ -301,11 +301,11 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 	if mcpProxy != nil {
 		mcpTools, err := mcpProxy.ListTools(ctx)
 		if err != nil {
-			// Log error but continue - agent can still chat without tools
+			// Log error but continue - mysis can still chat without tools
 			a.bus.Publish(Event{
-				Type:      EventAgentError,
-				AgentID:   a.id,
-				AgentName: a.name,
+				Type:      EventMysisError,
+				MysisID:   a.id,
+				MysisName: a.name,
 				Data:      ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
 				Timestamp: time.Now(),
 			})
@@ -323,9 +323,9 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 			// Log available tools (only on first message or if debugging)
 			if len(tools) > 0 {
 				a.bus.Publish(Event{
-					Type:      EventAgentMessage,
-					AgentID:   a.id,
-					AgentName: a.name,
+					Type:      EventMysisMessage,
+					MysisID:   a.id,
+					MysisName: a.name,
 					Data:      MessageData{Role: "system", Content: fmt.Sprintf("Tools available: %s", strings.Join(toolNames, ", "))},
 					Timestamp: time.Now(),
 				})
@@ -333,15 +333,15 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		}
 	} else {
 		a.bus.Publish(Event{
-			Type:      EventAgentError,
-			AgentID:   a.id,
-			AgentName: a.name,
+			Type:      EventMysisError,
+			MysisID:   a.id,
+			MysisName: a.name,
 			Data:      ErrorData{Error: "MCP proxy not configured - no tools available"},
 			Timestamp: time.Now(),
 		})
 	}
 
-	// Agentic loop: keep calling LLM until we get a final text response
+	// Loop: keep calling LLM until we get a final text response
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
 		// Get recent conversation history (keeps context small for faster inference)
 		memories, err := a.getContextMemories()
@@ -356,8 +356,8 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		// Signal LLM activity start
 		a.bus.Publish(Event{
 			Type:      EventNetworkLLM,
-			AgentID:   a.id,
-			AgentName: a.name,
+			MysisID:   a.id,
+			MysisName: a.name,
 			Timestamp: time.Now(),
 		})
 
@@ -376,7 +376,7 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		}
 
 		if err != nil {
-			a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+			a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 			a.setError(err)
 			return fmt.Errorf("provider chat: %w", err)
 		}
@@ -396,9 +396,9 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 				toolNames[i] = tc.Name
 			}
 			a.bus.Publish(Event{
-				Type:      EventAgentMessage,
-				AgentID:   a.id,
-				AgentName: a.name,
+				Type:      EventMysisMessage,
+				MysisID:   a.id,
+				MysisName: a.name,
 				Data:      MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
 				Timestamp: time.Now(),
 			})
@@ -408,8 +408,8 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 				// Signal MCP activity
 				a.bus.Publish(Event{
 					Type:      EventNetworkMCP,
-					AgentID:   a.id,
-					AgentName: a.name,
+					MysisID:   a.id,
+					MysisName: a.name,
 					Timestamp: time.Now(),
 				})
 
@@ -424,9 +424,9 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 
 				// Emit tool result event
 				a.bus.Publish(Event{
-					Type:      EventAgentMessage,
-					AgentID:   a.id,
-					AgentName: a.name,
+					Type:      EventMysisMessage,
+					MysisID:   a.id,
+					MysisName: a.name,
 					Data:      MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
 					Timestamp: time.Now(),
 				})
@@ -449,13 +449,13 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		}
 
 		// Signal network idle
-		a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+		a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
 		// Emit response event
 		a.bus.Publish(Event{
-			Type:      EventAgentResponse,
-			AgentID:   a.id,
-			AgentName: a.name,
+			Type:      EventMysisResponse,
+			MysisID:   a.id,
+			MysisName: a.name,
 			Data:      MessageData{Role: "assistant", Content: finalResponse},
 			Timestamp: time.Now(),
 		})
@@ -464,13 +464,13 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 	}
 
 	// Signal network idle on max iterations
-	a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
 	return fmt.Errorf("max tool iterations (%d) exceeded", MaxToolIterations)
 }
 
 // memoriesToMessages converts stored memories to provider messages.
-func (a *Agent) memoriesToMessages(memories []*store.Memory) []provider.Message {
+func (a *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message {
 	messages := make([]provider.Message, 0, len(memories))
 
 	for _, m := range memories {
@@ -502,7 +502,7 @@ func (a *Agent) memoriesToMessages(memories []*store.Memory) []provider.Message 
 }
 
 // executeToolCall executes a single tool call via MCP proxy.
-func (a *Agent) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc provider.ToolCall) (*mcp.ToolResult, error) {
+func (a *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc provider.ToolCall) (*mcp.ToolResult, error) {
 	if mcpProxy == nil {
 		return &mcp.ToolResult{
 			Content: []mcp.ContentBlock{{Type: "text", Text: "MCP not configured"}},
@@ -514,7 +514,7 @@ func (a *Agent) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 }
 
 // formatToolCallsForStorage formats tool calls for storage in memory.
-func (a *Agent) formatToolCallsForStorage(calls []provider.ToolCall) string {
+func (a *Mysis) formatToolCallsForStorage(calls []provider.ToolCall) string {
 	var parts []string
 	for _, tc := range calls {
 		parts = append(parts, fmt.Sprintf("%s:%s:%s", tc.ID, tc.Name, string(tc.Arguments)))
@@ -523,7 +523,7 @@ func (a *Agent) formatToolCallsForStorage(calls []provider.ToolCall) string {
 }
 
 // parseStoredToolCalls parses tool calls from stored format.
-func (a *Agent) parseStoredToolCalls(stored string) []provider.ToolCall {
+func (a *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 	stored = strings.TrimPrefix(stored, "[TOOL_CALLS]")
 	if stored == "" {
 		return nil
@@ -545,7 +545,7 @@ func (a *Agent) parseStoredToolCalls(stored string) []provider.ToolCall {
 }
 
 // formatToolResult formats a tool result for storage (includes ID for LLM context).
-func (a *Agent) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
+func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
 	if err != nil {
 		return fmt.Sprintf("%s:Error: %v", toolCallID, err)
 	}
@@ -566,7 +566,7 @@ func (a *Agent) formatToolResult(toolCallID, toolName string, result *mcp.ToolRe
 }
 
 // formatToolResultDisplay formats a tool result for UI display (human-readable).
-func (a *Agent) formatToolResultDisplay(result *mcp.ToolResult, err error) string {
+func (a *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -591,16 +591,16 @@ func (a *Agent) formatToolResultDisplay(result *mcp.ToolResult, err error) strin
 	return content
 }
 
-// setError sets the agent's last error and emits an error event.
-func (a *Agent) setError(err error) {
+// setError sets the mysis last error and emits an error event.
+func (a *Mysis) setError(err error) {
 	a.mu.Lock()
 	a.lastError = err
 	a.mu.Unlock()
 
 	a.bus.Publish(Event{
-		Type:      EventAgentError,
-		AgentID:   a.id,
-		AgentName: a.name,
+		Type:      EventMysisError,
+		MysisID:   a.id,
+		MysisName: a.name,
 		Data:      ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
@@ -608,7 +608,7 @@ func (a *Agent) setError(err error) {
 
 // getContextMemories returns memories for LLM context: system prompt + recent messages.
 // This keeps context small for faster inference while preserving essential information.
-func (a *Agent) getContextMemories() ([]*store.Memory, error) {
+func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// Get recent memories (limited for performance)
 	recent, err := a.store.GetRecentMemories(a.id, MaxContextMessages)
 	if err != nil {
@@ -634,9 +634,9 @@ func (a *Agent) getContextMemories() ([]*store.Memory, error) {
 	return result, nil
 }
 
-// run is the agent's main processing loop.
-func (a *Agent) run(ctx context.Context) {
-	// Ticker to nudge the agent if it's idle
+// run is the mysis main processing loop.
+func (a *Mysis) run(ctx context.Context) {
+	// Ticker to nudge the mysis if it's idle
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -645,9 +645,9 @@ func (a *Agent) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Only nudge if the agent is running and not already in a turn
+			// Only nudge if the mysis is running and not already in a turn
 			a.mu.RLock()
-			isRunning := a.state == AgentStateRunning
+			isRunning := a.state == MysisStateRunning
 			a.mu.RUnlock()
 
 			if isRunning {
@@ -661,11 +661,11 @@ func (a *Agent) run(ctx context.Context) {
 	}
 }
 
-func (a *Agent) emitStateChange(oldState, newState AgentState) {
+func (a *Mysis) emitStateChange(oldState, newState MysisState) {
 	a.bus.Publish(Event{
-		Type:      EventAgentStateChanged,
-		AgentID:   a.id,
-		AgentName: a.name,
+		Type:      EventMysisStateChanged,
+		MysisID:   a.id,
+		MysisName: a.name,
 		Data: StateChangeData{
 			OldState: oldState,
 			NewState: newState,
@@ -674,20 +674,20 @@ func (a *Agent) emitStateChange(oldState, newState AgentState) {
 	})
 }
 
-func (a *Agent) setErrorState(err error) {
+func (a *Mysis) setErrorState(err error) {
 	a.mu.Lock()
 	oldState := a.state
-	a.state = AgentStateErrored
+	a.state = MysisStateErrored
 	a.lastError = err
 	a.mu.Unlock()
 
-	a.store.UpdateAgentState(a.id, store.AgentStateErrored)
-	a.emitStateChange(oldState, AgentStateErrored)
+	a.store.UpdateMysisState(a.id, store.MysisStateErrored)
+	a.emitStateChange(oldState, MysisStateErrored)
 
 	a.bus.Publish(Event{
-		Type:      EventAgentError,
-		AgentID:   a.id,
-		AgentName: a.name,
+		Type:      EventMysisError,
+		MysisID:   a.id,
+		MysisName: a.name,
 		Data:      ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})

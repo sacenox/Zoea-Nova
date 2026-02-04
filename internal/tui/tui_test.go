@@ -39,7 +39,7 @@ func setupTestModel(t *testing.T) (Model, func()) {
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
-			MaxAgents: 16,
+			MaxMyses: 16,
 		},
 		Providers: map[string]config.ProviderConfig{
 			"ollama": {Endpoint: "http://mock", Model: "mock-model"},
@@ -151,10 +151,10 @@ func TestModelNavigation(t *testing.T) {
 	m, cleanup := setupTestModel(t)
 	defer cleanup()
 
-	// Create some agents
-	m.commander.CreateAgent("agent-1", "ollama")
-	m.commander.CreateAgent("agent-2", "ollama")
-	m.refreshAgentList()
+	// Create some myses
+	m.commander.CreateMysis("mysis-1", "ollama")
+	m.commander.CreateMysis("mysis-2", "ollama")
+	m.refreshMysisList()
 
 	if m.selectedIdx != 0 {
 		t.Errorf("expected selectedIdx=0, got %d", m.selectedIdx)
@@ -181,9 +181,9 @@ func TestModelFocusView(t *testing.T) {
 	m, cleanup := setupTestModel(t)
 	defer cleanup()
 
-	// Create an agent
-	agent, _ := m.commander.CreateAgent("test-agent", "ollama")
-	m.refreshAgentList()
+	// Create a mysis
+	mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+	m.refreshMysisList()
 
 	// Press enter to focus
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -192,8 +192,8 @@ func TestModelFocusView(t *testing.T) {
 	if m.view != ViewFocus {
 		t.Errorf("expected view=ViewFocus, got %d", m.view)
 	}
-	if m.focusID != agent.ID() {
-		t.Errorf("expected focusID=%s, got %s", agent.ID(), m.focusID)
+	if m.focusID != mysis.ID() {
+		t.Errorf("expected focusID=%s, got %s", mysis.ID(), m.focusID)
 	}
 
 	// Press escape to go back
@@ -267,47 +267,47 @@ func TestRenderHelp(t *testing.T) {
 }
 
 func TestRenderDashboard(t *testing.T) {
-	agents := []AgentInfo{
-		{ID: "1", Name: "agent-1", State: "running", Provider: "ollama"},
-		{ID: "2", Name: "agent-2", State: "idle", Provider: "ollama"},
+	myses := []MysisInfo{
+		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama"},
+		{ID: "2", Name: "mysis-2", State: "idle", Provider: "ollama"},
 	}
 
 	loadingSet := make(map[string]bool)
 	swarmMsgs := []SwarmMessageInfo{}
-	dashboard := RenderDashboard(agents, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard")
 	}
 
 	// Test with loading state
 	loadingSet["1"] = true
-	dashboardWithLoading := RenderDashboard(agents, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
+	dashboardWithLoading := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
 	if dashboardWithLoading == "" {
 		t.Error("expected non-empty dashboard with loading")
 	}
 }
 
 func TestRenderDashboardEmpty(t *testing.T) {
-	dashboard := RenderDashboard([]AgentInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋")
+	dashboard := RenderDashboard([]MysisInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋")
 	if dashboard == "" {
-		t.Error("expected non-empty dashboard even with no agents")
+		t.Error("expected non-empty dashboard even with no myses")
 	}
 }
 
 func TestRenderFocusView(t *testing.T) {
-	agent := AgentInfo{ID: "1", Name: "test-agent", State: "running", Provider: "ollama"}
+	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama"}
 	logs := []LogEntry{
 		{Role: "user", Content: "Hello"},
 		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
 	}
 
-	view := RenderFocusView(agent, logs, 80, 24, false, "⠋")
+	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋")
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
 
 	// Test with loading state
-	viewLoading := RenderFocusView(agent, logs, 80, 24, true, "⠋")
+	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋")
 	if viewLoading == "" {
 		t.Error("expected non-empty focus view with loading")
 	}
@@ -594,9 +594,9 @@ func TestInputModelModes(t *testing.T) {
 		wantDesc string
 	}{
 		{InputModeBroadcast, "", "broadcast mode"},
-		{InputModeMessage, "agent-1", "message mode with target"},
-		{InputModeNewAgent, "", "new agent mode"},
-		{InputModeConfigProvider, "agent-1", "config mode with target"},
+		{InputModeMessage, "mysis-1", "message mode with target"},
+		{InputModeNewMysis, "", "new mysis mode"},
+		{InputModeConfigProvider, "mysis-1", "config mode with target"},
 		{InputModeNone, "", "none mode"},
 	}
 
@@ -697,8 +697,8 @@ func TestNetIndicatorBounce(t *testing.T) {
 }
 
 func TestRenderDashboardWithSwarmMessages(t *testing.T) {
-	agents := []AgentInfo{
-		{ID: "1", Name: "agent-1", State: "running", Provider: "ollama"},
+	myses := []MysisInfo{
+		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama"},
 	}
 
 	swarmMsgs := []SwarmMessageInfo{
@@ -706,7 +706,7 @@ func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 		{Content: "Do the thing", CreatedAt: time.Now()},
 	}
 
-	dashboard := RenderDashboard(agents, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋")
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋")
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard with swarm messages")
 	}
@@ -718,7 +718,7 @@ func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 }
 
 func TestRenderFocusViewWithAllRoles(t *testing.T) {
-	agent := AgentInfo{ID: "1", Name: "test-agent", State: "running", Provider: "ollama"}
+	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama"}
 	logs := []LogEntry{
 		{Role: "system", Content: "System prompt"},
 		{Role: "user", Content: "User question"},
@@ -726,7 +726,7 @@ func TestRenderFocusViewWithAllRoles(t *testing.T) {
 		{Role: "tool", Content: "Tool result"},
 	}
 
-	view := RenderFocusView(agent, logs, 100, 30, false, "⠋")
+	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋")
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
@@ -776,7 +776,7 @@ func TestRenderHelpContent(t *testing.T) {
 	}
 }
 
-func TestRenderAgentLineStates(t *testing.T) {
+func TestRenderMysisLineStates(t *testing.T) {
 	spinnerView := "⠋"
 
 	tests := []struct {
@@ -792,23 +792,23 @@ func TestRenderAgentLineStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.state, func(t *testing.T) {
-			agent := AgentInfo{
+			mysis := MysisInfo{
 				ID:          "test-id",
-				Name:        "test-agent",
+				Name:        "test-mysis",
 				State:       tt.state,
 				Provider:    "ollama",
 				LastMessage: "Last message here",
 			}
 
 			// Test both selected and unselected
-			line := renderAgentLine(agent, false, tt.isLoading, spinnerView, 80)
+			line := renderMysisLine(mysis, false, tt.isLoading, spinnerView, 80)
 			if line == "" {
-				t.Error("expected non-empty agent line")
+				t.Error("expected non-empty mysis line")
 			}
 
-			selectedLine := renderAgentLine(agent, true, tt.isLoading, spinnerView, 80)
+			selectedLine := renderMysisLine(mysis, true, tt.isLoading, spinnerView, 80)
 			if selectedLine == "" {
-				t.Error("expected non-empty selected agent line")
+				t.Error("expected non-empty selected mysis line")
 			}
 		})
 	}
@@ -816,15 +816,15 @@ func TestRenderAgentLineStates(t *testing.T) {
 
 func TestDashboardLayoutExpectations(t *testing.T) {
 	// Test that dashboard renders with proper width expectations
-	agents := []AgentInfo{
-		{ID: "1", Name: "agent-1", State: "idle", Provider: "ollama", LastMessage: "Hello"},
-		{ID: "2", Name: "agent-2", State: "running", Provider: "ollama", LastMessage: "World"},
+	myses := []MysisInfo{
+		{ID: "1", Name: "mysis-1", State: "idle", Provider: "ollama", LastMessage: "Hello"},
+		{ID: "2", Name: "mysis-2", State: "running", Provider: "ollama", LastMessage: "World"},
 	}
 	swarmMsgs := []SwarmMessageInfo{}
 	width := 100
 	height := 30
 
-	dashboard := RenderDashboard(agents, swarmMsgs, 0, width, height, make(map[string]bool), "⠋")
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, width, height, make(map[string]bool), "⠋")
 
 	// Verify dashboard is not empty
 	if dashboard == "" {
@@ -841,43 +841,43 @@ func TestDashboardLayoutExpectations(t *testing.T) {
 		t.Errorf("header top line should contain decorative markers, got: %s", lines[0])
 	}
 
-	// Check that agent section title spans width (contains markers on both sides)
-	foundAgentSwarm := false
+	// Check that mysis section title spans width (contains markers on both sides)
+	foundMysisSwarm := false
 	for _, line := range lines {
-		if strings.Contains(line, "AGENT SWARM") {
-			foundAgentSwarm = true
+		if strings.Contains(line, "MYSIS SWARM") {
+			foundMysisSwarm = true
 			if !strings.Contains(line, "◈") {
-				t.Errorf("agent swarm title should have markers, got: %s", line)
+				t.Errorf("mysis swarm title should have markers, got: %s", line)
 			}
 			break
 		}
 	}
-	if !foundAgentSwarm {
-		t.Error("expected to find AGENT SWARM section title")
+	if !foundMysisSwarm {
+		t.Error("expected to find MYSIS SWARM section title")
 	}
 }
 
-func TestAgentLineWidthFill(t *testing.T) {
-	// Test that agent lines are styled with width to fill the panel
-	agent := AgentInfo{
+func TestMysisLineWidthFill(t *testing.T) {
+	// Test that mysis lines are styled with width to fill the panel
+	mysis := MysisInfo{
 		ID:       "test-id",
-		Name:     "test-agent",
+		Name:     "test-mysis",
 		State:    "idle",
 		Provider: "ollama",
 	}
 
 	width := 80
-	line := renderAgentLine(agent, false, false, "⠋", width)
+	line := renderMysisLine(mysis, false, false, "⠋", width)
 
 	// The line should be rendered (non-empty)
 	if line == "" {
-		t.Error("expected non-empty agent line")
+		t.Error("expected non-empty mysis line")
 	}
 
 	// Selected line should also be rendered
-	selectedLine := renderAgentLine(agent, true, false, "⠋", width)
+	selectedLine := renderMysisLine(mysis, true, false, "⠋", width)
 	if selectedLine == "" {
-		t.Error("expected non-empty selected agent line")
+		t.Error("expected non-empty selected mysis line")
 	}
 }
 
@@ -886,25 +886,25 @@ func TestFocusHeaderWidth(t *testing.T) {
 	// The decorative line itself must be the correct width, not just padded by lipgloss
 	tests := []struct {
 		name      string
-		agentName string
+		mysisName string
 		width     int
 	}{
 		{"short name", "bob", 80},
-		{"medium name", "agent-123", 100},
-		{"long name", "very-long-agent-name", 120},
+		{"medium name", "mysis-123", 100},
+		{"long name", "very-long-mysis-name", 120},
 		{"unicode chars", "qj;wuhd", 96},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			header := renderFocusHeader(tt.agentName, tt.width)
+			header := renderFocusHeader(tt.mysisName, tt.width)
 
 			// The header should contain the markers and name
 			if !strings.Contains(header, "◆") {
 				t.Errorf("header should contain ◆ markers")
 			}
-			if !strings.Contains(header, tt.agentName) {
-				t.Errorf("header should contain agent name %q", tt.agentName)
+			if !strings.Contains(header, tt.mysisName) {
+				t.Errorf("header should contain mysis name %q", tt.mysisName)
 			}
 
 			// Check actual display width matches requested width
@@ -935,18 +935,18 @@ func TestFocusHeaderWidth(t *testing.T) {
 func TestFocusHeaderRawLineWidth(t *testing.T) {
 	// Test the raw line width calculation with Unicode characters
 	tests := []struct {
-		agentName string
+		mysisName string
 		width     int
 	}{
 		{"bob", 80},
 		{"qj;wuhd", 96},
-		{"test-agent", 100},
+		{"test-mysis", 100},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.agentName, func(t *testing.T) {
+		t.Run(tt.mysisName, func(t *testing.T) {
 			// Build the same line as renderFocusHeader but without styling
-			titleText := " ⬡ AGENT: " + tt.agentName + " ⬡ "
+			titleText := " ⬡ MYSIS: " + tt.mysisName + " ⬡ "
 			titleDisplayWidth := lipgloss.Width(titleText)
 			availableWidth := tt.width - titleDisplayWidth - 2 // -2 for ◆ markers
 			if availableWidth < 4 {
@@ -974,7 +974,7 @@ func TestSectionTitleWidth(t *testing.T) {
 		width int
 	}{
 		{"CONVERSATION LOG", 80},
-		{"AGENT SWARM", 100},
+		{"MYSIS SWARM", 100},
 		{"SWARM BROADCAST", 96},
 	}
 
@@ -1150,7 +1150,7 @@ func TestFocusViewAllSectionsMatchWidth(t *testing.T) {
 	width := 100
 
 	// Render each section exactly as RenderFocusViewWithViewport does
-	header := renderFocusHeader("test-agent", width)
+	header := renderFocusHeader("test-mysis", width)
 	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", "", width)
 
 	entry := LogEntry{Role: "assistant", Content: "Test message content here"}

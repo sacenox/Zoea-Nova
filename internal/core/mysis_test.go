@@ -10,7 +10,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-func setupAgentTest(t *testing.T) (*store.Store, *EventBus, func()) {
+func setupMysisTest(t *testing.T) (*store.Store, *EventBus, func()) {
 	t.Helper()
 
 	tmpDir := t.TempDir()
@@ -30,72 +30,72 @@ func setupAgentTest(t *testing.T) (*store.Store, *EventBus, func()) {
 	return s, bus, cleanup
 }
 
-func TestAgentLifecycle(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisLifecycle(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	// Create stored agent
-	stored, err := s.CreateAgent("test-agent", "mock", "test-model")
+	// Create stored mysis
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model")
 	if err != nil {
-		t.Fatalf("CreateAgent() error: %v", err)
+		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
-	mock := provider.NewMock("mock", "Hello from agent!")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mock := provider.NewMock("mock", "Hello from mysis!")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Initial state
-	if agent.State() != AgentStateIdle {
-		t.Errorf("expected initial state=idle, got %s", agent.State())
+	if mysis.State() != MysisStateIdle {
+		t.Errorf("expected initial state=idle, got %s", mysis.State())
 	}
-	if agent.ID() != stored.ID {
-		t.Errorf("expected ID=%s, got %s", stored.ID, agent.ID())
+	if mysis.ID() != stored.ID {
+		t.Errorf("expected ID=%s, got %s", stored.ID, mysis.ID())
 	}
-	if agent.Name() != "test-agent" {
-		t.Errorf("expected name=test-agent, got %s", agent.Name())
+	if mysis.Name() != "test-mysis" {
+		t.Errorf("expected name=test-mysis, got %s", mysis.Name())
 	}
 
 	// Start
-	if err := agent.Start(); err != nil {
+	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
-	if agent.State() != AgentStateRunning {
-		t.Errorf("expected state=running, got %s", agent.State())
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running, got %s", mysis.State())
 	}
 
 	// Start again should error
-	if err := agent.Start(); err == nil {
-		t.Error("expected error starting already running agent")
+	if err := mysis.Start(); err == nil {
+		t.Error("expected error starting already running mysis")
 	}
 
 	// Stop
-	if err := agent.Stop(); err != nil {
+	if err := mysis.Stop(); err != nil {
 		t.Fatalf("Stop() error: %v", err)
 	}
-	if agent.State() != AgentStateStopped {
-		t.Errorf("expected state=stopped, got %s", agent.State())
+	if mysis.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped, got %s", mysis.State())
 	}
 
 	// Stop again should error
-	if err := agent.Stop(); err == nil {
-		t.Error("expected error stopping already stopped agent")
+	if err := mysis.Stop(); err == nil {
+		t.Error("expected error stopping already stopped mysis")
 	}
 }
 
-func TestAgentSendMessage(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisSendMessage(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("msg-agent", "mock", "test-model")
+	stored, _ := s.CreateMysis("msg-mysis", "mock", "test-model")
 	mock := provider.NewMock("mock", "I received your message!")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	// Can't send to non-running agent
-	if err := agent.SendMessage("Hello", store.MemorySourceDirect); err == nil {
-		t.Error("expected error sending to non-running agent")
+	// Can't send to non-running mysis
+	if err := mysis.SendMessage("Hello", store.MemorySourceDirect); err == nil {
+		t.Error("expected error sending to non-running mysis")
 	}
 
-	// Start agent
-	agent.Start()
+	// Start mysis
+	mysis.Start()
 
 	// Subscribe to events
 	events := bus.Subscribe()
@@ -107,7 +107,7 @@ initialTurnLoop:
 	for {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				break initialTurnLoop
 			}
 		case <-timeout:
@@ -116,7 +116,7 @@ initialTurnLoop:
 	}
 
 	// Send message
-	if err := agent.SendMessage("Hello, agent!", store.MemorySourceDirect); err != nil {
+	if err := mysis.SendMessage("Hello, mysis!", store.MemorySourceDirect); err != nil {
 		t.Fatalf("SendMessage() error: %v", err)
 	}
 
@@ -128,13 +128,13 @@ eventLoop:
 	for {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentMessage {
+			if e.Type == EventMysisMessage {
 				data, ok := e.Data.(MessageData)
-				if ok && data.Content == "Hello, agent!" {
+				if ok && data.Content == "Hello, mysis!" {
 					messageEvent = true
 				}
 			}
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				data := e.Data.(MessageData)
 				if data.Content == "I received your message!" {
 					responseEvent = true
@@ -150,7 +150,7 @@ eventLoop:
 	}
 
 	if !messageEvent {
-		t.Error("expected message event for 'Hello, agent!'")
+		t.Error("expected message event for 'Hello, mysis!'")
 	}
 	if !responseEvent {
 		t.Error("expected response event for 'I received your message!'")
@@ -167,34 +167,34 @@ eventLoop:
 		t.Errorf("expected 5 memories, got %d", len(memories))
 	}
 
-	agent.Stop()
+	mysis.Stop()
 }
 
-func TestAgentSetErrorState(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisSetErrorState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("error-state-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("error-state-test", "mock", "test-model")
 	mock := provider.NewMock("mock", "response")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	events := bus.Subscribe()
 
 	testErr := errors.New("test error")
-	agent.setErrorState(testErr)
+	mysis.setErrorState(testErr)
 
-	if agent.State() != AgentStateErrored {
-		t.Errorf("expected state=errored, got %s", agent.State())
+	if mysis.State() != MysisStateErrored {
+		t.Errorf("expected state=errored, got %s", mysis.State())
 	}
-	if agent.LastError() != testErr {
-		t.Errorf("expected last error %v, got %v", testErr, agent.LastError())
+	if mysis.LastError() != testErr {
+		t.Errorf("expected last error %v, got %v", testErr, mysis.LastError())
 	}
 
 	// Should receive state change event first
 	select {
 	case e := <-events:
-		if e.Type != EventAgentStateChanged {
-			t.Errorf("expected EventAgentStateChanged, got %s", e.Type)
+		if e.Type != EventMysisStateChanged {
+			t.Errorf("expected EventMysisStateChanged, got %s", e.Type)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for state change event")
@@ -203,72 +203,72 @@ func TestAgentSetErrorState(t *testing.T) {
 	// Should receive error event
 	select {
 	case e := <-events:
-		if e.Type != EventAgentError {
-			t.Errorf("expected EventAgentError, got %s", e.Type)
+		if e.Type != EventMysisError {
+			t.Errorf("expected EventMysisError, got %s", e.Type)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for error event")
 	}
 }
 
-func TestAgentProviderName(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisProviderName(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("provider-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("provider-test", "mock", "test-model")
 	mock := provider.NewMock("test-provider", "response")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	if agent.ProviderName() != "test-provider" {
-		t.Errorf("expected provider name=test-provider, got %s", agent.ProviderName())
+	if mysis.ProviderName() != "test-provider" {
+		t.Errorf("expected provider name=test-provider, got %s", mysis.ProviderName())
 	}
 
 	// Test with nil provider
-	agent.SetProvider(nil)
-	if agent.ProviderName() != "" {
-		t.Errorf("expected empty provider name for nil provider, got %s", agent.ProviderName())
+	mysis.SetProvider(nil)
+	if mysis.ProviderName() != "" {
+		t.Errorf("expected empty provider name for nil provider, got %s", mysis.ProviderName())
 	}
 }
 
-func TestAgentStateEvents(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisStateEvents(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("event-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("event-test", "mock", "test-model")
 	mock := provider.NewMock("mock", "response")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	events := bus.Subscribe()
 
-	agent.Start()
+	mysis.Start()
 
 	// Should get state change event
 	select {
 	case e := <-events:
-		if e.Type != EventAgentStateChanged {
+		if e.Type != EventMysisStateChanged {
 			t.Errorf("expected state change event, got %s", e.Type)
 		}
 		data := e.Data.(StateChangeData)
-		if data.OldState != AgentStateIdle {
+		if data.OldState != MysisStateIdle {
 			t.Errorf("expected old state=idle, got %s", data.OldState)
 		}
-		if data.NewState != AgentStateRunning {
+		if data.NewState != MysisStateRunning {
 			t.Errorf("expected new state=running, got %s", data.NewState)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for state change event")
 	}
 
-	agent.Stop()
+	mysis.Stop()
 }
 
-func TestAgentContextMemoryLimit(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisContextMemoryLimit(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("context-test", "mock", "test-model")
+	stored, _ := s.CreateMysis("context-test", "mock", "test-model")
 	mock := provider.NewMock("mock", "response")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
 	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt")
@@ -280,7 +280,7 @@ func TestAgentContextMemoryLimit(t *testing.T) {
 	}
 
 	// Get context memories
-	memories, err := agent.getContextMemories()
+	memories, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
@@ -300,13 +300,13 @@ func TestAgentContextMemoryLimit(t *testing.T) {
 	}
 }
 
-func TestAgentContextMemoryWithRecentSystemPrompt(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("context-test-2", "mock", "test-model")
+	stored, _ := s.CreateMysis("context-test-2", "mock", "test-model")
 	mock := provider.NewMock("mock", "response")
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
 	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt")
@@ -318,7 +318,7 @@ func TestAgentContextMemoryWithRecentSystemPrompt(t *testing.T) {
 	}
 
 	// Get context memories
-	memories, err := agent.getContextMemories()
+	memories, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}

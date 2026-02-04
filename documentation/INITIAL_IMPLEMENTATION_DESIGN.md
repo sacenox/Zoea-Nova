@@ -13,23 +13,23 @@ Control several automated players in the game https://www.spacemolt.com/. Each i
   - Custom framework to expose internal orchestration tools via MCP.
 - **Orchestration:**
   - Capability to broadcast shared objectives to the entire swarm simultaneously.
-  - Targeted messaging/tasking for individual swarm members.
+  - Targeted messaging/tasking for individual Myses.
 - **Command Center TUI:**
-  - **Aggregated Dashboard:** High-level swarm status, health, swarm message history, and agent list.
-  - **Focus Mode:** Detailed conversation logs and direct control for individual agents.
+  - **Aggregated Dashboard:** High-level swarm status, health, swarm message history, and Mysis list.
+  - **Focus Mode:** Detailed conversation logs and direct control for individual Myses.
   - **Aesthetic:** Retro-futuristic (80s/90s) CRT-style visuals with reactive animations.
 
 ### Dashboard Layout
 
 ```
 ╔═══ ZOEA NOVA COMMAND CENTER ═══╗
-● 2  ○ 1  ◌ 0  ✖ 0              ← Agent state counts (running/idle/stopped/errored)
+● 2  ○ 1  ◌ 0  ✖ 0              ← Mysis state counts (running/idle/stopped/errored)
 ─── Swarm Messages ───           ← Recent broadcast messages (up to 10)
 14:30:05 Hello everyone, mine!
 14:32:12 Check your inventories
-─── Agents ───                   ← Agent list with status and last message
-⠋ agent-1    running  [ollama] │ I found some ore...
-○ agent-2    idle     [ollama] │ Ready to start
+─── Myses ───                   ← Mysis list with status and last message
+⠋ mysis-1    running  [ollama] │ I found some ore...
+○ mysis-2    idle     [ollama] │ Ready to start
 Press ? for help
 ```
 
@@ -61,8 +61,8 @@ Scrollable conversation viewport showing full message history with role-based st
 Example `config.toml`:
 ```toml
 [swarm]
-default_agents = 4
-max_agents = 16
+default_myses = 4
+max_myses = 16
 
 [providers.ollama]
 endpoint = "http://localhost:11434"
@@ -79,15 +79,15 @@ upstream = "https://game.spacemolt.com/mcp"
 ## State & Persistence
 
 - **Database:** Single SQLite file at `$HOME/.zoea-nova/zoea.db`.
-- **Scope:** Agent memories, conversation history, swarm state, per-agent provider config, and user preferences.
+- **Scope:** Mysis memories, conversation history, swarm state, per-Mysis provider config, and user preferences.
 - **Migrations:** Schema managed via embedded SQL migrations (e.g., `golang-migrate` or manual versioning). Never support backwards, never write data migrations. If we change the schema we create a new db fresh.
 - **Backup:** Consider periodic WAL checkpoints; SQLite handles crash recovery.
 
-### Database Schema (v2)
+### Database Schema (v3)
 
 ```sql
--- Agents table
-CREATE TABLE agents (
+-- Myses table
+CREATE TABLE myses (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
@@ -100,50 +100,50 @@ CREATE TABLE agents (
 -- Memories table (conversation history)
 CREATE TABLE memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id TEXT NOT NULL,
+    mysis_id TEXT NOT NULL,
     role TEXT NOT NULL,        -- system, user, assistant, tool
     source TEXT NOT NULL,      -- direct, broadcast, system, llm, tool
     content TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    FOREIGN KEY (mysis_id) REFERENCES myses(id) ON DELETE CASCADE
 );
 ```
 
 **Memory Sources:**
-- `direct` — Message sent directly to a specific agent
-- `broadcast` — Message broadcast to all agents (swarm command)
+- `direct` — Message sent directly to a specific Mysis
+- `broadcast` — Message broadcast to all Myses (swarm command)
 - `system` — System prompts
 - `llm` — LLM-generated responses
 - `tool` — Tool call results
 
-## Agent Lifecycle
+## Mysis Lifecycle
 
-- **Ownership:** The Commander (orchestrator) owns all agent lifecycles.
-- **Creation:** User creates agents via TUI controls. Default swarm size: **4 agents**.
-- **Limits:** Configurable `max_agents` (default 16). Enforced at Commander level, but user controls count from TUI.
+- **Ownership:** The Commander (orchestrator) owns all Mysis lifecycles.
+- **Creation:** User creates Myses via TUI controls. Default swarm size: **4 Myses**.
+- **Limits:** Configurable `max_myses` (default 16). Enforced at Commander level, but user controls count from TUI.
 - **States:** `idle` → `running` → `stopped` / `errored`.
 - **TUI Controls:**
-  - **Create:** Spawn a new agent (if under limit).
-  - **Relaunch:** Restart a stopped/errored agent.
-  - **Force Stop:** Immediately halt an agent.
-  - **Delete:** Remove agent and optionally purge its memories.
-  - **Broadcast Message:** Send a message/objective to all agents.
-  - **Direct Message:** Send a message to a specific agent.
-  - **Configure Agent:** Set model/provider per agent (Ollama or OpenCode Zen).
-- **Recovery:** On application restart, agents are rehydrated from SQLite in `stopped` state; user must explicitly relaunch.
+  - **Create:** Spawn a new Mysis (if under limit).
+  - **Relaunch:** Restart a stopped/errored Mysis.
+  - **Force Stop:** Immediately halt a Mysis.
+  - **Delete:** Remove Mysis and optionally purge its memories.
+  - **Broadcast Message:** Send a message/objective to all Myses.
+  - **Direct Message:** Send a message to a specific Mysis.
+  - **Configure Mysis:** Set model/provider per Mysis (Ollama or OpenCode Zen).
+- **Recovery:** On application restart, Myses are rehydrated from SQLite in `stopped` state; user must explicitly relaunch.
 
 ## Keyboard Shortcuts
 
 Minimal set matching TUI controls:
 - `q` / `Ctrl+C` — Quit
-- `n` — New agent
-- `d` — Delete selected agent
-- `r` — Relaunch selected agent
-- `s` — Stop selected agent
+- `n` — New Mysis
+- `d` — Delete selected Mysis
+- `r` — Relaunch selected Mysis
+- `s` — Stop selected Mysis
 - `b` — Broadcast message to all
-- `m` — Message selected agent
-- `c` — Configure selected agent
-- `Tab` / `Shift+Tab` — Navigate between agents
+- `m` — Message selected Mysis
+- `c` — Configure selected Mysis
+- `Tab` / `Shift+Tab` — Navigate between Myses
 - `?` — Help overlay
 
 ## Build & Operations
@@ -171,7 +171,7 @@ Minimal set matching TUI controls:
   - `internal/provider`: LLM provider implementations (Ollama, OpenCode Zen).
   - `internal/config`: Configuration loading (TOML + ENV merge).
   - `internal/store`: SQLite repository layer and migrations.
-- **Concurrency Model:** Each agent operates in an isolated goroutine. State updates are pushed to the TUI via a central command/message bus to ensure thread-safety.
+- **Concurrency Model:** Each Mysis operates in an isolated goroutine. State updates are pushed to the TUI via a central command/message bus to ensure thread-safety.
 - **Interface-Driven:** All external dependencies (LLMs, MCP servers) must be hidden behind interfaces to facilitate unit testing and future-proofing.
 - **Testing:** Mandatory unit tests for `internal/core` logic. TUI components should be tested using `bubbletea`'s testing utilities. Aim for above 80% test coverage. No flaky tests.
 - **Warnings and Errors** Fix all that you see, even if it's from your current changes.

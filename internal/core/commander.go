@@ -12,77 +12,77 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-// Commander orchestrates the swarm of agents.
+// Commander orchestrates the swarm of myses.
 type Commander struct {
 	mu sync.RWMutex
 
-	agents    map[string]*Agent
-	store     *store.Store
-	registry  *provider.Registry
-	bus       *EventBus
-	config    *config.Config
-	mcp       *mcp.Proxy
-	maxAgents int
+	myses    map[string]*Mysis
+	store    *store.Store
+	registry *provider.Registry
+	bus      *EventBus
+	config   *config.Config
+	mcp      *mcp.Proxy
+	maxMyses int
 }
 
 // NewCommander creates a new commander.
 func NewCommander(s *store.Store, reg *provider.Registry, bus *EventBus, cfg *config.Config) *Commander {
 	return &Commander{
-		agents:    make(map[string]*Agent),
-		store:     s,
-		registry:  reg,
-		bus:       bus,
-		config:    cfg,
-		maxAgents: cfg.Swarm.MaxAgents,
+		myses:    make(map[string]*Mysis),
+		store:    s,
+		registry: reg,
+		bus:      bus,
+		config:   cfg,
+		maxMyses: cfg.Swarm.MaxMyses,
 	}
 }
 
-// SetMCP sets the MCP proxy for all agents.
+// SetMCP sets the MCP proxy for all myses.
 func (c *Commander) SetMCP(proxy *mcp.Proxy) {
 	c.mu.Lock()
 	c.mcp = proxy
-	// Set MCP on all existing agents
-	for _, agent := range c.agents {
-		agent.SetMCP(proxy)
+	// Set MCP on all existing myses
+	for _, mysis := range c.myses {
+		mysis.SetMCP(proxy)
 	}
 	c.mu.Unlock()
 }
 
-// LoadAgents loads existing agents from the store.
-// Agents are loaded in stopped state; they must be explicitly started.
-func (c *Commander) LoadAgents() error {
-	stored, err := c.store.ListAgents()
+// LoadMyses loads existing myses from the store.
+// Myses are loaded in stopped state; they must be explicitly started.
+func (c *Commander) LoadMyses() error {
+	stored, err := c.store.ListMyses()
 	if err != nil {
-		return fmt.Errorf("list agents: %w", err)
+		return fmt.Errorf("list myses: %w", err)
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for _, sa := range stored {
-		p, err := c.registry.Get(sa.Provider)
+	for _, sm := range stored {
+		p, err := c.registry.Get(sm.Provider)
 		if err != nil {
-			// Provider not available, skip agent
+			// Provider not available, skip mysis
 			continue
 		}
 
-		agent := NewAgent(sa.ID, sa.Name, sa.CreatedAt, p, c.store, c.bus)
+		mysis := NewMysis(sm.ID, sm.Name, sm.CreatedAt, p, c.store, c.bus)
 		if c.mcp != nil {
-			agent.SetMCP(c.mcp)
+			mysis.SetMCP(c.mcp)
 		}
-		c.agents[sa.ID] = agent
+		c.myses[sm.ID] = mysis
 	}
 
 	return nil
 }
 
-// CreateAgent creates a new agent with the given name and provider.
-func (c *Commander) CreateAgent(name, providerName string) (*Agent, error) {
+// CreateMysis creates a new mysis with the given name and provider.
+func (c *Commander) CreateMysis(name, providerName string) (*Mysis, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(c.agents) >= c.maxAgents {
-		return nil, fmt.Errorf("max agents (%d) reached", c.maxAgents)
+	if len(c.myses) >= c.maxMyses {
+		return nil, fmt.Errorf("max myses (%d) reached", c.maxMyses)
 	}
 
 	// Get provider
@@ -98,111 +98,111 @@ func (c *Commander) CreateAgent(name, providerName string) (*Agent, error) {
 	}
 
 	// Create in store
-	stored, err := c.store.CreateAgent(name, providerName, provCfg.Model)
+	stored, err := c.store.CreateMysis(name, providerName, provCfg.Model)
 	if err != nil {
-		return nil, fmt.Errorf("create agent in store: %w", err)
+		return nil, fmt.Errorf("create mysis in store: %w", err)
 	}
 
-	// Create runtime agent
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus)
+	// Create runtime mysis
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus)
 	if c.mcp != nil {
-		agent.SetMCP(c.mcp)
+		mysis.SetMCP(c.mcp)
 	}
-	c.agents[stored.ID] = agent
+	c.myses[stored.ID] = mysis
 
 	// Emit event
 	c.bus.Publish(Event{
-		Type:      EventAgentCreated,
-		AgentID:   stored.ID,
-		AgentName: stored.Name,
+		Type:      EventMysisCreated,
+		MysisID:   stored.ID,
+		MysisName: stored.Name,
 		Timestamp: time.Now(),
 	})
 
-	return agent, nil
+	return mysis, nil
 }
 
-// DeleteAgent removes an agent from the swarm.
-func (c *Commander) DeleteAgent(id string, purgeMemories bool) error {
+// DeleteMysis removes a mysis from the swarm.
+func (c *Commander) DeleteMysis(id string, purgeMemories bool) error {
 	c.mu.Lock()
-	agent, ok := c.agents[id]
+	mysis, ok := c.myses[id]
 	if !ok {
 		c.mu.Unlock()
-		return fmt.Errorf("agent not found: %s", id)
+		return fmt.Errorf("mysis not found: %s", id)
 	}
 
-	delete(c.agents, id)
+	delete(c.myses, id)
 	c.mu.Unlock()
 
 	// Stop if running (outside of commander lock to avoid deadlock)
-	if agent.State() == AgentStateRunning {
-		agent.Stop()
+	if mysis.State() == MysisStateRunning {
+		mysis.Stop()
 	}
 
 	// Delete from store (memories cascade)
-	if err := c.store.DeleteAgent(id); err != nil {
-		return fmt.Errorf("delete agent from store: %w", err)
+	if err := c.store.DeleteMysis(id); err != nil {
+		return fmt.Errorf("delete mysis from store: %w", err)
 	}
 
 	// Emit event
 	c.bus.Publish(Event{
-		Type:      EventAgentDeleted,
-		AgentID:   id,
-		AgentName: agent.Name(),
+		Type:      EventMysisDeleted,
+		MysisID:   id,
+		MysisName: mysis.Name(),
 		Timestamp: time.Now(),
 	})
 
 	return nil
 }
 
-// GetAgent returns an agent by ID.
-func (c *Commander) GetAgent(id string) (*Agent, error) {
+// GetMysis returns a mysis by ID.
+func (c *Commander) GetMysis(id string) (*Mysis, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	agent, ok := c.agents[id]
+	mysis, ok := c.myses[id]
 	if !ok {
-		return nil, fmt.Errorf("agent not found: %s", id)
+		return nil, fmt.Errorf("mysis not found: %s", id)
 	}
-	return agent, nil
+	return mysis, nil
 }
 
-// ListAgents returns all agents.
-func (c *Commander) ListAgents() []*Agent {
+// ListMyses returns all myses.
+func (c *Commander) ListMyses() []*Mysis {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	agents := make([]*Agent, 0, len(c.agents))
-	for _, a := range c.agents {
-		agents = append(agents, a)
+	myses := make([]*Mysis, 0, len(c.myses))
+	for _, m := range c.myses {
+		myses = append(myses, m)
 	}
-	return agents
+	return myses
 }
 
-// StartAgent starts an agent by ID.
-func (c *Commander) StartAgent(id string) error {
-	agent, err := c.GetAgent(id)
+// StartMysis starts a mysis by ID.
+func (c *Commander) StartMysis(id string) error {
+	mysis, err := c.GetMysis(id)
 	if err != nil {
 		return err
 	}
-	return agent.Start()
+	return mysis.Start()
 }
 
-// StopAgent stops an agent by ID.
-func (c *Commander) StopAgent(id string) error {
-	agent, err := c.GetAgent(id)
+// StopMysis stops a mysis by ID.
+func (c *Commander) StopMysis(id string) error {
+	mysis, err := c.GetMysis(id)
 	if err != nil {
 		return err
 	}
-	return agent.Stop()
+	return mysis.Stop()
 }
 
-// ConfigureAgent updates an agent's provider and model.
-func (c *Commander) ConfigureAgent(id, providerName string) error {
+// ConfigureMysis updates a mysis provider and model.
+func (c *Commander) ConfigureMysis(id, providerName string) error {
 	c.mu.Lock()
-	agent, ok := c.agents[id]
+	mysis, ok := c.myses[id]
 	if !ok {
 		c.mu.Unlock()
-		return fmt.Errorf("agent not found: %s", id)
+		return fmt.Errorf("mysis not found: %s", id)
 	}
 	c.mu.Unlock()
 
@@ -219,18 +219,18 @@ func (c *Commander) ConfigureAgent(id, providerName string) error {
 	}
 
 	// Update store
-	if err := c.store.UpdateAgentConfig(id, providerName, provCfg.Model); err != nil {
+	if err := c.store.UpdateMysisConfig(id, providerName, provCfg.Model); err != nil {
 		return fmt.Errorf("update store: %w", err)
 	}
 
 	// Update runtime
-	agent.SetProvider(p)
+	mysis.SetProvider(p)
 
 	// Emit event
 	c.bus.Publish(Event{
-		Type:      EventAgentConfigChanged,
-		AgentID:   id,
-		AgentName: agent.Name(),
+		Type:      EventMysisConfigChanged,
+		MysisID:   id,
+		MysisName: mysis.Name(),
 		Data: ConfigChangeData{
 			Provider: providerName,
 			Model:    provCfg.Model,
@@ -241,47 +241,47 @@ func (c *Commander) ConfigureAgent(id, providerName string) error {
 	return nil
 }
 
-// SendMessage sends a message to a specific agent (synchronous).
+// SendMessage sends a message to a specific mysis (synchronous).
 func (c *Commander) SendMessage(id, content string) error {
-	agent, err := c.GetAgent(id)
+	mysis, err := c.GetMysis(id)
 	if err != nil {
 		return err
 	}
-	return agent.SendMessage(content, store.MemorySourceDirect)
+	return mysis.SendMessage(content, store.MemorySourceDirect)
 }
 
-// SendMessageAsync sends a message to a specific agent without waiting for processing.
-// Returns immediately after validating the agent exists and is running.
+// SendMessageAsync sends a message to a specific mysis without waiting for processing.
+// Returns immediately after validating the mysis exists and is running.
 func (c *Commander) SendMessageAsync(id, content string) error {
-	agent, err := c.GetAgent(id)
+	mysis, err := c.GetMysis(id)
 	if err != nil {
 		return err
 	}
-	if agent.State() != AgentStateRunning {
-		return fmt.Errorf("agent not running")
+	if mysis.State() != MysisStateRunning {
+		return fmt.Errorf("mysis not running")
 	}
 	go func() {
-		if err := agent.SendMessage(content, store.MemorySourceDirect); err != nil {
-			// Error is published to bus by agent.SendMessage
+		if err := mysis.SendMessage(content, store.MemorySourceDirect); err != nil {
+			// Error is published to bus by mysis.SendMessage
 		}
 	}()
 	return nil
 }
 
-// Broadcast sends a message to all running agents (synchronous).
+// Broadcast sends a message to all running myses (synchronous).
 func (c *Commander) Broadcast(content string) error {
 	c.mu.RLock()
-	agents := make([]*Agent, 0)
-	for _, a := range c.agents {
-		if a.State() == AgentStateRunning {
-			agents = append(agents, a)
+	myses := make([]*Mysis, 0)
+	for _, m := range c.myses {
+		if m.State() == MysisStateRunning {
+			myses = append(myses, m)
 		}
 	}
 	c.mu.RUnlock()
 
-	// Check if any agents are running
-	if len(agents) == 0 {
-		return fmt.Errorf("no running agents to receive broadcast")
+	// Check if any myses are running
+	if len(myses) == 0 {
+		return fmt.Errorf("no running myses to receive broadcast")
 	}
 
 	// Emit broadcast event
@@ -292,33 +292,33 @@ func (c *Commander) Broadcast(content string) error {
 	})
 
 	var errs []error
-	for _, a := range agents {
-		if err := a.SendMessage(content, store.MemorySourceBroadcast); err != nil {
-			errs = append(errs, fmt.Errorf("agent %s: %w", a.ID(), err))
+	for _, m := range myses {
+		if err := m.SendMessage(content, store.MemorySourceBroadcast); err != nil {
+			errs = append(errs, fmt.Errorf("mysis %s: %w", m.ID(), err))
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("broadcast failed for %d agent(s): %w", len(errs), errors.Join(errs...))
+		return fmt.Errorf("broadcast failed for %d mysis: %w", len(errs), errors.Join(errs...))
 	}
 	return nil
 }
 
-// BroadcastAsync sends a message to all running agents without waiting for processing.
-// Returns immediately after validating at least one agent is running.
+// BroadcastAsync sends a message to all running myses without waiting for processing.
+// Returns immediately after validating at least one mysis is running.
 func (c *Commander) BroadcastAsync(content string) error {
 	c.mu.RLock()
-	agents := make([]*Agent, 0)
-	for _, a := range c.agents {
-		if a.State() == AgentStateRunning {
-			agents = append(agents, a)
+	myses := make([]*Mysis, 0)
+	for _, m := range c.myses {
+		if m.State() == MysisStateRunning {
+			myses = append(myses, m)
 		}
 	}
 	c.mu.RUnlock()
 
-	// Check if any agents are running
-	if len(agents) == 0 {
-		return fmt.Errorf("no running agents to receive broadcast")
+	// Check if any myses are running
+	if len(myses) == 0 {
+		return fmt.Errorf("no running myses to receive broadcast")
 	}
 
 	// Emit broadcast event
@@ -328,12 +328,12 @@ func (c *Commander) BroadcastAsync(content string) error {
 		Timestamp: time.Now(),
 	})
 
-	// Send to each agent asynchronously
-	for _, a := range agents {
-		agent := a // capture for goroutine
+	// Send to each mysis asynchronously
+	for _, m := range myses {
+		mysis := m
 		go func() {
-			if err := agent.SendMessage(content, store.MemorySourceBroadcast); err != nil {
-				// Error is published to bus by agent.SendMessage
+			if err := mysis.SendMessage(content, store.MemorySourceBroadcast); err != nil {
+				// Error is published to bus by mysis.SendMessage
 			}
 		}()
 	}
@@ -341,32 +341,32 @@ func (c *Commander) BroadcastAsync(content string) error {
 	return nil
 }
 
-// StopAll stops all running agents.
+// StopAll stops all running myses.
 func (c *Commander) StopAll() {
 	c.mu.RLock()
-	agents := make([]*Agent, 0)
-	for _, a := range c.agents {
-		agents = append(agents, a)
+	myses := make([]*Mysis, 0)
+	for _, m := range c.myses {
+		myses = append(myses, m)
 	}
 	c.mu.RUnlock()
 
-	for _, a := range agents {
-		if a.State() == AgentStateRunning {
-			a.Stop()
+	for _, m := range myses {
+		if m.State() == MysisStateRunning {
+			m.Stop()
 		}
 	}
 }
 
-// AgentCount returns the current number of agents.
-func (c *Commander) AgentCount() int {
+// MysisCount returns the current number of myses.
+func (c *Commander) MysisCount() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return len(c.agents)
+	return len(c.myses)
 }
 
-// MaxAgents returns the maximum allowed agents.
-func (c *Commander) MaxAgents() int {
-	return c.maxAgents
+// MaxMyses returns the maximum allowed myses.
+func (c *Commander) MaxMyses() int {
+	return c.maxMyses
 }
 
 // Store returns the store for direct access (e.g., for testing).

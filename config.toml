@@ -1,6 +1,6 @@
 [swarm]
-default_agents = 4
-max_agents = 16
+default_myses = 4
+max_myses = 16
 
 [providers.ollama]
 endpoint = "http://localhost:11434"

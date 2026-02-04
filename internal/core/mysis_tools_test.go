@@ -12,16 +12,16 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-func TestAgentToolExecution(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisToolExecution(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("tool-agent", "mock", "test-model")
+	stored, _ := s.CreateMysis("tool-mysis", "mock", "test-model")
 
 	// Mock provider that returns a tool call first, then a text response
 	mock := provider.NewMock("mock", "Initial response")
 
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Setup MCP proxy with a local tool
 	proxy := mcp.NewProxy("")
@@ -34,10 +34,10 @@ func TestAgentToolExecution(t *testing.T) {
 			Content: []mcp.ContentBlock{{Type: "text", Text: "tool result content"}},
 		}, nil
 	})
-	agent.SetMCP(proxy)
+	mysis.SetMCP(proxy)
 
 	events := bus.Subscribe()
-	agent.Start()
+	mysis.Start()
 
 	// Wait for initial turn to finish
 	timeout := time.After(5 * time.Second)
@@ -45,7 +45,7 @@ func TestAgentToolExecution(t *testing.T) {
 	for !initialFinished {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				data := e.Data.(MessageData)
 				if data.Content == "Initial response" {
 					initialFinished = true
@@ -67,14 +67,14 @@ func TestAgentToolExecution(t *testing.T) {
 	})
 
 	// Send message to trigger the loop
-	go agent.SendMessage("Use the tool", store.MemorySourceDirect)
+	go mysis.SendMessage("Use the tool", store.MemorySourceDirect)
 
 	// Wait for tool call event
 	toolCalled := false
 	for !toolCalled {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentMessage {
+			if e.Type == EventMysisMessage {
 				data := e.Data.(MessageData)
 				if data.Role == "assistant" && data.Content == "Calling tools: test_tool" {
 					toolCalled = true
@@ -92,7 +92,7 @@ func TestAgentToolExecution(t *testing.T) {
 	for !finalResponse {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				finalResponse = true
 			}
 		case <-timeout:
@@ -122,15 +122,15 @@ func TestAgentToolExecution(t *testing.T) {
 	}
 }
 
-func TestAgentToolError(t *testing.T) {
-	s, bus, cleanup := setupAgentTest(t)
+func TestMysisToolError(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, _ := s.CreateAgent("tool-err-agent", "mock", "test-model")
+	stored, _ := s.CreateMysis("tool-err-mysis", "mock", "test-model")
 
 	mock := provider.NewMock("mock", "Initial response")
 
-	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	proxy := mcp.NewProxy("")
 	proxy.RegisterTool(mcp.Tool{
@@ -138,10 +138,10 @@ func TestAgentToolError(t *testing.T) {
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
 		return nil, errors.New("tool failed")
 	})
-	agent.SetMCP(proxy)
+	mysis.SetMCP(proxy)
 
 	events := bus.Subscribe()
-	agent.Start()
+	mysis.Start()
 
 	// Wait for initial turn
 	timeout := time.After(5 * time.Second)
@@ -149,7 +149,7 @@ func TestAgentToolError(t *testing.T) {
 	for !initialFinished {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				initialFinished = true
 			}
 		case <-timeout:
@@ -172,7 +172,7 @@ func TestAgentToolError(t *testing.T) {
 		mock.WithToolCalls(nil)
 	}()
 
-	agent.SendMessage("Trigger error", store.MemorySourceDirect)
+	mysis.SendMessage("Trigger error", store.MemorySourceDirect)
 
 	// Verify memory contains error with retry
 	deadline := time.Now().Add(2 * time.Second)

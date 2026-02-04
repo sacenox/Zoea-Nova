@@ -13,7 +13,7 @@ const (
 	InputModeNone InputMode = iota
 	InputModeBroadcast
 	InputModeMessage
-	InputModeNewAgent
+	InputModeNewMysis
 	InputModeConfigProvider
 )
 
@@ -52,13 +52,13 @@ func (m *InputModel) SetMode(mode InputMode, targetID string) {
 
 	switch mode {
 	case InputModeBroadcast:
-		m.textInput.Placeholder = "Broadcast message to all agents..."
+		m.textInput.Placeholder = "Broadcast message to all myses..."
 		m.textInput.Prompt = inputPromptStyle.Render("📢 ") + " "
 	case InputModeMessage:
-		m.textInput.Placeholder = "Message to agent..."
+		m.textInput.Placeholder = "Message to mysis..."
 		m.textInput.Prompt = inputPromptStyle.Render("💬 ") + " "
-	case InputModeNewAgent:
-		m.textInput.Placeholder = "Enter agent name..."
+	case InputModeNewMysis:
+		m.textInput.Placeholder = "Enter mysis name..."
 		m.textInput.Prompt = inputPromptStyle.Render("🤖 ") + " "
 	case InputModeConfigProvider:
 		m.textInput.Placeholder = "Enter provider (ollama/opencode_zen)..."
@@ -80,7 +80,7 @@ func (m InputModel) Mode() InputMode {
 	return m.mode
 }
 
-// TargetID returns the target agent ID for direct messages.
+// TargetID returns the target mysis ID for direct messages.
 func (m InputModel) TargetID() string {
 	return m.targetID
 }

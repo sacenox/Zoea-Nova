@@ -13,9 +13,9 @@ func TestEventBus(t *testing.T) {
 
 	// Publish event
 	event := Event{
-		Type:      EventAgentCreated,
-		AgentID:   "test-id",
-		AgentName: "test-agent",
+		Type:      EventMysisCreated,
+		MysisID:   "test-id",
+		MysisName: "test-mysis",
 		Timestamp: time.Now(),
 	}
 	bus.Publish(event)
@@ -23,11 +23,11 @@ func TestEventBus(t *testing.T) {
 	// Receive event
 	select {
 	case received := <-ch:
-		if received.Type != EventAgentCreated {
-			t.Errorf("expected type=%s, got %s", EventAgentCreated, received.Type)
+		if received.Type != EventMysisCreated {
+			t.Errorf("expected type=%s, got %s", EventMysisCreated, received.Type)
 		}
-		if received.AgentID != "test-id" {
-			t.Errorf("expected agent_id=test-id, got %s", received.AgentID)
+		if received.MysisID != "test-id" {
+			t.Errorf("expected mysis_id=test-id, got %s", received.MysisID)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for event")
@@ -50,8 +50,8 @@ func TestEventBusMultipleSubscribers(t *testing.T) {
 	ch2 := bus.Subscribe()
 
 	event := Event{
-		Type:      EventAgentMessage,
-		AgentID:   "agent-1",
+		Type:      EventMysisMessage,
+		MysisID:   "mysis-1",
 		Timestamp: time.Now(),
 	}
 	bus.Publish(event)
@@ -78,12 +78,12 @@ func TestEventBusNonBlocking(t *testing.T) {
 	ch := bus.Subscribe()
 
 	// Fill buffer
-	bus.Publish(Event{Type: EventAgentCreated})
+	bus.Publish(Event{Type: EventMysisCreated})
 
 	// This should not block (event dropped)
 	done := make(chan bool)
 	go func() {
-		bus.Publish(Event{Type: EventAgentDeleted})
+		bus.Publish(Event{Type: EventMysisDeleted})
 		done <- true
 	}()
 

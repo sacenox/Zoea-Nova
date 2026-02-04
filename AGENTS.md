@@ -1,4 +1,4 @@
-# Zoea Nova Agents
+# Zoea Nova agents
 
 Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm controller for automated SpaceMolt game players.
 
@@ -55,16 +55,16 @@ The application uses SQLite for persistence.
 
 ## Terminology:
 
-- **Agent**: An AI-controlled player instance with its own provider, memory, and state.
-- **Commander**: The swarm orchestrator that owns agent lifecycles and routes messages.
-- **Swarm**: The collection of all agents managed by the Commander.
+- **Mysis**: An AI-controlled player instance with its own provider, memory, and state.
+- **Commander**: The swarm orchestrator that owns Mysis lifecycles and routes messages.
+- **Swarm**: The collection of all Myses managed by the Commander.
 - **Provider**: An LLM backend (Ollama local or OpenCode Zen remote).
 - **MCP**: Model Context Protocol—the interface to SpaceMolt game actions.
 - **Event Bus**: Channel-based pub/sub for TUI updates from core goroutines.
-- **Focus Mode**: TUI view showing detailed conversation logs for a single agent.
-- **Dashboard**: TUI view showing swarm status, broadcast history, and agent list.
+- **Focus Mode**: TUI view showing detailed conversation logs for a single Mysis.
+- **Dashboard**: TUI view showing swarm status, broadcast history, and Mysis list.
 - **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
-- **Source**: Origin of a memory—`direct` (single agent), `broadcast` (swarm), `system`, `llm`, or `tool`.
+- **Source**: Origin of a memory—`direct` (single Mysis), `broadcast` (swarm), `system`, `llm`, or `tool`.
 - **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/CONTEXT_COMPRESSION.md](documentation/CONTEXT_COMPRESSION.md).
 
 ## Workflow:
@@ -79,7 +79,7 @@ The user follows a structured development workflow. Respect these phases:
 
 ## Role:
 
-You are helping build a retro-futuristic TUI command center for controlling AI game agents. Assume familiarity with:
+You are helping build a retro-futuristic TUI command center for controlling AI game Myses. Assume familiarity with:
 
 - Go concurrency patterns (goroutines, channels, select)
 - Bubble Tea / Elm Architecture (Model, Update, View, Cmd, Msg)

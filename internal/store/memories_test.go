@@ -20,22 +20,22 @@ func TestGetSystemMemory(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	agent, _ := s.CreateAgent("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model")
 
 	// No system memory yet
-	_, err := s.GetSystemMemory(agent.ID)
+	_, err := s.GetSystemMemory(mysis.ID)
 	if err == nil {
 		t.Error("expected error getting non-existent system memory")
 	}
 
 	// Add system memory
 	expected := "You are a test."
-	s.AddMemory(agent.ID, MemoryRoleSystem, MemorySourceSystem, expected)
+	s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, expected)
 
 	// Add other memories
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "hello")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello")
 
-	system, err := s.GetSystemMemory(agent.ID)
+	system, err := s.GetSystemMemory(mysis.ID)
 	if err != nil {
 		t.Fatalf("GetSystemMemory() error: %v", err)
 	}
@@ -48,14 +48,14 @@ func TestSearchMemories(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	agent, _ := s.CreateAgent("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model")
 
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "I like apples")
-	s.AddMemory(agent.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great")
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "I like apples")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?")
 
 	// Search for "apples"
-	results, err := s.SearchMemories(agent.ID, "apples", 10)
+	results, err := s.SearchMemories(mysis.ID, "apples", 10)
 	if err != nil {
 		t.Fatalf("SearchMemories() error: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestSearchMemories(t *testing.T) {
 	}
 
 	// Search for "oranges"
-	results, err = s.SearchMemories(agent.ID, "oranges", 10)
+	results, err = s.SearchMemories(mysis.ID, "oranges", 10)
 	if err != nil {
 		t.Fatalf("SearchMemories() error: %v", err)
 	}
@@ -77,12 +77,12 @@ func TestSearchBroadcasts(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	agent1, _ := s.CreateAgent("agent1", "mock", "model")
-	agent2, _ := s.CreateAgent("agent2", "mock", "model")
+	mysis1, _ := s.CreateMysis("mysis1", "mock", "model")
+	mysis2, _ := s.CreateMysis("mysis2", "mock", "model")
 
-	s.AddMemory(agent1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1")
-	s.AddMemory(agent2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2")
-	s.AddMemory(agent1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1")
+	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message")
 
 	// Search for "Broadcast"
 	results, err := s.SearchBroadcasts("Broadcast", 10)
@@ -109,12 +109,12 @@ func TestGetRecentBroadcasts(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()
 
-	agent, _ := s.CreateAgent("test", "mock", "model")
+	mysis, _ := s.CreateMysis("test", "mock", "model")
 
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceBroadcast, "B1")
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceBroadcast, "B2")
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceBroadcast, "B3")
-	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "D1")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B1")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B2")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B3")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "D1")
 
 	results, err := s.GetRecentBroadcasts(2)
 	if err != nil {

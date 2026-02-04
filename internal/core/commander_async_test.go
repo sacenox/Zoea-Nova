@@ -49,10 +49,10 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	mock := provider.NewMock("mock", "response")
 	c.registry.Register(mock)
 
-	agent, _ := c.CreateAgent("async-agent", "mock")
+	mysis, _ := c.CreateMysis("async-mysis", "mock")
 
 	events := bus.Subscribe()
-	agent.Start()
+	mysis.Start()
 
 	// Wait for initial turn
 	timeout := time.After(10 * time.Second)
@@ -60,7 +60,7 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	for !found {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				found = true
 			}
 		case <-timeout:
@@ -69,7 +69,7 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	}
 
 	// Send async message
-	if err := c.SendMessageAsync(agent.ID(), "Hello async"); err != nil {
+	if err := c.SendMessageAsync(mysis.ID(), "Hello async"); err != nil {
 		t.Fatalf("SendMessageAsync() error: %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	for !found {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
+			if e.Type == EventMysisResponse {
 				found = true
 			}
 		case <-timeout:
@@ -97,13 +97,13 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 	c.registry.Register(m1)
 	c.registry.Register(m2)
 
-	a1, err := c.CreateAgent("a1", "mock1")
+	a1, err := c.CreateMysis("m1", "mock1")
 	if err != nil {
-		t.Fatalf("CreateAgent(a1) error: %v", err)
+		t.Fatalf("CreateMysis(m1) error: %v", err)
 	}
-	a2, err := c.CreateAgent("a2", "mock2")
+	a2, err := c.CreateMysis("m2", "mock2")
 	if err != nil {
-		t.Fatalf("CreateAgent(a2) error: %v", err)
+		t.Fatalf("CreateMysis(m2) error: %v", err)
 	}
 
 	events := bus.Subscribe()
@@ -116,7 +116,7 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 	for !found {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse && e.AgentID == a1.ID() {
+			if e.Type == EventMysisResponse && e.MysisID == a1.ID() {
 				found = true
 			}
 		case <-timeout:
@@ -133,7 +133,7 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 	for !found {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse && e.AgentID == a2.ID() {
+			if e.Type == EventMysisResponse && e.MysisID == a2.ID() {
 				found = true
 			}
 		case <-timeout:
@@ -152,8 +152,8 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 	for len(responses) < 2 {
 		select {
 		case e := <-events:
-			if e.Type == EventAgentResponse {
-				responses[e.AgentID] = true
+			if e.Type == EventMysisResponse {
+				responses[e.MysisID] = true
 			}
 		case <-timeout:
 			t.Fatalf("timeout waiting for broadcast responses, got %d", len(responses))

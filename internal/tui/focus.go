@@ -55,24 +55,24 @@ func wrapText(text string, maxWidth int) []string {
 	return lines
 }
 
-// RenderFocusView renders the detailed agent view (legacy, without viewport).
-func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string) string {
+// RenderFocusView renders the detailed mysis view (legacy, without viewport).
+func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string) string {
 	var sections []string
 
-	// Header with agent name - spans full width
-	header := renderFocusHeader(agent.Name, width)
+	// Header with mysis name - spans full width
+	header := renderFocusHeader(mysis.Name, width)
 	sections = append(sections, header)
 
-	// Agent info panel
-	stateDisplay := StateStyle(agent.State).Render(agent.State)
+	// Mysis info panel
+	stateDisplay := StateStyle(mysis.State).Render(mysis.State)
 	if isLoading {
 		stateDisplay += " " + spinnerView + " thinking..."
 	}
 
 	infoLines := []string{
-		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(agent.ID)),
+		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(mysis.ID)),
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
-		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(agent.Provider)),
+		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
 	infoContent := strings.Join(infoLines, "  ")
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
@@ -119,24 +119,24 @@ func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoad
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// RenderFocusViewWithViewport renders the detailed agent view using a scrollable viewport.
-func RenderFocusViewWithViewport(agent AgentInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool) string {
+// RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool) string {
 	var sections []string
 
-	// Header with agent name - spans full width
-	header := renderFocusHeader(agent.Name, width)
+	// Header with mysis name - spans full width
+	header := renderFocusHeader(mysis.Name, width)
 	sections = append(sections, header)
 
-	// Agent info panel
-	stateDisplay := StateStyle(agent.State).Render(agent.State)
+	// Mysis info panel
+	stateDisplay := StateStyle(mysis.State).Render(mysis.State)
 	if isLoading {
 		stateDisplay += " " + spinnerView + " thinking..."
 	}
 
 	infoLines := []string{
-		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(agent.ID)),
+		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(mysis.ID)),
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
-		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(agent.Provider)),
+		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
 	infoContent := strings.Join(infoLines, "  ")
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
@@ -247,10 +247,10 @@ func LogEntryFromMemory(m *store.Memory) LogEntry {
 }
 
 // renderFocusHeader renders the focus view header spanning full width.
-func renderFocusHeader(agentName string, width int) string {
-	// Format: ◆─── ⬡ AGENT: name ⬡ ───◆ with dashes filling the remaining space
+func renderFocusHeader(mysisName string, width int) string {
+	// Format: ◆─── ⬡ MYSIS: name ⬡ ───◆ with dashes filling the remaining space
 	// Use lipgloss.Width() for proper Unicode display width calculation
-	titleText := " ⬡ AGENT: " + agentName + " ⬡ "
+	titleText := " ⬡ MYSIS: " + mysisName + " ⬡ "
 	titleDisplayWidth := lipgloss.Width(titleText)
 	// Total fixed chars: ◆ (1) on each side = 2
 	availableWidth := width - titleDisplayWidth - 2

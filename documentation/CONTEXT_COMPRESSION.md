@@ -1,12 +1,12 @@
 # Context Compression
 
-Agents in Zoea Nova use a sliding window approach to manage LLM context size. Instead of sending the entire conversation history to the LLM on each turn, agents send only recent messages plus the system prompt. This keeps inference fast while agents retain access to older memories through search tools.
+Myses in Zoea Nova use a sliding window approach to manage LLM context size. Instead of sending the entire conversation history to the LLM on each turn, Myses send only recent messages plus the system prompt. This keeps inference fast while Myses retain access to older memories through search tools.
 
 ## Design
 
 ### The Problem
 
-Without compression, agent context grows unbounded:
+Without compression, Mysis context grows unbounded:
 - Each tool call adds multiple messages (request + result)
 - SpaceMolt gameplay involves frequent tool use (mining, trading, navigation)
 - Large contexts slow inference and increase costs
@@ -29,7 +29,7 @@ Without compression, agent context grows unbounded:
 ┌─────────────────────────────────────────────────────┐
 │              Full Memory (SQLite)                   │
 ├─────────────────────────────────────────────────────┤
-│  All messages since agent creation                  │
+│  All messages since Mysis creation                  │
 │  Searchable via zoea_search_messages tool           │
 └─────────────────────────────────────────────────────┘
 ```
@@ -39,7 +39,7 @@ Without compression, agent context grows unbounded:
 ### Constants
 
 ```go
-// internal/core/agent.go
+// internal/core/mysis.go
 
 // MaxContextMessages limits how many recent messages to include in LLM context.
 // Value chosen to cover ~2 server ticks worth of activity.
@@ -51,18 +51,18 @@ const MaxContextMessages = 20
 The `getContextMemories()` method assembles context for each LLM call:
 
 1. Fetch the N most recent memories from SQLite
-2. Fetch the system prompt (first system message for the agent)
+2. Fetch the system prompt (first system message for the Mysis)
 3. If system prompt isn't already in recent memories, prepend it
 4. Return the assembled context
 
 ```go
-func (a *Agent) getContextMemories() ([]*store.Memory, error) {
-    recent, err := a.store.GetRecentMemories(a.id, MaxContextMessages)
+func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
+    recent, err := m.store.GetRecentMemories(m.id, MaxContextMessages)
     if err != nil {
         return nil, err
     }
 
-    system, err := a.store.GetSystemMemory(a.id)
+    system, err := m.store.GetSystemMemory(m.id)
     if err != nil {
         // No system prompt - use recent memories only
         return recent, nil
@@ -86,14 +86,14 @@ func (a *Agent) getContextMemories() ([]*store.Memory, error) {
 ```go
 // internal/store/memories.go
 
-// GetSystemMemory retrieves the initial system prompt for an agent.
-func (s *Store) GetSystemMemory(agentID string) (*Memory, error)
+// GetSystemMemory retrieves the initial system prompt for a Mysis.
+func (s *Store) GetSystemMemory(mysisID string) (*Memory, error)
 
-// GetRecentMemories retrieves the most recent N memories for an agent.
-func (s *Store) GetRecentMemories(agentID string, limit int) ([]*Memory, error)
+// GetRecentMemories retrieves the most recent N memories for a Mysis.
+func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error)
 
 // SearchMemories searches memories by content text (case-sensitive).
-func (s *Store) SearchMemories(agentID, query string, limit int) ([]*Memory, error)
+func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error)
 
 // SearchBroadcasts searches broadcast messages by content text (case-sensitive).
 func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, error)
@@ -101,15 +101,15 @@ func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, 
 
 ## Search Tools
 
-Agents can retrieve older memories using MCP tools exposed through the orchestrator:
+Myses can retrieve older memories using MCP tools exposed through the orchestrator:
 
 ### zoea_search_messages
 
-Search an agent's past messages by text content.
+Search a Mysis's past messages by text content.
 
 ```json
 {
-  "agent_id": "abc123",
+  "mysis_id": "abc123",
   "query": "iron ore",
   "limit": 20
 }
@@ -132,7 +132,7 @@ Returns matching broadcasts with content and timestamp.
 
 ## System Prompt Guidance
 
-The system prompt instructs agents to use their captain's log for persistent memory:
+The system prompt instructs Myses to use their captain's log for persistent memory:
 
 ```
 ## Memory
@@ -143,7 +143,7 @@ Use captain's log (captains_log_add) to remember:
 - Current objectives and plans
 ```
 
-This encourages agents to externalize important information to the game's built-in note system, which persists across context windows.
+This encourages Myses to externalize important information to the game's built-in note system, which persists across context windows.
 
 ## Tradeoffs
 

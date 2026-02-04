@@ -184,7 +184,7 @@ base_url = "http://localhost:11434"
 # For fast testing
 model = "qwen3:4b"
 
-# For production agents
+# For production Myses
 # model = "qwen3:8b"
 
 # For complex reasoning tasks
@@ -193,7 +193,7 @@ model = "qwen3:4b"
 
 ### Thinking Mode Strategy
 
-For game agents that need to plan:
+For game Myses that need to plan:
 1. Use Qwen 3 with thinking enabled for strategic decisions
 2. Disable thinking (`/nothink`) for rapid tool execution
 3. Consider separate models: fast (4B) for actions, larger (14B) for planning

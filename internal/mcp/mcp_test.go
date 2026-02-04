@@ -175,44 +175,44 @@ func TestClientWithMockServer(t *testing.T) {
 
 // mockOrchestrator is a test implementation of the Orchestrator interface.
 type mockOrchestrator struct {
-	agents []AgentInfo
+	myses []MysisInfo
 }
 
-func (m *mockOrchestrator) ListAgents() []AgentInfo {
-	return m.agents
+func (m *mockOrchestrator) ListMyses() []MysisInfo {
+	return m.myses
 }
 
-func (m *mockOrchestrator) GetAgent(id string) (AgentInfo, error) {
-	for _, a := range m.agents {
-		if a.ID == id {
-			return a, nil
+func (m *mockOrchestrator) GetMysis(id string) (MysisInfo, error) {
+	for _, mysis := range m.myses {
+		if mysis.ID == id {
+			return mysis, nil
 		}
 	}
-	return AgentInfo{}, errors.New("agent not found")
+	return MysisInfo{}, errors.New("mysis not found")
 }
 
-func (m *mockOrchestrator) AgentCount() int {
-	return len(m.agents)
+func (m *mockOrchestrator) MysisCount() int {
+	return len(m.myses)
 }
 
-func (m *mockOrchestrator) MaxAgents() int {
+func (m *mockOrchestrator) MaxMyses() int {
 	return 16
 }
 
-func (m *mockOrchestrator) SendMessageAsync(agentID, message string) error {
-	for _, a := range m.agents {
-		if a.ID == agentID {
+func (m *mockOrchestrator) SendMessageAsync(mysisID, message string) error {
+	for _, mysis := range m.myses {
+		if mysis.ID == mysisID {
 			return nil
 		}
 	}
-	return errors.New("agent not found")
+	return errors.New("mysis not found")
 }
 
 func (m *mockOrchestrator) BroadcastAsync(message string) error {
 	return nil
 }
 
-func (m *mockOrchestrator) SearchMessages(agentID, query string, limit int) ([]SearchResult, error) {
+func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]SearchResult, error) {
 	return []SearchResult{}, nil
 }
 
@@ -223,8 +223,8 @@ func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]Broadcas
 func TestOrchestratorTools(t *testing.T) {
 	// Create mock orchestrator
 	orchestrator := &mockOrchestrator{
-		agents: []AgentInfo{
-			{ID: "agent-1", Name: "test-agent", State: "running", Provider: "mock"},
+		myses: []MysisInfo{
+			{ID: "mysis-1", Name: "test-mysis", State: "running", Provider: "mock"},
 		},
 	}
 
@@ -248,29 +248,29 @@ func TestOrchestratorTools(t *testing.T) {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Test zoea_list_agents
-	result, err = proxy.CallTool(ctx, "zoea_list_agents", nil)
+	// Test zoea_list_myses
+	result, err = proxy.CallTool(ctx, "zoea_list_myses", nil)
 	if err != nil {
-		t.Fatalf("CallTool(zoea_list_agents) error: %v", err)
+		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
 	}
 	if result.IsError {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Test zoea_get_agent
-	args, _ := json.Marshal(map[string]string{"agent_id": "agent-1"})
-	result, err = proxy.CallTool(ctx, "zoea_get_agent", args)
+	// Test zoea_get_mysis
+	args, _ := json.Marshal(map[string]string{"mysis_id": "mysis-1"})
+	result, err = proxy.CallTool(ctx, "zoea_get_mysis", args)
 	if err != nil {
-		t.Fatalf("CallTool(zoea_get_agent) error: %v", err)
+		t.Fatalf("CallTool(zoea_get_mysis) error: %v", err)
 	}
 	if result.IsError {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Test zoea_get_agent with invalid ID
-	args, _ = json.Marshal(map[string]string{"agent_id": "nonexistent"})
-	result, _ = proxy.CallTool(ctx, "zoea_get_agent", args)
+	// Test zoea_get_mysis with invalid ID
+	args, _ = json.Marshal(map[string]string{"mysis_id": "nonexistent"})
+	result, _ = proxy.CallTool(ctx, "zoea_get_mysis", args)
 	if !result.IsError {
-		t.Error("expected error for nonexistent agent")
+		t.Error("expected error for nonexistent mysis")
 	}
 }

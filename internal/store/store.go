@@ -1,4 +1,4 @@
-// Package store provides SQLite-based persistence for agents and memories.
+// Package store provides SQLite-based persistence for Myses and memories.
 package store
 
 import (
@@ -15,7 +15,7 @@ import (
 //go:embed schema.sql
 var schema string
 
-const currentSchemaVersion = 2
+const currentSchemaVersion = 3
 
 // Store provides access to the SQLite database.
 type Store struct {
@@ -99,20 +99,24 @@ func (s *Store) migrate() error {
 		return nil
 	}
 
-	// Per design: forward-only migrations, create fresh DB on schema change
-	// For MVP, we just recreate
+	// Per design: no data migrations. Schema changes require manual database deletion.
 	if version < currentSchemaVersion {
-		// Drop all tables and recreate
-		if _, err := s.db.Exec(`
-			DROP TABLE IF EXISTS memories;
-			DROP TABLE IF EXISTS agents;
-			DROP TABLE IF EXISTS schema_version;
-		`); err != nil {
-			return fmt.Errorf("drop tables: %w", err)
-		}
-		if _, err := s.db.Exec(schema); err != nil {
-			return fmt.Errorf("recreate schema: %w", err)
-		}
+		return fmt.Errorf(
+			"database schema version %d is outdated (current: %d)\n"+
+				"Delete the database to continue:\n"+
+				"  rm ~/.zoea-nova/zoea.db*",
+			version, currentSchemaVersion,
+		)
+	}
+
+	// Future schema version (downgrade not supported)
+	if version > currentSchemaVersion {
+		return fmt.Errorf(
+			"database schema version %d is newer than supported version %d\n"+
+				"Upgrade Zoea Nova or delete the database:\n"+
+				"  rm ~/.zoea-nova/zoea.db*",
+			version, currentSchemaVersion,
+		)
 	}
 
 	return nil

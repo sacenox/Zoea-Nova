@@ -19,8 +19,8 @@ const (
 type MemorySource string
 
 const (
-	MemorySourceDirect    MemorySource = "direct"    // Direct message to specific agent
-	MemorySourceBroadcast MemorySource = "broadcast" // Broadcast message to all agents
+	MemorySourceDirect    MemorySource = "direct"    // Direct message to specific mysis
+	MemorySourceBroadcast MemorySource = "broadcast" // Broadcast message to all myses
 	MemorySourceSystem    MemorySource = "system"    // System prompts
 	MemorySourceLLM       MemorySource = "llm"       // LLM-generated responses
 	MemorySourceTool      MemorySource = "tool"      // Tool call results
@@ -29,21 +29,21 @@ const (
 // Memory represents a stored conversation message.
 type Memory struct {
 	ID        int64
-	AgentID   string
+	MysisID   string
 	Role      MemoryRole
 	Source    MemorySource
 	Content   string
 	CreatedAt time.Time
 }
 
-// AddMemory adds a memory entry for an agent.
-func (s *Store) AddMemory(agentID string, role MemoryRole, source MemorySource, content string) (*Memory, error) {
+// AddMemory adds a memory entry for a mysis.
+func (s *Store) AddMemory(mysisID string, role MemoryRole, source MemorySource, content string) (*Memory, error) {
 	now := time.Now().UTC()
 
 	result, err := s.db.Exec(`
-		INSERT INTO memories (agent_id, role, source, content, created_at)
+		INSERT INTO memories (mysis_id, role, source, content, created_at)
 		VALUES (?, ?, ?, ?, ?)
-	`, agentID, role, source, content, now)
+	`, mysisID, role, source, content, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert memory: %w", err)
 	}
@@ -51,7 +51,7 @@ func (s *Store) AddMemory(agentID string, role MemoryRole, source MemorySource, 
 	id, _ := result.LastInsertId()
 	return &Memory{
 		ID:        id,
-		AgentID:   agentID,
+		MysisID:   mysisID,
 		Role:      role,
 		Source:    source,
 		Content:   content,
@@ -59,14 +59,14 @@ func (s *Store) AddMemory(agentID string, role MemoryRole, source MemorySource, 
 	}, nil
 }
 
-// GetMemories retrieves all memories for an agent, ordered by creation time.
-func (s *Store) GetMemories(agentID string) ([]*Memory, error) {
+// GetMemories retrieves all memories for a mysis, ordered by creation time.
+func (s *Store) GetMemories(mysisID string) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, created_at
 		FROM memories
-		WHERE agent_id = ?
+		WHERE mysis_id = ?
 		ORDER BY created_at ASC
-	`, agentID)
+	`, mysisID)
 	if err != nil {
 		return nil, fmt.Errorf("query memories: %w", err)
 	}
@@ -75,7 +75,7 @@ func (s *Store) GetMemories(agentID string) ([]*Memory, error) {
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.AgentID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)
@@ -84,31 +84,31 @@ func (s *Store) GetMemories(agentID string) ([]*Memory, error) {
 	return memories, rows.Err()
 }
 
-// GetSystemMemory retrieves the initial system prompt for an agent.
-func (s *Store) GetSystemMemory(agentID string) (*Memory, error) {
+// GetSystemMemory retrieves the initial system prompt for a mysis.
+func (s *Store) GetSystemMemory(mysisID string) (*Memory, error) {
 	var m Memory
 	err := s.db.QueryRow(`
-		SELECT id, agent_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, created_at
 		FROM memories
-		WHERE agent_id = ? AND role = 'system' AND source = 'system'
+		WHERE mysis_id = ? AND role = 'system' AND source = 'system'
 		ORDER BY created_at ASC
 		LIMIT 1
-	`, agentID).Scan(&m.ID, &m.AgentID, &m.Role, &m.Source, &m.Content, &m.CreatedAt)
+	`, mysisID).Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &m, nil
 }
 
-// GetRecentMemories retrieves the most recent N memories for an agent.
-func (s *Store) GetRecentMemories(agentID string, limit int) ([]*Memory, error) {
+// GetRecentMemories retrieves the most recent N memories for a mysis.
+func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, created_at
 		FROM memories
-		WHERE agent_id = ?
+		WHERE mysis_id = ?
 		ORDER BY created_at DESC
 		LIMIT ?
-	`, agentID, limit)
+	`, mysisID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query recent memories: %w", err)
 	}
@@ -117,7 +117,7 @@ func (s *Store) GetRecentMemories(agentID string, limit int) ([]*Memory, error) 
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.AgentID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)
@@ -131,30 +131,30 @@ func (s *Store) GetRecentMemories(agentID string, limit int) ([]*Memory, error) 
 	return memories, rows.Err()
 }
 
-// DeleteMemories deletes all memories for an agent.
-func (s *Store) DeleteMemories(agentID string) error {
-	_, err := s.db.Exec(`DELETE FROM memories WHERE agent_id = ?`, agentID)
+// DeleteMemories deletes all memories for a mysis.
+func (s *Store) DeleteMemories(mysisID string) error {
+	_, err := s.db.Exec(`DELETE FROM memories WHERE mysis_id = ?`, mysisID)
 	if err != nil {
 		return fmt.Errorf("delete memories: %w", err)
 	}
 	return nil
 }
 
-// CountMemories returns the number of memories for an agent.
-func (s *Store) CountMemories(agentID string) (int, error) {
+// CountMemories returns the number of memories for a mysis.
+func (s *Store) CountMemories(mysisID string) (int, error) {
 	var count int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM memories WHERE agent_id = ?`, agentID).Scan(&count)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM memories WHERE mysis_id = ?`, mysisID).Scan(&count)
 	return count, err
 }
 
-// BroadcastMessage represents a unique broadcast message across all agents.
+// BroadcastMessage represents a unique broadcast message across all myses.
 type BroadcastMessage struct {
 	Content   string
 	CreatedAt time.Time
 }
 
 // GetRecentBroadcasts retrieves the most recent N unique broadcast messages.
-// Since broadcasts are stored per-agent, this groups by content to get unique messages.
+// Since broadcasts are stored per-mysis, this groups by content to get unique messages.
 func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
 	rows, err := s.db.Query(`
 		SELECT content, MIN(created_at) as created_at
@@ -195,16 +195,16 @@ func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
 	return messages, rows.Err()
 }
 
-// SearchMemories searches memories for an agent by content text.
+// SearchMemories searches memories for a mysis by content text.
 // Returns memories where content contains the query string (case-sensitive).
-func (s *Store) SearchMemories(agentID, query string, limit int) ([]*Memory, error) {
+func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, role, source, content, created_at
+		SELECT id, mysis_id, role, source, content, created_at
 		FROM memories
-		WHERE agent_id = ? AND content LIKE '%' || ? || '%'
+		WHERE mysis_id = ? AND content LIKE '%' || ? || '%'
 		ORDER BY created_at DESC
 		LIMIT ?
-	`, agentID, query, limit)
+	`, mysisID, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search memories: %w", err)
 	}
@@ -213,7 +213,7 @@ func (s *Store) SearchMemories(agentID, query string, limit int) ([]*Memory, err
 	var memories []*Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.AgentID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &m.Content, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory: %w", err)
 		}
 		memories = append(memories, &m)

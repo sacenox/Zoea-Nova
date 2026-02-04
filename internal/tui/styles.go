@@ -63,24 +63,24 @@ var (
 			Background(colorBgAlt).
 			Padding(0, 1)
 
-	// Agent list - double border for that 80s terminal aesthetic
-	agentListStyle = lipgloss.NewStyle().
+	// Mysis list - double border for that 80s terminal aesthetic
+	mysisListStyle = lipgloss.NewStyle().
 			Border(lipgloss.DoubleBorder()).
 			BorderForeground(colorBorder).
 			Background(colorBgPanel)
 
-	agentItemStyle = lipgloss.NewStyle().
+	mysisItemStyle = lipgloss.NewStyle().
 			Foreground(colorTeal).
 			Background(colorBgPanel).
 			Padding(0, 1)
 
-	agentItemSelectedStyle = lipgloss.NewStyle().
+	mysisItemSelectedStyle = lipgloss.NewStyle().
 				Foreground(colorBg).
 				Background(colorBrand).
 				Bold(true).
 				Padding(0, 1)
 
-	// Agent states - distinct colors for each state
+	// Mysis states - distinct colors for each state
 	stateRunningStyle = lipgloss.NewStyle().
 				Foreground(colorSuccess).
 				Bold(true)
@@ -144,7 +144,7 @@ var (
 	helpDescStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
-	// Panels - consistent with agent list
+	// Panels - consistent with mysis list
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder).
@@ -173,7 +173,7 @@ var (
 			Bold(true)
 )
 
-// StateStyle returns the appropriate style for an agent state.
+// StateStyle returns the appropriate style for a mysis state.
 func StateStyle(state string) lipgloss.Style {
 	switch state {
 	case "running":

@@ -86,16 +86,16 @@ func main() {
 	// Initialize commander
 	commander := core.NewCommander(s, registry, bus, cfg)
 
-	// Load existing agents from database
-	if err := commander.LoadAgents(); err != nil {
-		log.Warn().Err(err).Msg("Failed to load existing agents")
+	// Load existing myses from database
+	if err := commander.LoadMyses(); err != nil {
+		log.Warn().Err(err).Msg("Failed to load existing myses")
 	}
-	log.Debug().Int("agents", commander.AgentCount()).Msg("Agents loaded")
+	log.Debug().Int("myses", commander.MysisCount()).Msg("Myses loaded")
 
-	// Auto-start all existing agents on launch
-	for _, a := range commander.ListAgents() {
+	// Auto-start all existing myses on launch
+	for _, a := range commander.ListMyses() {
 		if err := a.Start(); err != nil {
-			log.Warn().Err(err).Str("agent", a.Name()).Msg("Failed to start agent")
+			log.Warn().Err(err).Str("mysis", a.Name()).Msg("Failed to start mysis")
 		}
 	}
 
@@ -123,7 +123,7 @@ func main() {
 		cancel()
 	}
 
-	// Connect MCP proxy to commander so agents can use tools
+	// Connect MCP proxy to commander so myses can use tools
 	commander.SetMCP(mcpProxy)
 
 	log.Debug().Bool("upstream", mcpProxy.HasUpstream()).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP proxy initialized")
@@ -212,53 +212,53 @@ type commanderAdapter struct {
 	commander *core.Commander
 }
 
-func (a *commanderAdapter) ListAgents() []mcp.AgentInfo {
-	agents := a.commander.ListAgents()
-	result := make([]mcp.AgentInfo, len(agents))
-	for i, agent := range agents {
-		result[i] = mcp.AgentInfo{
-			ID:        agent.ID(),
-			Name:      agent.Name(),
-			State:     string(agent.State()),
-			Provider:  agent.ProviderName(),
-			LastError: agent.LastError(),
+func (a *commanderAdapter) ListMyses() []mcp.MysisInfo {
+	myses := a.commander.ListMyses()
+	result := make([]mcp.MysisInfo, len(myses))
+	for i, mysis := range myses {
+		result[i] = mcp.MysisInfo{
+			ID:        mysis.ID(),
+			Name:      mysis.Name(),
+			State:     string(mysis.State()),
+			Provider:  mysis.ProviderName(),
+			LastError: mysis.LastError(),
 		}
 	}
 	return result
 }
 
-func (a *commanderAdapter) GetAgent(id string) (mcp.AgentInfo, error) {
-	agent, err := a.commander.GetAgent(id)
+func (a *commanderAdapter) GetMysis(id string) (mcp.MysisInfo, error) {
+	mysis, err := a.commander.GetMysis(id)
 	if err != nil {
-		return mcp.AgentInfo{}, err
+		return mcp.MysisInfo{}, err
 	}
-	return mcp.AgentInfo{
-		ID:        agent.ID(),
-		Name:      agent.Name(),
-		State:     string(agent.State()),
-		Provider:  agent.ProviderName(),
-		LastError: agent.LastError(),
+	return mcp.MysisInfo{
+		ID:        mysis.ID(),
+		Name:      mysis.Name(),
+		State:     string(mysis.State()),
+		Provider:  mysis.ProviderName(),
+		LastError: mysis.LastError(),
 	}, nil
 }
 
-func (a *commanderAdapter) AgentCount() int {
-	return a.commander.AgentCount()
+func (a *commanderAdapter) MysisCount() int {
+	return a.commander.MysisCount()
 }
 
-func (a *commanderAdapter) MaxAgents() int {
-	return a.commander.MaxAgents()
+func (a *commanderAdapter) MaxMyses() int {
+	return a.commander.MaxMyses()
 }
 
-func (a *commanderAdapter) SendMessageAsync(agentID, message string) error {
-	return a.commander.SendMessageAsync(agentID, message)
+func (a *commanderAdapter) SendMessageAsync(mysisID, message string) error {
+	return a.commander.SendMessageAsync(mysisID, message)
 }
 
 func (a *commanderAdapter) BroadcastAsync(message string) error {
 	return a.commander.BroadcastAsync(message)
 }
 
-func (a *commanderAdapter) SearchMessages(agentID, query string, limit int) ([]mcp.SearchResult, error) {
-	memories, err := a.commander.Store().SearchMemories(agentID, query, limit)
+func (a *commanderAdapter) SearchMessages(mysisID, query string, limit int) ([]mcp.SearchResult, error) {
+	memories, err := a.commander.Store().SearchMemories(mysisID, query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -402,23 +402,23 @@ func runMCPTest(configPath string) {
 // mockOrchestrator is a simple orchestrator for testing.
 type mockOrchestrator struct{}
 
-func (m *mockOrchestrator) ListAgents() []mcp.AgentInfo {
-	return []mcp.AgentInfo{}
+func (m *mockOrchestrator) ListMyses() []mcp.MysisInfo {
+	return []mcp.MysisInfo{}
 }
 
-func (m *mockOrchestrator) GetAgent(id string) (mcp.AgentInfo, error) {
-	return mcp.AgentInfo{}, fmt.Errorf("no agents in test mode")
+func (m *mockOrchestrator) GetMysis(id string) (mcp.MysisInfo, error) {
+	return mcp.MysisInfo{}, fmt.Errorf("no myses in test mode")
 }
 
-func (m *mockOrchestrator) AgentCount() int {
+func (m *mockOrchestrator) MysisCount() int {
 	return 0
 }
 
-func (m *mockOrchestrator) MaxAgents() int {
+func (m *mockOrchestrator) MaxMyses() int {
 	return 16
 }
 
-func (m *mockOrchestrator) SendMessageAsync(agentID, message string) error {
+func (m *mockOrchestrator) SendMessageAsync(mysisID, message string) error {
 	return fmt.Errorf("not available in test mode")
 }
 
@@ -426,7 +426,7 @@ func (m *mockOrchestrator) BroadcastAsync(message string) error {
 	return fmt.Errorf("not available in test mode")
 }
 
-func (m *mockOrchestrator) SearchMessages(agentID, query string, limit int) ([]mcp.SearchResult, error) {
+func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]mcp.SearchResult, error) {
 	return []mcp.SearchResult{}, nil
 }
 

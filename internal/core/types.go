@@ -5,27 +5,27 @@ import (
 	"time"
 )
 
-// AgentState represents the current state of an agent.
-type AgentState string
+// MysisState represents the current state of a mysis.
+type MysisState string
 
 const (
-	AgentStateIdle    AgentState = "idle"
-	AgentStateRunning AgentState = "running"
-	AgentStateStopped AgentState = "stopped"
-	AgentStateErrored AgentState = "errored"
+	MysisStateIdle    MysisState = "idle"
+	MysisStateRunning MysisState = "running"
+	MysisStateStopped MysisState = "stopped"
+	MysisStateErrored MysisState = "errored"
 )
 
 // EventType identifies the type of event.
 type EventType string
 
 const (
-	EventAgentCreated       EventType = "agent_created"
-	EventAgentDeleted       EventType = "agent_deleted"
-	EventAgentStateChanged  EventType = "agent_state_changed"
-	EventAgentConfigChanged EventType = "agent_config_changed"
-	EventAgentMessage       EventType = "agent_message"
-	EventAgentResponse      EventType = "agent_response"
-	EventAgentError         EventType = "agent_error"
+	EventMysisCreated       EventType = "mysis_created"
+	EventMysisDeleted       EventType = "mysis_deleted"
+	EventMysisStateChanged  EventType = "mysis_state_changed"
+	EventMysisConfigChanged EventType = "mysis_config_changed"
+	EventMysisMessage       EventType = "mysis_message"
+	EventMysisResponse      EventType = "mysis_response"
+	EventMysisError         EventType = "mysis_error"
 	EventBroadcast          EventType = "broadcast"
 	EventNetworkLLM         EventType = "network_llm"  // LLM request started/finished
 	EventNetworkMCP         EventType = "network_mcp"  // MCP request started/finished
@@ -35,8 +35,8 @@ const (
 // Event represents something that happened in the swarm.
 type Event struct {
 	Type      EventType
-	AgentID   string
-	AgentName string
+	MysisID   string
+	MysisName string
 	Data      interface{}
 	Timestamp time.Time
 }
@@ -54,8 +54,8 @@ type ErrorData struct {
 
 // StateChangeData contains data for state change events.
 type StateChangeData struct {
-	OldState AgentState
-	NewState AgentState
+	OldState MysisState
+	NewState MysisState
 }
 
 // ConfigChangeData contains data for config change events.
