@@ -10,12 +10,25 @@ import (
 // ToolHandler is a function that handles a tool call.
 type ToolHandler func(ctx context.Context, arguments json.RawMessage) (*ToolResult, error)
 
+type AccountStore interface {
+	CreateAccount(username, password string) (*Account, error)
+	MarkAccountInUse(username string) error
+	ReleaseAccount(username string) error
+	ReleaseAllAccounts() error
+}
+
+type Account struct {
+	Username string
+	Password string
+}
+
 // Proxy combines an upstream MCP client with local tool handlers.
 type Proxy struct {
 	mu            sync.RWMutex
 	upstream      *Client
 	localTools    map[string]Tool
 	localHandlers map[string]ToolHandler
+	accountStore  AccountStore
 }
 
 // NewProxy creates a new MCP proxy.
@@ -30,6 +43,12 @@ func NewProxy(upstreamEndpoint string) *Proxy {
 		localTools:    make(map[string]Tool),
 		localHandlers: make(map[string]ToolHandler),
 	}
+}
+
+func (p *Proxy) SetAccountStore(store AccountStore) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.accountStore = store
 }
 
 // RegisterTool registers a local tool with the proxy.
@@ -71,6 +90,7 @@ func (p *Proxy) ListTools(ctx context.Context) ([]Tool, error) {
 func (p *Proxy) CallTool(ctx context.Context, name string, arguments json.RawMessage) (*ToolResult, error) {
 	p.mu.RLock()
 	handler, isLocal := p.localHandlers[name]
+	accountStore := p.accountStore
 	p.mu.RUnlock()
 
 	// Try local handler first
@@ -86,13 +106,87 @@ func (p *Proxy) CallTool(ctx context.Context, name string, arguments json.RawMes
 				return nil, fmt.Errorf("unmarshal arguments: %w", err)
 			}
 		}
-		return p.upstream.CallTool(ctx, name, args)
+
+		result, err := p.upstream.CallTool(ctx, name, args)
+
+		if accountStore != nil && result != nil && !result.IsError {
+			p.interceptAuthTools(name, arguments, result)
+		}
+
+		return result, err
 	}
 
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("tool not found: %s", name)}},
 		IsError: true,
 	}, nil
+}
+
+func (p *Proxy) interceptAuthTools(toolName string, arguments json.RawMessage, result *ToolResult) {
+	switch toolName {
+	case "register":
+		p.handleRegisterResponse(arguments, result)
+	case "login":
+		p.handleLoginResponse(arguments, result)
+	case "logout":
+		p.handleLogoutResponse(arguments, result)
+	}
+}
+
+func (p *Proxy) handleRegisterResponse(arguments json.RawMessage, result *ToolResult) {
+	var args struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(arguments, &args); err != nil {
+		return
+	}
+
+	if len(result.Content) == 0 {
+		return
+	}
+
+	var response struct {
+		Password string `json:"password"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &response); err != nil {
+		return
+	}
+
+	if args.Username != "" && response.Password != "" {
+		_, _ = p.accountStore.CreateAccount(args.Username, response.Password)
+	}
+}
+
+func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResult) {
+	var args struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(arguments, &args); err != nil {
+		return
+	}
+
+	if args.Username != "" {
+		_ = p.accountStore.MarkAccountInUse(args.Username)
+	}
+}
+
+func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResult) {
+	if len(result.Content) == 0 {
+		return
+	}
+
+	var response struct {
+		Player struct {
+			Username string `json:"username"`
+		} `json:"player"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &response); err != nil {
+		return
+	}
+
+	if response.Player.Username != "" {
+		_ = p.accountStore.ReleaseAccount(response.Player.Username)
+	}
 }
 
 // Initialize initializes the upstream connection if available.

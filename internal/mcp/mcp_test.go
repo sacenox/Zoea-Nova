@@ -225,20 +225,8 @@ func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]Broadcas
 	return []BroadcastResult{}, nil
 }
 
-func (m *mockOrchestrator) ListAvailableAccounts() ([]AccountInfo, error) {
-	return []AccountInfo{}, nil
-}
-
-func (m *mockOrchestrator) ClaimAccount(mysisID string) (AccountInfo, error) {
+func (m *mockOrchestrator) ClaimAccount() (AccountInfo, error) {
 	return AccountInfo{}, fmt.Errorf("not available in test mode")
-}
-
-func (m *mockOrchestrator) RegisterAccount(mysisID, username, password, empire string) error {
-	return fmt.Errorf("not available in test mode")
-}
-
-func (m *mockOrchestrator) ReleaseAccount(mysisID string) error {
-	return fmt.Errorf("not available in test mode")
 }
 
 func TestOrchestratorTools(t *testing.T) {
@@ -253,8 +241,8 @@ func TestOrchestratorTools(t *testing.T) {
 	proxy := NewProxy("")
 	RegisterOrchestratorTools(proxy, orchestrator)
 
-	if proxy.LocalToolCount() != 12 {
-		t.Errorf("expected 12 local tools, got %d", proxy.LocalToolCount())
+	if proxy.LocalToolCount() != 9 {
+		t.Errorf("expected 9 local tools, got %d", proxy.LocalToolCount())
 	}
 
 	ctx := context.Background()

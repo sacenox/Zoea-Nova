@@ -101,6 +101,7 @@ func main() {
 
 	// Initialize MCP proxy
 	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
+	mcpProxy.SetAccountStore(&accountStoreAdapter{s})
 	mcp.RegisterOrchestratorTools(mcpProxy, &commanderAdapter{commander})
 
 	// Initialize upstream MCP connection if configured
@@ -154,6 +155,12 @@ func main() {
 
 	// Clean shutdown
 	commander.StopAll()
+
+	// Release all accounts
+	if err := s.ReleaseAllAccounts(); err != nil {
+		log.Warn().Err(err).Msg("Failed to release accounts on shutdown")
+	}
+
 	log.Info().Msg("Zoea Nova shutdown complete")
 }
 
@@ -207,7 +214,30 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 	return registry
 }
 
-// commanderAdapter adapts core.Commander to the mcp.Orchestrator interface.
+type accountStoreAdapter struct {
+	store *store.Store
+}
+
+func (a *accountStoreAdapter) CreateAccount(username, password string) (*mcp.Account, error) {
+	acc, err := a.store.CreateAccount(username, password)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
+}
+
+func (a *accountStoreAdapter) MarkAccountInUse(username string) error {
+	return a.store.MarkAccountInUse(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAccount(username string) error {
+	return a.store.ReleaseAccount(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAllAccounts() error {
+	return a.store.ReleaseAllAccounts()
+}
+
 type commanderAdapter struct {
 	commander *core.Commander
 }
@@ -310,77 +340,16 @@ func (a *commanderAdapter) SearchBroadcasts(query string, limit int) ([]mcp.Broa
 	return results, nil
 }
 
-func (a *commanderAdapter) ListAvailableAccounts() ([]mcp.AccountInfo, error) {
-	accounts, err := a.commander.Store().ListAvailableAccounts()
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]mcp.AccountInfo, len(accounts))
-	for i, acc := range accounts {
-		results[i] = mcp.AccountInfo{
-			Username: acc.Username,
-			Empire:   acc.Empire,
-		}
-	}
-	return results, nil
-}
-
-func (a *commanderAdapter) ClaimAccount(mysisID string) (mcp.AccountInfo, error) {
-	available, err := a.commander.Store().ListAvailableAccounts()
+func (a *commanderAdapter) ClaimAccount() (mcp.AccountInfo, error) {
+	acc, err := a.commander.Store().ClaimAccount()
 	if err != nil {
 		return mcp.AccountInfo{}, err
 	}
-	if len(available) == 0 {
-		return mcp.AccountInfo{}, fmt.Errorf("no accounts available")
-	}
 
-	// Try to claim accounts in order until one succeeds (handles race conditions)
-	for _, acc := range available {
-		if err := a.commander.Store().ClaimAccount(acc.Username, mysisID); err != nil {
-			// If already claimed, try next account
-			if err.Error() == fmt.Sprintf("account %s is already claimed", acc.Username) {
-				continue
-			}
-			// Other errors are fatal
-			return mcp.AccountInfo{}, err
-		}
-
-		// Successfully claimed, update last used
-		if err := a.commander.Store().UpdateAccountLastUsed(acc.Username); err != nil {
-			log.Warn().Err(err).Str("username", acc.Username).Msg("failed to update account last_used_at")
-		}
-
-		return mcp.AccountInfo{
-			Username: acc.Username,
-			Password: acc.Password,
-			Empire:   acc.Empire,
-		}, nil
-	}
-
-	// All accounts were claimed during our attempt
-	return mcp.AccountInfo{}, fmt.Errorf("no accounts available")
-}
-
-func (a *commanderAdapter) RegisterAccount(mysisID, username, password, empire string) error {
-	if username == "" || password == "" {
-		return fmt.Errorf("username and password are required")
-	}
-
-	if empire == "" {
-		empire = "solarian"
-	}
-
-	acc, err := a.commander.Store().CreateAccount(username, password, empire)
-	if err != nil {
-		return err
-	}
-
-	return a.commander.Store().ClaimAccount(acc.Username, mysisID)
-}
-
-func (a *commanderAdapter) ReleaseAccount(mysisID string) error {
-	return a.commander.Store().ReleaseAccountsByMysis(mysisID)
+	return mcp.AccountInfo{
+		Username: acc.Username,
+		Password: acc.Password,
+	}, nil
 }
 
 // runMCPTest tests the MCP connection and tool calling.
@@ -530,18 +499,6 @@ func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]mcp.Broa
 	return []mcp.BroadcastResult{}, nil
 }
 
-func (m *mockOrchestrator) ListAvailableAccounts() ([]mcp.AccountInfo, error) {
-	return []mcp.AccountInfo{}, nil
-}
-
-func (m *mockOrchestrator) ClaimAccount(mysisID string) (mcp.AccountInfo, error) {
+func (m *mockOrchestrator) ClaimAccount() (mcp.AccountInfo, error) {
 	return mcp.AccountInfo{}, fmt.Errorf("not available in test mode")
-}
-
-func (m *mockOrchestrator) RegisterAccount(mysisID, username, password, empire string) error {
-	return fmt.Errorf("not available in test mode")
-}
-
-func (m *mockOrchestrator) ReleaseAccount(mysisID string) error {
-	return fmt.Errorf("not available in test mode")
 }

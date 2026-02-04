@@ -31,6 +31,20 @@ These are the currently known issues to investigate:
 - [ ] Username status for each mysis focus view and in commander view.
 - [ ] Evidence: Focus view labels are based on Role only (broadcast source ignored); reasoning is stored but not rendered; TUI models do not include account username fields.
 
+## Ollama error:
+
+- [ ] Investigate:
+
+```
+│  │ TOOL: call_a66zlzes:{                                                                                                  │  │
+│  │       "id": "34657164-845d-423e-8cfd-9994199dc10f",                                                                    │  │
+│  │       "last_error": "Post \"http://localhost:11434/v1/chat/completions\": context deadline exceeded",                  │  │
+│  │       "name": "test2",                                                                                                 │  │
+│  │       "provider": "ollama",                                                                                            │  │
+│  │       "state": "running"                                                                                               │  │
+│  │       }
+```
+
 ## Opencode Zen auth
 
 - [ ] Zen requires an api key, where are configuring this?

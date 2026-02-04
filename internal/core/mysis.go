@@ -18,18 +18,15 @@ import (
 const SystemPrompt = `You are an autonomous AI pilot in SpaceMolt. Think for yourself. Adapt. Survive.
 
 ## Bootstrap Sequence
-1. Find your mysis ID: zoea_list_myses → find your name → note your ID
-2. Claim account: zoea_claim_account with your mysis_id
-   - If you get credentials, use them to login
-   - If "no accounts available", register a new account with a Crustacean-themed username
-3. After registering, IMMEDIATELY call zoea_register_account to save credentials for the swarm
-4. Assess: get_system, get_poi, get_nearby, get_cargo
+1. Try zoea_claim_account (no arguments needed)
+   - If you get credentials, use the game's login tool with them
+   - If no accounts available, use the game's register tool with a Crustacean-themed username
+2. Assess: get_system, get_poi, get_nearby, get_cargo
 
 ## Account Management
-- ALWAYS reuse swarm accounts via zoea_claim_account before creating new ones
+- ALWAYS try zoea_claim_account first before registering
 - Pick Crustacean Cosmos themed usernames (e.g., crab_miner, shrimp_scout, lobster_trader)
-- After registration, IMMEDIATELY call zoea_register_account to share with swarm
-- Your account is automatically released when you stop or are deleted
+- Credentials are automatically tracked - no manual saving needed
 
 ## Decision Framework
 Before each action, consider:
@@ -74,9 +71,7 @@ You're part of a swarm. Use zoea_* tools to:
 - zoea_broadcast: Message all running myses
 - zoea_search_messages: Search your past messages by text
 - zoea_search_broadcasts: Search past swarm broadcasts by text
-- zoea_accounts_available: List available swarm accounts
-- zoea_claim_account: Claim an account for login
-- zoea_register_account: Share new credentials with swarm
+- zoea_claim_account: Get existing credentials from swarm pool
 - Report threats and opportunities
 - Request assistance
 - Coordinate territory
@@ -128,7 +123,8 @@ type Mysis struct {
 	turnMu sync.Mutex
 
 	// For runtime tracking
-	lastError error
+	lastError              error
+	currentAccountUsername string
 }
 
 // NewMysis creates a new mysis from stored data.
@@ -275,6 +271,7 @@ func (a *Mysis) Stop() error {
 
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateStopped)
+	a.releaseCurrentAccount()
 
 	return nil
 }
@@ -546,7 +543,48 @@ func (a *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 		}, nil
 	}
 
-	return mcpProxy.CallTool(ctx, tc.Name, tc.Arguments)
+	result, err := mcpProxy.CallTool(ctx, tc.Name, tc.Arguments)
+	if err == nil && result != nil && !result.IsError {
+		switch tc.Name {
+		case "login", "register":
+			var args struct {
+				Username string `json:"username"`
+			}
+			if err := json.Unmarshal(tc.Arguments, &args); err == nil {
+				a.setCurrentAccount(args.Username)
+			}
+		case "logout":
+			a.releaseCurrentAccount()
+		}
+	}
+
+	return result, err
+}
+
+func (a *Mysis) setCurrentAccount(username string) {
+	if username == "" {
+		return
+	}
+
+	a.mu.Lock()
+	previous := a.currentAccountUsername
+	a.currentAccountUsername = username
+	a.mu.Unlock()
+
+	if previous != "" && previous != username {
+		_ = a.store.ReleaseAccount(previous)
+	}
+}
+
+func (a *Mysis) releaseCurrentAccount() {
+	a.mu.Lock()
+	username := a.currentAccountUsername
+	a.currentAccountUsername = ""
+	a.mu.Unlock()
+
+	if username != "" {
+		_ = a.store.ReleaseAccount(username)
+	}
 }
 
 // formatToolCallsForStorage formats tool calls for storage in memory.

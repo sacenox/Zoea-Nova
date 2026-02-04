@@ -267,15 +267,18 @@ func TestAccountCRUD(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
-
-	// Create account
-	acc, err := s.CreateAccount("crab_01", "pass123", "solarian")
+	// Create account (automatically marked as in_use)
+	acc, err := s.CreateAccount("crab_01", "pass123")
 	if err != nil {
 		t.Fatalf("CreateAccount() error: %v", err)
 	}
-	if acc.InUse {
-		t.Error("new account should not be in use")
+	if !acc.InUse {
+		t.Error("new account should be in use after registration")
+	}
+
+	// Release it to make it available
+	if err := s.ReleaseAccount("crab_01"); err != nil {
+		t.Fatalf("ReleaseAccount() error: %v", err)
 	}
 
 	// List available
@@ -284,15 +287,19 @@ func TestAccountCRUD(t *testing.T) {
 		t.Errorf("expected 1 available, got %d", len(available))
 	}
 
-	// Claim
-	if err := s.ClaimAccount("crab_01", mysis.ID); err != nil {
+	// Claim (no arguments - returns first available)
+	claimed, err := s.ClaimAccount()
+	if err != nil {
 		t.Fatalf("ClaimAccount() error: %v", err)
+	}
+	if claimed.Username != "crab_01" {
+		t.Errorf("expected crab_01, got %s", claimed.Username)
 	}
 
 	// Verify claimed
 	fetched, _ := s.GetAccount("crab_01")
-	if !fetched.InUse || fetched.ClaimedBy != mysis.ID {
-		t.Error("account should be claimed by mysis")
+	if !fetched.InUse {
+		t.Error("account should be in use after claim")
 	}
 
 	// List available (should be empty)
@@ -313,25 +320,33 @@ func TestAccountCRUD(t *testing.T) {
 	}
 }
 
-func TestReleaseAccountsByMysis(t *testing.T) {
+func TestReleaseAllAccounts(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
+	// Create and release two accounts to make them available
+	s.CreateAccount("acc1", "pass1")
+	s.CreateAccount("acc2", "pass2")
+	s.ReleaseAccount("acc1")
+	s.ReleaseAccount("acc2")
 
-	s.CreateAccount("acc1", "pass1", "solarian")
-	s.CreateAccount("acc2", "pass2", "solarian")
+	// Claim both
+	s.ClaimAccount()
+	s.ClaimAccount()
 
-	s.ClaimAccount("acc1", mysis.ID)
-	s.ClaimAccount("acc2", mysis.ID)
+	// Verify both in use
+	available, _ := s.ListAvailableAccounts()
+	if len(available) != 0 {
+		t.Errorf("expected 0 available, got %d", len(available))
+	}
 
 	// Release all
-	if err := s.ReleaseAccountsByMysis(mysis.ID); err != nil {
-		t.Fatalf("ReleaseAccountsByMysis() error: %v", err)
+	if err := s.ReleaseAllAccounts(); err != nil {
+		t.Fatalf("ReleaseAllAccounts() error: %v", err)
 	}
 
 	// Verify both released
-	available, _ := s.ListAvailableAccounts()
+	available, _ = s.ListAvailableAccounts()
 	if len(available) != 2 {
 		t.Errorf("expected 2 available, got %d", len(available))
 	}

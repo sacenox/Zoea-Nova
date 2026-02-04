@@ -6,60 +6,46 @@ import (
 	"time"
 )
 
-// Account represents a stored game account credential.
 type Account struct {
-	ID         int64
 	Username   string
 	Password   string
-	Empire     string
 	InUse      bool
-	ClaimedBy  string // mysis_id or empty
 	LastUsedAt time.Time
 	CreatedAt  time.Time
-	UpdatedAt  time.Time
 }
 
-// CreateAccount stores a new account credential.
-func (s *Store) CreateAccount(username, password, empire string) (*Account, error) {
+func (s *Store) CreateAccount(username, password string) (*Account, error) {
 	now := time.Now().UTC()
 
-	result, err := s.db.Exec(`
-		INSERT INTO accounts (username, password, empire, in_use, created_at, updated_at)
-		VALUES (?, ?, ?, 0, ?, ?)
-	`, username, password, empire, now, now)
+	_, err := s.db.Exec(`
+		INSERT INTO accounts (username, password, in_use, created_at, last_used_at)
+		VALUES (?, ?, 1, ?, ?)
+	`, username, password, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert account: %w", err)
 	}
 
-	id, _ := result.LastInsertId()
 	return &Account{
-		ID:        id,
-		Username:  username,
-		Password:  password,
-		Empire:    empire,
-		InUse:     false,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Username:   username,
+		Password:   password,
+		InUse:      true,
+		CreatedAt:  now,
+		LastUsedAt: now,
 	}, nil
 }
 
-// GetAccount retrieves an account by username.
 func (s *Store) GetAccount(username string) (*Account, error) {
 	var acc Account
 	var lastUsedAt sql.NullTime
-	var claimedBy sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, username, password, empire, in_use, claimed_by, last_used_at, created_at, updated_at
+		SELECT username, password, in_use, last_used_at, created_at
 		FROM accounts WHERE username = ?
-	`, username).Scan(&acc.ID, &acc.Username, &acc.Password, &acc.Empire, &acc.InUse, &claimedBy, &lastUsedAt, &acc.CreatedAt, &acc.UpdatedAt)
+	`, username).Scan(&acc.Username, &acc.Password, &acc.InUse, &lastUsedAt, &acc.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	if claimedBy.Valid {
-		acc.ClaimedBy = claimedBy.String
-	}
 	if lastUsedAt.Valid {
 		acc.LastUsedAt = lastUsedAt.Time
 	}
@@ -67,10 +53,9 @@ func (s *Store) GetAccount(username string) (*Account, error) {
 	return &acc, nil
 }
 
-// ListAvailableAccounts returns all unclaimed accounts.
 func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	rows, err := s.db.Query(`
-		SELECT id, username, password, empire, in_use, claimed_by, last_used_at, created_at, updated_at
+		SELECT username, password, in_use, last_used_at, created_at
 		FROM accounts
 		WHERE in_use = 0
 		ORDER BY created_at ASC
@@ -84,15 +69,11 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	for rows.Next() {
 		var acc Account
 		var lastUsedAt sql.NullTime
-		var claimedBy sql.NullString
 
-		if err := rows.Scan(&acc.ID, &acc.Username, &acc.Password, &acc.Empire, &acc.InUse, &claimedBy, &lastUsedAt, &acc.CreatedAt, &acc.UpdatedAt); err != nil {
+		if err := rows.Scan(&acc.Username, &acc.Password, &acc.InUse, &lastUsedAt, &acc.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 
-		if claimedBy.Valid {
-			acc.ClaimedBy = claimedBy.String
-		}
 		if lastUsedAt.Valid {
 			acc.LastUsedAt = lastUsedAt.Time
 		}
@@ -103,91 +84,85 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	return accounts, rows.Err()
 }
 
-// ClaimAccount marks an account as in use by a mysis.
-// Returns error if already claimed or doesn't exist.
-func (s *Store) ClaimAccount(username, mysisID string) error {
-	now := time.Now().UTC()
+func (s *Store) ClaimAccount() (*Account, error) {
+	for attempts := 0; attempts < 5; attempts++ {
+		var username, password string
+		var createdAt time.Time
+		err := s.db.QueryRow(`
+			SELECT username, password, created_at
+			FROM accounts
+			WHERE in_use = 0
+			ORDER BY created_at ASC
+			LIMIT 1
+		`).Scan(&username, &password, &createdAt)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no accounts available")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("query available account: %w", err)
+		}
 
-	// Check if account exists first
-	var exists bool
-	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM accounts WHERE username = ?)`, username).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("check account exists: %w", err)
-	}
-	if !exists {
-		return fmt.Errorf("account %s does not exist", username)
+		now := time.Now().UTC()
+		result, err := s.db.Exec(`
+			UPDATE accounts
+			SET in_use = 1, last_used_at = ?
+			WHERE username = ? AND in_use = 0
+		`, now, username)
+		if err != nil {
+			return nil, fmt.Errorf("claim account: %w", err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return nil, fmt.Errorf("claim account rows: %w", err)
+		}
+		if rows == 0 {
+			continue
+		}
+
+		return &Account{
+			Username:   username,
+			Password:   password,
+			InUse:      true,
+			LastUsedAt: now,
+			CreatedAt:  createdAt,
+		}, nil
 	}
 
-	result, err := s.db.Exec(`
-		UPDATE accounts
-		SET in_use = 1, claimed_by = ?, updated_at = ?
-		WHERE username = ? AND in_use = 0
-	`, mysisID, now, username)
-	if err != nil {
-		return fmt.Errorf("claim account: %w", err)
-	}
-
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("account %s is already claimed", username)
-	}
-
-	return nil
+	return nil, fmt.Errorf("no accounts available")
 }
 
-// ReleaseAccount marks an account as available.
-func (s *Store) ReleaseAccount(username string) error {
-	now := time.Now().UTC()
-
-	result, err := s.db.Exec(`
-		UPDATE accounts
-		SET in_use = 0, claimed_by = NULL, updated_at = ?
-		WHERE username = ?
-	`, now, username)
-	if err != nil {
-		return fmt.Errorf("release account: %w", err)
-	}
-
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
-}
-
-// ReleaseAccountsByMysis releases all accounts claimed by a mysis.
-func (s *Store) ReleaseAccountsByMysis(mysisID string) error {
+func (s *Store) MarkAccountInUse(username string) error {
 	now := time.Now().UTC()
 
 	_, err := s.db.Exec(`
 		UPDATE accounts
-		SET in_use = 0, claimed_by = NULL, updated_at = ?
-		WHERE claimed_by = ?
-	`, now, mysisID)
+		SET in_use = 1, last_used_at = ?
+		WHERE username = ?
+	`, now, username)
 	if err != nil {
-		return fmt.Errorf("release accounts by mysis: %w", err)
+		return fmt.Errorf("mark account in use: %w", err)
 	}
 
 	return nil
 }
 
-// UpdateAccountLastUsed updates the last_used_at timestamp.
-func (s *Store) UpdateAccountLastUsed(username string) error {
-	now := time.Now().UTC()
-
-	result, err := s.db.Exec(`
+func (s *Store) ReleaseAccount(username string) error {
+	_, err := s.db.Exec(`
 		UPDATE accounts
-		SET last_used_at = ?, updated_at = ?
+		SET in_use = 0
 		WHERE username = ?
-	`, now, now, username)
+	`, username)
 	if err != nil {
-		return fmt.Errorf("update account last used: %w", err)
+		return fmt.Errorf("release account: %w", err)
 	}
 
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
+	return nil
+}
+
+func (s *Store) ReleaseAllAccounts() error {
+	_, err := s.db.Exec(`UPDATE accounts SET in_use = 0`)
+	if err != nil {
+		return fmt.Errorf("release all accounts: %w", err)
 	}
 
 	return nil

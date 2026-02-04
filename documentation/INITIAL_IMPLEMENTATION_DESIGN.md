@@ -83,7 +83,7 @@ upstream = "https://game.spacemolt.com/mcp"
 - **Migrations:** Schema managed via embedded SQL migrations (e.g., `golang-migrate` or manual versioning). Never support backwards, never write data migrations. If we change the schema we create a new db fresh.
 - **Backup:** Consider periodic WAL checkpoints; SQLite handles crash recovery.
 
-### Database Schema (v6)
+### Database Schema (v7)
 
 ```sql
 -- Myses table
@@ -112,20 +112,15 @@ CREATE TABLE memories (
 
 -- Swarm account credentials
 CREATE TABLE accounts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
+    username TEXT PRIMARY KEY,
     password TEXT NOT NULL,
-    empire TEXT NOT NULL DEFAULT 'solarian',
     in_use BOOLEAN NOT NULL DEFAULT 0,
-    claimed_by TEXT,
     last_used_at DATETIME,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (claimed_by) REFERENCES myses(id) ON DELETE SET NULL
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-**Schema v5 → v6 Migration:**
+**Schema v6 → v7 Migration:**
 Requires fresh database. Delete existing:
 ```bash
 rm ~/.zoea-nova/zoea.db*
