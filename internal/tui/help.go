@@ -32,7 +32,7 @@ var helpItems = []helpItem{
 // RenderHelp renders the help overlay.
 func RenderHelp(width, height int) string {
 	var lines []string
-	lines = append(lines, titleStyle.Render("⌨ Keyboard Shortcuts"))
+	lines = append(lines, titleStyle.Render("◆═══ ⬡ COMMAND REFERENCE ⬡ ═══◆"))
 	lines = append(lines, "")
 
 	maxKeyLen := 0

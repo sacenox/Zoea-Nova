@@ -175,6 +175,17 @@ func (m InputModel) View() string {
 	return inputStyle.Render(m.textInput.View())
 }
 
+// ViewAlways renders the input bar, showing placeholder when not active.
+func (m InputModel) ViewAlways(width int) string {
+	if m.mode != InputModeNone {
+		// Active - show the actual input
+		return inputStyle.Width(width - 2).Render(m.textInput.View())
+	}
+	// Inactive - show placeholder prompt
+	placeholder := dimmedStyle.Render("Press 'm' to message, 'b' to broadcast...")
+	return inputStyle.Width(width - 2).Render(placeholder)
+}
+
 // Reset clears the input.
 func (m *InputModel) Reset() {
 	m.textInput.Reset()

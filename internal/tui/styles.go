@@ -1,72 +1,92 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Colors - Retro 80s/90s CRT aesthetic
+// Colors - Retro-futuristic aesthetic based on Zoea Nova brand
+// Brand colors from logo: #9D00FF (electric purple), #00FFCC (bright teal)
 var (
-	// Primary colors
-	colorPrimary   = lipgloss.Color("#00FF00") // Classic green terminal
-	colorSecondary = lipgloss.Color("#00AAAA") // Cyan
-	colorAccent    = lipgloss.Color("#FFAA00") // Amber/Orange
-	colorWarning   = lipgloss.Color("#FF5500") // Warning orange
-	colorError     = lipgloss.Color("#FF0000") // Error red
-	colorMuted     = lipgloss.Color("#666666") // Muted gray
+	// Brand colors
+	colorBrand    = lipgloss.Color("#9D00FF") // Electric purple (from logo)
+	colorTeal     = lipgloss.Color("#00FFCC") // Bright teal (from logo)
+	colorBrandDim = lipgloss.Color("#6B00B3") // Dimmed purple for subtle accents
+	colorTealDim  = lipgloss.Color("#00AA99") // Dimmed teal
 
-	// Background
-	colorBg     = lipgloss.Color("#0A0A0A") // Near black
-	colorBgAlt  = lipgloss.Color("#1A1A1A") // Slightly lighter
-	colorBorder = lipgloss.Color("#333333") // Border gray
+	// Role colors (per design doc: user=green, assistant=magenta, system=cyan, tool=yellow)
+	colorUser      = lipgloss.Color("#00FF66") // Bright green for user messages
+	colorAssistant = lipgloss.Color("#FF00CC") // Magenta/pink for assistant (complements brand purple)
+	colorSystem    = lipgloss.Color("#00CCFF") // Cyan for system messages
+	colorTool      = lipgloss.Color("#FFCC00") // Yellow/gold for tool calls
+
+	// Semantic colors
+	colorWarning = lipgloss.Color("#FF6600") // Warning orange
+	colorError   = lipgloss.Color("#FF3366") // Error red-pink
+	colorSuccess = lipgloss.Color("#00FF66") // Success green
+	colorMuted   = lipgloss.Color("#5555AA") // Muted purple-gray
+
+	// Backgrounds - deep space with purple undertones
+	colorBg       = lipgloss.Color("#08080F") // Deep space black
+	colorBgAlt    = lipgloss.Color("#101018") // Slightly lighter
+	colorBgPanel  = lipgloss.Color("#14141F") // Panel background
+	colorBorder   = lipgloss.Color("#2A2A55") // Purple-tinted border
+	colorBorderHi = lipgloss.Color("#4040AA") // Highlighted border
+
+	// Legacy aliases for compatibility
+	colorPrimary   = colorBrand
+	colorSecondary = colorTeal
+	colorAccent    = colorTeal
 )
 
-// Styles
+// Styles - Retro-futuristic command center aesthetic
 var (
 	// Base styles
 	baseStyle = lipgloss.NewStyle().
 			Background(colorBg)
 
-	// Header
+	// Header - Bold brand presence, no border (decorative lines in content)
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorPrimary).
+			Foreground(colorBrand).
 			Background(colorBgAlt).
-			Padding(0, 1).
 			MarginBottom(1)
 
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorPrimary)
+			Foreground(colorBrand)
 
-	// Status bar
+	// Status bar - teal on dark, command center vibe
 	statusBarStyle = lipgloss.NewStyle().
-			Foreground(colorSecondary).
+			Foreground(colorTeal).
 			Background(colorBgAlt).
 			Padding(0, 1)
 
-	// Agent list
+	// Agent list - double border for that 80s terminal aesthetic
 	agentListStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
+			Border(lipgloss.DoubleBorder()).
 			BorderForeground(colorBorder).
-			Padding(0, 1)
+			Background(colorBgPanel)
 
 	agentItemStyle = lipgloss.NewStyle().
-			Foreground(colorPrimary).
+			Foreground(colorTeal).
+			Background(colorBgPanel).
 			Padding(0, 1)
 
 	agentItemSelectedStyle = lipgloss.NewStyle().
 				Foreground(colorBg).
-				Background(colorPrimary).
+				Background(colorBrand).
 				Bold(true).
 				Padding(0, 1)
 
-	// Agent states
+	// Agent states - distinct colors for each state
 	stateRunningStyle = lipgloss.NewStyle().
-				Foreground(colorPrimary).
+				Foreground(colorSuccess).
 				Bold(true)
 
 	stateIdleStyle = lipgloss.NewStyle().
-			Foreground(colorSecondary)
+			Foreground(colorTeal)
 
 	stateStoppedStyle = lipgloss.NewStyle().
 				Foreground(colorMuted)
@@ -75,72 +95,82 @@ var (
 				Foreground(colorError).
 				Bold(true)
 
-	// Logs/Messages
+	// Logs/Messages - conversation styling per design doc
+	// No padding here - padding is added to content lines directly
 	logStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder).
-			Padding(0, 1)
+			Background(colorBgPanel)
 
+	// Role colors per design doc: user=green, assistant=magenta, system=cyan, tool=yellow
 	logUserStyle = lipgloss.NewStyle().
-			Foreground(colorAccent)
+			Foreground(colorUser).
+			Bold(true)
 
 	logAssistantStyle = lipgloss.NewStyle().
-				Foreground(colorPrimary)
+				Foreground(colorAssistant)
 
 	logSystemStyle = lipgloss.NewStyle().
-			Foreground(colorMuted).
+			Foreground(colorSystem).
 			Italic(true)
 
 	logToolStyle = lipgloss.NewStyle().
-			Foreground(colorSecondary).
+			Foreground(colorTool).
 			Italic(true)
 
-	// Input
+	// Input - teal border, brand prompt
 	inputStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorSecondary).
+			BorderForeground(colorTeal).
+			Background(colorBgPanel).
 			Padding(0, 1)
 
 	inputPromptStyle = lipgloss.NewStyle().
-				Foreground(colorAccent).
+				Foreground(colorBrand).
 				Bold(true)
 
-	// Help
+	// Help - double border for prominence, centered brand feel
 	helpStyle = lipgloss.NewStyle().
 			Border(lipgloss.DoubleBorder()).
-			BorderForeground(colorSecondary).
+			BorderForeground(colorBrand).
+			Background(colorBgPanel).
 			Padding(1, 2).
 			Margin(1)
 
 	helpKeyStyle = lipgloss.NewStyle().
-			Foreground(colorAccent).
+			Foreground(colorTeal).
 			Bold(true)
 
 	helpDescStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
-	// Panels
+	// Panels - consistent with agent list
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder).
+			Background(colorBgPanel).
 			Padding(0, 1)
 
 	panelTitleStyle = lipgloss.NewStyle().
-			Foreground(colorSecondary).
-			Bold(true).
-			Padding(0, 1)
+			Foreground(colorTeal).
+			Bold(true)
 
-	// Info/Stats
+	// Info/Stats - brand colors for values
 	labelStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
 	valueStyle = lipgloss.NewStyle().
-			Foreground(colorPrimary).
+			Foreground(colorBrand).
 			Bold(true)
 
 	// Dimmed/Disabled
 	dimmedStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
+
+	// Highlight style for important info
+	highlightStyle = lipgloss.NewStyle().
+			Foreground(colorTeal).
+			Bold(true)
 )
 
 // StateStyle returns the appropriate style for an agent state.
@@ -173,4 +203,64 @@ func RoleStyle(role string) lipgloss.Style {
 	default:
 		return logSystemStyle
 	}
+}
+
+// RoleColor returns the foreground color for a message role.
+func RoleColor(role string) lipgloss.Color {
+	switch role {
+	case "user":
+		return colorUser
+	case "assistant":
+		return colorAssistant
+	case "system":
+		return colorSystem
+	case "tool":
+		return colorTool
+	default:
+		return colorSystem
+	}
+}
+
+// renderSectionTitle renders a section title that spans the full width.
+func renderSectionTitle(title string, width int) string {
+	return renderSectionTitleWithSuffix(title, "", width)
+}
+
+// renderSectionTitleWithSuffix renders a section title with an optional suffix (like scroll indicator).
+func renderSectionTitleWithSuffix(title, suffix string, width int) string {
+	// Format: ◈── TITLE ──◈ [suffix] with dashes filling the remaining space
+	// Account for: 2 (◈ markers) + 2 (─ adjacent to markers) + title + 2 (spaces around title) = 4
+	titleWithSpaces := " " + title + " "
+	titleDisplayWidth := lipgloss.Width(titleWithSpaces)
+	suffixDisplayWidth := lipgloss.Width(suffix)
+	// Total fixed chars: ◈─ (2) on each side = 4
+	availableWidth := width - titleDisplayWidth - 4 - suffixDisplayWidth
+	if availableWidth < 2 {
+		availableWidth = 2
+	}
+	leftDashes := availableWidth / 2
+	rightDashes := availableWidth - leftDashes
+
+	line := "◈─" + strings.Repeat("─", leftDashes) + titleWithSpaces + strings.Repeat("─", rightDashes) + "─◈"
+	if suffix != "" {
+		line += suffix
+	}
+	return panelTitleStyle.Width(width).Render(line)
+}
+
+// truncateToWidth truncates a string to fit within maxWidth display columns.
+// Uses rune-aware iteration to avoid cutting multi-byte characters.
+func truncateToWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	currentWidth := 0
+	for i, r := range s {
+		charWidth := lipgloss.Width(string(r))
+		if currentWidth+charWidth > maxWidth {
+			return s[:i]
+		}
+		currentWidth += charWidth
+	}
+	return s
 }

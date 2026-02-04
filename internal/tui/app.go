@@ -70,13 +70,13 @@ type EventMsg struct {
 
 // New creates a new TUI model.
 func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) Model {
-	// Initialize spinner with retro dots style
+	// Initialize spinner with hexagonal theme (matching logo)
 	sp := spinner.New()
 	sp.Spinner = spinner.Spinner{
-		Frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-		FPS:    time.Second / 10, // 10 frames per second
+		Frames: []string{"⬡", "⬢", "⬡", "⬢", "◇", "◆", "◇", "◆"},
+		FPS:    time.Second / 8, // 8 frames per second
 	}
-	sp.Style = lipgloss.NewStyle().Foreground(colorSecondary)
+	sp.Style = lipgloss.NewStyle().Foreground(colorBrand)
 
 	// Initialize viewport for conversation scrolling
 	vp := viewport.New(80, 20)
@@ -235,10 +235,11 @@ func (m Model) View() string {
 	} else if m.view == ViewFocus {
 		content = RenderFocusViewWithViewport(m.agentByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll)
 	} else {
-		// Convert swarm messages for display
+		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
 		for i, msg := range m.swarmMessages {
-			swarmInfos[i] = SwarmMessageInfo{
+			// Reverse order: most recent first
+			swarmInfos[len(m.swarmMessages)-1-i] = SwarmMessageInfo{
 				Content:   msg.Content,
 				CreatedAt: msg.CreatedAt,
 			}
@@ -246,10 +247,8 @@ func (m Model) View() string {
 		content = RenderDashboard(m.agents, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
 	}
 
-	// Add input if active
-	if m.input.IsActive() {
-		content += "\n" + m.input.View()
-	}
+	// Always show message bar
+	content += "\n" + m.input.ViewAlways(m.width)
 
 	// Add error if present
 	if m.err != nil {
@@ -614,9 +613,14 @@ func (m *Model) updateViewportContent() {
 		return
 	}
 
+	// Log entries must fill the panel content area exactly.
+	// Panel is rendered with logStyle.Width(m.width - 2).Padding(0, 2)
+	// Content width = m.width - 2, minus 4 for padding (2 each side) = m.width - 6
+	panelContentWidth := m.width - 6
+
 	var lines []string
 	for _, entry := range m.logs {
-		entryLines := renderLogEntry(entry, m.viewport.Width-2)
+		entryLines := renderLogEntry(entry, panelContentWidth)
 		lines = append(lines, entryLines...)
 	}
 

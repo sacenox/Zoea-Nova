@@ -85,12 +85,12 @@ func (n NetIndicator) Init() tea.Cmd {
 
 // View renders the network indicator.
 func (n NetIndicator) View() string {
-	// Define the bar characters
+	// Define the bar characters - use block elements for CRT feel
 	const (
-		barEmpty  = "─"
+		barEmpty  = "░"
 		barFilled = "█"
-		barLeft   = "["
-		barRight  = "]"
+		barLeft   = "▐"
+		barRight  = "▌"
 	)
 
 	// Get style based on activity
@@ -100,7 +100,7 @@ func (n NetIndicator) View() string {
 	switch n.activity {
 	case NetActivityIdle:
 		style = lipgloss.NewStyle().Foreground(colorMuted)
-		label = "IDLE"
+		label = "◇ IDLE"
 		// For idle, show a static dim bar
 		bar := barLeft
 		for i := 0; i < n.width; i++ {
@@ -110,12 +110,12 @@ func (n NetIndicator) View() string {
 		return style.Render(label + " " + bar)
 
 	case NetActivityLLM:
-		style = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-		label = "LLM "
+		style = lipgloss.NewStyle().Foreground(colorAssistant).Bold(true)
+		label = "◆ LLM "
 
 	case NetActivityMCP:
-		style = lipgloss.NewStyle().Foreground(colorSecondary).Bold(true)
-		label = "MCP "
+		style = lipgloss.NewStyle().Foreground(colorTeal).Bold(true)
+		label = "◆ MCP "
 	}
 
 	// Build the bouncing bar
@@ -135,8 +135,8 @@ func (n NetIndicator) View() string {
 
 // ViewCompact renders a compact version for small screens.
 func (n NetIndicator) ViewCompact() string {
-	// Simpler animation frames for compact view
-	frames := []string{"◐", "◓", "◑", "◒"}
+	// Simpler animation frames for compact view - hexagonal theme
+	frames := []string{"⬡", "⬢", "⬡", "⬢"}
 
 	var style lipgloss.Style
 	var label string
@@ -144,14 +144,14 @@ func (n NetIndicator) ViewCompact() string {
 	switch n.activity {
 	case NetActivityIdle:
 		style = lipgloss.NewStyle().Foreground(colorMuted)
-		return style.Render("○ IDLE")
+		return style.Render("◇ IDLE")
 
 	case NetActivityLLM:
-		style = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
+		style = lipgloss.NewStyle().Foreground(colorAssistant).Bold(true)
 		label = "LLM"
 
 	case NetActivityMCP:
-		style = lipgloss.NewStyle().Foreground(colorSecondary).Bold(true)
+		style = lipgloss.NewStyle().Foreground(colorTeal).Bold(true)
 		label = "MCP"
 	}
 

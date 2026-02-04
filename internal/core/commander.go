@@ -261,6 +261,11 @@ func (c *Commander) Broadcast(content string) error {
 	}
 	c.mu.RUnlock()
 
+	// Check if any agents are running
+	if len(agents) == 0 {
+		return fmt.Errorf("no running agents to receive broadcast")
+	}
+
 	// Emit broadcast event
 	c.bus.Publish(Event{
 		Type:      EventBroadcast,

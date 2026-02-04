@@ -15,7 +15,8 @@ type LogEntry struct {
 	Content string
 }
 
-// wrapText wraps text to fit within maxWidth, preserving words.
+// wrapText wraps text to fit within maxWidth display columns, preserving words.
+// Uses lipgloss.Width() for proper Unicode character width calculation.
 func wrapText(text string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		maxWidth = 80
@@ -38,7 +39,10 @@ func wrapText(text string, maxWidth int) []string {
 
 		currentLine := words[0]
 		for _, word := range words[1:] {
-			if len(currentLine)+1+len(word) <= maxWidth {
+			// Use lipgloss.Width() for proper Unicode width calculation
+			lineWidth := lipgloss.Width(currentLine)
+			wordWidth := lipgloss.Width(word)
+			if lineWidth+1+wordWidth <= maxWidth {
 				currentLine += " " + word
 			} else {
 				lines = append(lines, currentLine)
@@ -55,9 +59,8 @@ func wrapText(text string, maxWidth int) []string {
 func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string) string {
 	var sections []string
 
-	// Header with agent name
-	headerText := fmt.Sprintf("═══ AGENT: %s ═══", agent.Name)
-	header := headerStyle.Width(width).Render(headerText)
+	// Header with agent name - spans full width
+	header := renderFocusHeader(agent.Name, width)
 	sections = append(sections, header)
 
 	// Agent info panel
@@ -72,11 +75,11 @@ func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoad
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(agent.Provider)),
 	}
 	infoContent := strings.Join(infoLines, "  ")
-	infoPanel := panelStyle.Width(width - 4).Render(infoContent)
+	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
 
-	// Logs panel
-	logTitle := panelTitleStyle.Render("── Conversation ──")
+	// Logs panel - use full-width section title
+	logTitle := renderSectionTitle("CONVERSATION LOG", width)
 	sections = append(sections, logTitle)
 
 	// Calculate available height for logs
@@ -87,12 +90,15 @@ func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoad
 	}
 
 	var logLines []string
+	// Panel is rendered with logStyle.Width(width - 2).Padding(0, 2)
+	// Content width = width - 2, minus 4 for padding (2 each side) = width - 6
+	panelContentWidth := width - 6
 	if len(logs) == 0 {
 		logLines = append(logLines, dimmedStyle.Render("No conversation history."))
 	} else {
-		// Render all log entries
+		// Render all log entries to fill panel content area
 		for _, entry := range logs {
-			entryLines := renderLogEntry(entry, width-6)
+			entryLines := renderLogEntry(entry, panelContentWidth)
 			logLines = append(logLines, entryLines...)
 		}
 
@@ -103,11 +109,11 @@ func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoad
 	}
 
 	logContent := strings.Join(logLines, "\n")
-	logPanel := logStyle.Width(width - 4).Height(logHeight).Render(logContent)
+	logPanel := logStyle.Width(width-2).Height(logHeight).Padding(0, 2).Render(logContent)
 	sections = append(sections, logPanel)
 
 	// Footer
-	hint := dimmedStyle.Render("Esc: back | m: message | r: relaunch | s: stop | c: configure")
+	hint := dimmedStyle.Render("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ r ] RELAUNCH  ·  [ s ] STOP")
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -117,9 +123,8 @@ func RenderFocusView(agent AgentInfo, logs []LogEntry, width, height int, isLoad
 func RenderFocusViewWithViewport(agent AgentInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool) string {
 	var sections []string
 
-	// Header with agent name
-	headerText := fmt.Sprintf("═══ AGENT: %s ═══", agent.Name)
-	header := headerStyle.Width(width).Render(headerText)
+	// Header with agent name - spans full width
+	header := renderFocusHeader(agent.Name, width)
 	sections = append(sections, header)
 
 	// Agent info panel
@@ -134,47 +139,64 @@ func RenderFocusViewWithViewport(agent AgentInfo, vp viewport.Model, width int, 
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(agent.Provider)),
 	}
 	infoContent := strings.Join(infoLines, "  ")
-	infoPanel := panelStyle.Width(width - 4).Render(infoContent)
+	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
 
-	// Conversation title with scroll indicator
+	// Conversation title with scroll indicator - spans full width
 	scrollInfo := ""
 	if !autoScroll {
-		scrollInfo = dimmedStyle.Render(" (scrolled)")
+		scrollInfo = "  ↑ SCROLLED"
 	}
-	logTitle := panelTitleStyle.Render("── Conversation ──") + scrollInfo
+	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", scrollInfo, width)
 	sections = append(sections, logTitle)
 
 	// Viewport content (scrollable)
-	vpView := logStyle.Width(width - 4).Render(vp.View())
+	// Add horizontal padding (2 spaces each side) for content inside panel border
+	vpView := logStyle.Width(width-2).Padding(0, 2).Render(vp.View())
 	sections = append(sections, vpView)
 
 	// Footer with scroll hints
-	hint := dimmedStyle.Render("Esc: back | m: message | ↑↓/PgUp/PgDn: scroll | G/End: bottom")
+	hint := dimmedStyle.Render("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM")
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
+// logBgColor is the background color for log entries (same as colorBgPanel)
+var logBgColor = colorBgPanel
+
 func renderLogEntry(entry LogEntry, maxWidth int) []string {
-	roleStyle := RoleStyle(entry.Role)
+	// Get the role's foreground color and create a style with background
+	roleColor := RoleColor(entry.Role)
+	prefixStyle := lipgloss.NewStyle().
+		Foreground(roleColor).
+		Background(logBgColor)
+
+	// Content style - just background, no foreground override
+	contentStyle := lipgloss.NewStyle().
+		Background(logBgColor)
 
 	var prefix string
 	switch entry.Role {
 	case "user":
-		prefix = "YOU:  "
+		prefix = "YOU: "
 	case "assistant":
-		prefix = "AI:   "
+		prefix = "AI:  "
 	case "system":
-		prefix = "SYS:  "
+		prefix = "SYS: "
 	case "tool":
-		prefix = "TOOL: "
+		prefix = "TOOL:"
 	default:
-		prefix = "???:  "
+		prefix = "???:"
 	}
 
-	// Calculate content width (accounting for prefix on first line, indent on rest)
-	contentWidth := maxWidth - len(prefix) - 2
+	// Inside padding: 1 space on left and right of all content
+	const padLeft = 1
+	const padRight = 1
+
+	// Calculate content width (accounting for prefix, padding, and gap after prefix)
+	prefixWidth := len(prefix) + 1 // +1 for space after prefix
+	contentWidth := maxWidth - prefixWidth - padLeft - padRight
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
@@ -183,13 +205,33 @@ func renderLogEntry(entry LogEntry, maxWidth int) []string {
 	wrappedLines := wrapText(entry.Content, contentWidth)
 
 	var result []string
-	indent := strings.Repeat(" ", len(prefix))
+	indent := strings.Repeat(" ", prefixWidth)
+
+	// Add top padding (empty line with background)
+	emptyLine := contentStyle.Width(maxWidth).Render("")
+	result = append(result, emptyLine)
 
 	for i, line := range wrappedLines {
+		// Pad the line content to fill remaining width
+		lineLen := lipgloss.Width(line)
+		remainingWidth := contentWidth - lineLen
+		if remainingWidth < 0 {
+			remainingWidth = 0
+		}
+		paddedLine := line + strings.Repeat(" ", remainingWidth+padRight)
+
 		if i == 0 {
-			result = append(result, roleStyle.Render(prefix)+line)
+			// First line: left pad + styled prefix + space + content with background
+			leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+			styledPrefix := prefixStyle.Render(prefix)
+			styledContent := contentStyle.Render(" " + paddedLine)
+			result = append(result, leftPad+styledPrefix+styledContent)
 		} else {
-			result = append(result, roleStyle.Render(indent)+line)
+			// Continuation lines: left pad + indent + content with background
+			leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+			styledIndent := contentStyle.Render(indent)
+			styledContent := contentStyle.Render(paddedLine)
+			result = append(result, leftPad+styledIndent+styledContent)
 		}
 	}
 
@@ -202,4 +244,22 @@ func LogEntryFromMemory(m *store.Memory) LogEntry {
 		Role:    string(m.Role),
 		Content: m.Content,
 	}
+}
+
+// renderFocusHeader renders the focus view header spanning full width.
+func renderFocusHeader(agentName string, width int) string {
+	// Format: ◆─── ⬡ AGENT: name ⬡ ───◆ with dashes filling the remaining space
+	// Use lipgloss.Width() for proper Unicode display width calculation
+	titleText := " ⬡ AGENT: " + agentName + " ⬡ "
+	titleDisplayWidth := lipgloss.Width(titleText)
+	// Total fixed chars: ◆ (1) on each side = 2
+	availableWidth := width - titleDisplayWidth - 2
+	if availableWidth < 4 {
+		availableWidth = 4
+	}
+	leftDashes := availableWidth / 2
+	rightDashes := availableWidth - leftDashes
+
+	line := "◆" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "◆"
+	return headerStyle.Width(width).Render(line)
 }

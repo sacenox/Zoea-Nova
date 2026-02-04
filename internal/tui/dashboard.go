@@ -29,8 +29,29 @@ type SwarmMessageInfo struct {
 func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string) string {
 	var sections []string
 
-	// Header
-	header := headerStyle.Width(width).Render("╔═══ ZOEA NOVA COMMAND CENTER ═══╗")
+	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
+	// Build width-spanning lines (exactly `width` characters)
+	if width < 20 {
+		width = 20
+	}
+	topLine := "◆" + strings.Repeat("═", width-2) + "◆"
+	titleText := " ⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
+	// Center the title and pad to full width - use lipgloss.Width() for Unicode
+	titleDisplayWidth := lipgloss.Width(titleText)
+	titlePadding := (width - titleDisplayWidth) / 2
+	if titlePadding < 0 {
+		titlePadding = 0
+	}
+	titleLine := strings.Repeat(" ", titlePadding) + titleText
+	// Pad right side to fill width
+	titleLineWidth := lipgloss.Width(titleLine)
+	if titleLineWidth < width {
+		titleLine += strings.Repeat(" ", width-titleLineWidth)
+	}
+	bottomLine := "◆" + strings.Repeat("═", width-2) + "◆"
+
+	headerText := topLine + "\n" + titleLine + "\n" + bottomLine
+	header := headerStyle.Width(width).Render(headerText)
 	sections = append(sections, header)
 
 	// Stats bar
@@ -68,7 +89,7 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 
 	// Swarm message history
 	if len(swarmMessages) > 0 {
-		swarmHeader := dimmedStyle.Render("─── Swarm Messages ───")
+		swarmHeader := renderSectionTitle("SWARM BROADCAST", width)
 		sections = append(sections, swarmHeader)
 
 		var msgLines []string
@@ -79,8 +100,8 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 			if maxLen < 20 {
 				maxLen = 20
 			}
-			if len(content) > maxLen {
-				content = content[:maxLen-3] + "..."
+			if lipgloss.Width(content) > maxLen {
+				content = truncateToWidth(content, maxLen-3) + "..."
 			}
 			line := fmt.Sprintf("%s %s", dimmedStyle.Render(timeStr), content)
 			msgLines = append(msgLines, line)
@@ -90,28 +111,47 @@ func RenderDashboard(agents []AgentInfo, swarmMessages []SwarmMessageInfo, selec
 	}
 
 	// Agent list header
-	agentHeader := dimmedStyle.Render("─── Agents ───")
+	agentHeader := renderSectionTitle("AGENT SWARM", width)
 	sections = append(sections, agentHeader)
 
-	// Agent list
+	// Calculate height used by other elements to fill remaining space
+	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + messages, Agent header: 1 line, Footer: 1 line
+	usedHeight := 6 // header (3 + margin) + stats (1) + agent header (1) + footer (1)
+	if len(swarmMessages) > 0 {
+		usedHeight += 1 + len(swarmMessages) // swarm header + messages
+	}
+	// Account for panel borders (top + bottom = 2 lines)
+	usedHeight += 2
+
+	agentListHeight := height - usedHeight
+	if agentListHeight < 3 {
+		agentListHeight = 3
+	}
+
+	// Agent list - DoubleBorder adds 2 chars each side, so content width is width-4
+	contentWidth := width - 4
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+
 	if len(agents) == 0 {
 		emptyMsg := dimmedStyle.Render("No agents. Press 'n' to create one.")
-		agentList := agentListStyle.Width(width - 4).Render(emptyMsg)
+		agentList := agentListStyle.Width(width - 2).Height(agentListHeight).Render(emptyMsg)
 		sections = append(sections, agentList)
 	} else {
 		var agentLines []string
 		for i, a := range agents {
 			isLoading := loadingSet[a.ID]
-			line := renderAgentLine(a, i == selectedIdx, isLoading, spinnerView, width-8)
+			line := renderAgentLine(a, i == selectedIdx, isLoading, spinnerView, contentWidth)
 			agentLines = append(agentLines, line)
 		}
 		content := strings.Join(agentLines, "\n")
-		agentList := agentListStyle.Width(width - 4).Render(content)
+		agentList := agentListStyle.Width(width - 2).Height(agentListHeight).Render(content)
 		sections = append(sections, agentList)
 	}
 
 	// Footer with hint
-	hint := dimmedStyle.Render("Press ? for help")
+	hint := dimmedStyle.Render("[ ? ] HELP  ·  [ n ] NEW AGENT  ·  [ b ] BROADCAST")
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -138,10 +178,10 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 		}
 	}
 
-	// Build line
+	// Build line - use display width for truncation
 	name := a.Name
-	if len(name) > 16 {
-		name = name[:13] + "..."
+	if lipgloss.Width(name) > 16 {
+		name = truncateToWidth(name, 13) + "..."
 	}
 
 	stateText := StateStyle(a.State).Render(fmt.Sprintf("%-8s", a.State))
@@ -152,28 +192,31 @@ func renderAgentLine(a AgentInfo, selected, isLoading bool, spinnerView string, 
 
 	// Calculate remaining width for last message
 	// Account for the prefix "│ " for the message
-	usedWidth := 2 + 16 + 1 + 8 + 1 + len(a.Provider) + 2 + 4 // rough estimate
+	// Use lipgloss.Width() for proper Unicode width calculation
+	providerWidth := lipgloss.Width(a.Provider)
+	usedWidth := 2 + 16 + 1 + 8 + 1 + providerWidth + 2 + 4 // rough estimate
 	msgWidth := width - usedWidth - 8
 	if msgWidth < 10 {
 		msgWidth = 10
 	}
 
-	// Format last message (truncated)
+	// Format last message (truncated) - use display width
 	var msgPart string
 	if a.LastMessage != "" {
 		msg := strings.ReplaceAll(a.LastMessage, "\n", " ")
-		if len(msg) > msgWidth {
-			msg = msg[:msgWidth-3] + "..."
+		if lipgloss.Width(msg) > msgWidth {
+			msg = truncateToWidth(msg, msgWidth-3) + "..."
 		}
 		msgPart = dimmedStyle.Render(" │ " + msg)
 	}
 
 	line := firstPart + msgPart
 
+	// Apply style with full width to ensure background fills the line
 	if selected {
-		return agentItemSelectedStyle.Render(line)
+		return agentItemSelectedStyle.Width(width).Render(line)
 	}
-	return agentItemStyle.Render(line)
+	return agentItemStyle.Width(width).Render(line)
 }
 
 // AgentInfoFromCore converts a core.Agent to AgentInfo.
