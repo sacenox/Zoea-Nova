@@ -1,0 +1,15 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- The Swarm-Hex: Fleet formation -->
+  <defs>
+    <polygon id="hex" points="30,0 60,17 60,52 30,69 0,52 0,17" />
+  </defs>
+  <g fill="#9D00FF">
+    <use href="#hex" x="170" y="50" />
+    <use href="#hex" x="120" y="130" />
+    <use href="#hex" x="220" y="130" />
+    <use href="#hex" x="70" y="210" />
+    <use href="#hex" x="170" y="210" />
+    <use href="#hex" x="270" y="210" />
+    <use href="#hex" x="170" y="290" fill="#00FFCC" />
+  </g>
+</svg>

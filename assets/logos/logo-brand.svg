@@ -1,0 +1,20 @@
+<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- The Swarm-Hex: Fleet formation -->
+  <defs>
+    <polygon id="hex" points="30,0 60,17 60,52 30,69 0,52 0,17" />
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#9D00FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00FFCC;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <g fill="#9D00FF">
+    <use href="#hex" x="170" y="50" />
+    <use href="#hex" x="120" y="130" />
+    <use href="#hex" x="220" y="130" />
+    <use href="#hex" x="70" y="210" />
+    <use href="#hex" x="170" y="210" />
+    <use href="#hex" x="270" y="210" />
+    <use href="#hex" x="170" y="290" fill="#00FFCC" />
+  </g>
+  <text x="200" y="440" font-family="monospace" font-weight="bold" font-size="48" fill="url(#brandGrad)" text-anchor="middle">ZOEA-NOVA</text>
+</svg>
