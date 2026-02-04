@@ -130,13 +130,13 @@ func (c *Commander) DeleteAgent(id string, purgeMemories bool) error {
 		return fmt.Errorf("agent not found: %s", id)
 	}
 
-	// Stop if running
+	delete(c.agents, id)
+	c.mu.Unlock()
+
+	// Stop if running (outside of commander lock to avoid deadlock)
 	if agent.State() == AgentStateRunning {
 		agent.Stop()
 	}
-
-	delete(c.agents, id)
-	c.mu.Unlock()
 
 	// Delete from store (memories cascade)
 	if err := c.store.DeleteAgent(id); err != nil {
@@ -241,7 +241,7 @@ func (c *Commander) ConfigureAgent(id, providerName string) error {
 	return nil
 }
 
-// SendMessage sends a message to a specific agent.
+// SendMessage sends a message to a specific agent (synchronous).
 func (c *Commander) SendMessage(id, content string) error {
 	agent, err := c.GetAgent(id)
 	if err != nil {
@@ -250,7 +250,25 @@ func (c *Commander) SendMessage(id, content string) error {
 	return agent.SendMessage(content, store.MemorySourceDirect)
 }
 
-// Broadcast sends a message to all running agents.
+// SendMessageAsync sends a message to a specific agent without waiting for processing.
+// Returns immediately after validating the agent exists and is running.
+func (c *Commander) SendMessageAsync(id, content string) error {
+	agent, err := c.GetAgent(id)
+	if err != nil {
+		return err
+	}
+	if agent.State() != AgentStateRunning {
+		return fmt.Errorf("agent not running")
+	}
+	go func() {
+		if err := agent.SendMessage(content, store.MemorySourceDirect); err != nil {
+			// Error is published to bus by agent.SendMessage
+		}
+	}()
+	return nil
+}
+
+// Broadcast sends a message to all running agents (synchronous).
 func (c *Commander) Broadcast(content string) error {
 	c.mu.RLock()
 	agents := make([]*Agent, 0)
@@ -283,6 +301,43 @@ func (c *Commander) Broadcast(content string) error {
 	if len(errs) > 0 {
 		return fmt.Errorf("broadcast failed for %d agent(s): %w", len(errs), errors.Join(errs...))
 	}
+	return nil
+}
+
+// BroadcastAsync sends a message to all running agents without waiting for processing.
+// Returns immediately after validating at least one agent is running.
+func (c *Commander) BroadcastAsync(content string) error {
+	c.mu.RLock()
+	agents := make([]*Agent, 0)
+	for _, a := range c.agents {
+		if a.State() == AgentStateRunning {
+			agents = append(agents, a)
+		}
+	}
+	c.mu.RUnlock()
+
+	// Check if any agents are running
+	if len(agents) == 0 {
+		return fmt.Errorf("no running agents to receive broadcast")
+	}
+
+	// Emit broadcast event
+	c.bus.Publish(Event{
+		Type:      EventBroadcast,
+		Data:      MessageData{Role: "user", Content: content},
+		Timestamp: time.Now(),
+	})
+
+	// Send to each agent asynchronously
+	for _, a := range agents {
+		agent := a // capture for goroutine
+		go func() {
+			if err := agent.SendMessage(content, store.MemorySourceBroadcast); err != nil {
+				// Error is published to bus by agent.SendMessage
+			}
+		}()
+	}
+
 	return nil
 }
 

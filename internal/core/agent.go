@@ -14,26 +14,67 @@ import (
 )
 
 // SystemPrompt is the initial prompt sent to every agent when they first start.
-const SystemPrompt = `You are an AI agent playing SpaceMolt, an online multiplayer game.
+const SystemPrompt = `You are an autonomous AI pilot in SpaceMolt. Think for yourself. Adapt. Survive.
 
-You have function calling capabilities. Use the tools provided to interact with the game.
+## Bootstrap Sequence
+1. get_status → Am I logged in?
+2. If no session: register (pick a name, empire="solarian") → SAVE THE PASSWORD
+3. If returning: login with saved credentials
+4. Assess: get_system, get_poi, get_nearby, get_cargo
 
-When you start, explore the available tools to understand what actions you can take. Register or login, then play the game - interact with other players and explore.
+## Decision Framework
+Before each action, consider:
+- **Safety:** What's the police_level? Who's nearby? Am I in danger?
+- **Resources:** What's in my cargo? How much fuel? Hull status?
+- **Opportunity:** Can I mine here? Trade? Explore?
+- **Goals:** What am I trying to achieve right now?
 
-Play indefinitely and provide updates to the user about your progress. If you encounter errors, try different approaches.
+## Action Priority
+1. **Survival** - If hull low: dock and repair. If fuel low: refuel.
+2. **Income** - Mine, trade, complete missions. Credits = options.
+3. **Progression** - Skills train passively. Mining → mining skill. Trading → trading skill.
+4. **Exploration** - Discover new systems. First discovery = 500 credits + XP.
+
+## Situational Responses
+- **Attacked?** Fight back, flee, or cloak (if you have the module)
+- **Found a wreck?** Loot it (loot_wreck) or salvage it (salvage_wreck)
+- **See a pilotless ship?** Opportunity to attack without retaliation
+- **Low on options?** Check missions (get_missions) for direction
+
+## Memory
+Use captain's log (captains_log_add) to remember:
+- Your password (CRITICAL)
+- Discovered systems and their resources
+- Player encounters (friendly or hostile)
+- Current objectives and plans
 
 ## Swarm Coordination
+You're part of a swarm. Use zoea_* tools to:
+- zoea_list_agents, zoea_swarm_status: See swarm state
+- zoea_send_message: Direct message a specific agent
+- zoea_broadcast: Message all running agents
+- zoea_search_messages: Search your past messages by text
+- zoea_search_broadcasts: Search past swarm broadcasts by text
+- Report threats and opportunities
+- Request assistance
+- Coordinate territory
 
-You are part of a swarm of AI agents. You can coordinate with other agents using these tools:
+## Thinking Style
+Keep your reasoning brief - decide and act, don't over-analyze.
 
-- zoea_list_agents: See all agents in the swarm and their status
-- zoea_get_agent: Get details about a specific agent
-- zoea_swarm_status: Get overall swarm statistics
-- zoea_send_message: Send a message to another agent
-- zoea_broadcast: Send a message to all running agents`
+No hand-holding. Figure it out. Adapt or die.`
 
 // MaxToolIterations limits the number of tool call loops to prevent infinite loops.
 const MaxToolIterations = 10
+
+// MaxContextMessages limits how many recent messages to include in LLM context.
+// This keeps context small for faster inference while agents can use search tools
+// to retrieve older memories when needed. Value chosen to cover ~2 server ticks
+// worth of activity (each tick may involve multiple tool calls).
+const MaxContextMessages = 20
+
+// ContinuePrompt is sent to agents when they finish a turn to encourage autonomy.
+const ContinuePrompt = "Turn complete. What is your next move? If you are waiting for something, describe what and why. Otherwise, continue your mission."
 
 // Agent represents a single AI agent in the swarm.
 type Agent struct {
@@ -48,7 +89,11 @@ type Agent struct {
 	mcp       *mcp.Proxy
 
 	state  AgentState
+	ctx    context.Context
 	cancel context.CancelFunc
+
+	// turnMu ensures only one agentic turn runs at a time.
+	turnMu sync.Mutex
 
 	// For runtime tracking
 	lastError error
@@ -135,6 +180,7 @@ func (a *Agent) Start() error {
 	a.lastError = nil
 
 	ctx, cancel := context.WithCancel(context.Background())
+	a.ctx = ctx
 	a.cancel = cancel
 	a.mu.Unlock()
 
@@ -159,6 +205,9 @@ func (a *Agent) Start() error {
 	// Start the processing goroutine
 	go a.run(ctx)
 
+	// Trigger initial turn to encourage autonomy
+	go a.SendMessage(ContinuePrompt, store.MemorySourceSystem)
+
 	return nil
 }
 
@@ -172,8 +221,16 @@ func (a *Agent) Stop() error {
 
 	if a.cancel != nil {
 		a.cancel()
-		a.cancel = nil
 	}
+	a.mu.Unlock()
+
+	// Wait for current turn to finish
+	a.turnMu.Lock()
+	defer a.turnMu.Unlock()
+
+	a.mu.Lock()
+	a.cancel = nil
+	a.ctx = nil
 
 	oldState := a.state
 	a.state = AgentStateStopped
@@ -194,6 +251,9 @@ func (a *Agent) Stop() error {
 // This implements the agentic loop with tool calling support.
 // The source parameter indicates whether this is a direct or broadcast message.
 func (a *Agent) SendMessage(content string, source store.MemorySource) error {
+	a.turnMu.Lock()
+	defer a.turnMu.Unlock()
+
 	a.mu.RLock()
 	state := a.state
 	p := a.provider
@@ -204,8 +264,14 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		return fmt.Errorf("agent not running")
 	}
 
-	// Store the user message
-	if _, err := a.store.AddMemory(a.id, store.MemoryRoleUser, source, content); err != nil {
+	// Determine role based on source
+	role := store.MemoryRoleUser
+	if source == store.MemorySourceSystem {
+		role = store.MemoryRoleSystem
+	}
+
+	// Store the message
+	if _, err := a.store.AddMemory(a.id, role, source, content); err != nil {
 		return fmt.Errorf("store message: %w", err)
 	}
 
@@ -214,12 +280,20 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 		Type:      EventAgentMessage,
 		AgentID:   a.id,
 		AgentName: a.name,
-		Data:      MessageData{Role: "user", Content: content},
+		Data:      MessageData{Role: string(role), Content: content},
 		Timestamp: time.Now(),
 	})
 
 	// Create context for the entire conversation turn
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	a.mu.RLock()
+	parentCtx := a.ctx
+	a.mu.RUnlock()
+
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
 	// Get available tools from MCP proxy
@@ -269,9 +343,10 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 
 	// Agentic loop: keep calling LLM until we get a final text response
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
-		// Get conversation history
-		memories, err := a.store.GetMemories(a.id)
+		// Get recent conversation history (keeps context small for faster inference)
+		memories, err := a.getContextMemories()
 		if err != nil {
+			a.setError(err)
 			return fmt.Errorf("get memories: %w", err)
 		}
 
@@ -311,6 +386,7 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 			// Store the assistant's tool call request
 			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
 			if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON); err != nil {
+				a.setError(err)
 				return fmt.Errorf("store tool call: %w", err)
 			}
 
@@ -342,6 +418,7 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
 				if _, err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent); err != nil {
+					a.setError(err)
 					return fmt.Errorf("store tool result: %w", err)
 				}
 
@@ -367,6 +444,7 @@ func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 
 		// Store the assistant response
 		if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse); err != nil {
+			a.setError(err)
 			return fmt.Errorf("store response: %w", err)
 		}
 
@@ -528,10 +606,59 @@ func (a *Agent) setError(err error) {
 	})
 }
 
+// getContextMemories returns memories for LLM context: system prompt + recent messages.
+// This keeps context small for faster inference while preserving essential information.
+func (a *Agent) getContextMemories() ([]*store.Memory, error) {
+	// Get recent memories (limited for performance)
+	recent, err := a.store.GetRecentMemories(a.id, MaxContextMessages)
+	if err != nil {
+		return nil, err
+	}
+
+	// Always try to fetch the system prompt and prepend it if not already first
+	system, err := a.store.GetSystemMemory(a.id)
+	if err != nil {
+		// No system prompt found - this is okay, just use recent memories
+		return recent, nil
+	}
+
+	// Check if system prompt is already the first message
+	if len(recent) > 0 && recent[0].ID == system.ID {
+		return recent, nil
+	}
+
+	// Prepend system prompt to recent memories
+	result := make([]*store.Memory, 0, len(recent)+1)
+	result = append(result, system)
+	result = append(result, recent...)
+	return result, nil
+}
+
 // run is the agent's main processing loop.
 func (a *Agent) run(ctx context.Context) {
-	<-ctx.Done()
-	// Context cancelled, agent stopped
+	// Ticker to nudge the agent if it's idle
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Only nudge if the agent is running and not already in a turn
+			a.mu.RLock()
+			isRunning := a.state == AgentStateRunning
+			a.mu.RUnlock()
+
+			if isRunning {
+				// Only nudge if not already in a turn
+				if a.turnMu.TryLock() {
+					a.turnMu.Unlock()
+					go a.SendMessage(ContinuePrompt, store.MemorySourceSystem)
+				}
+			}
+		}
+	}
 }
 
 func (a *Agent) emitStateChange(oldState, newState AgentState) {

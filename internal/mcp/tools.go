@@ -15,6 +15,20 @@ type AgentInfo struct {
 	LastError error
 }
 
+// SearchResult represents a search result from memory.
+type SearchResult struct {
+	Role      string
+	Source    string
+	Content   string
+	CreatedAt string
+}
+
+// BroadcastResult represents a broadcast search result.
+type BroadcastResult struct {
+	Content   string
+	CreatedAt string
+}
+
 // Orchestrator defines the interface for swarm orchestration.
 // This interface breaks the import cycle between mcp and core packages.
 type Orchestrator interface {
@@ -22,8 +36,10 @@ type Orchestrator interface {
 	GetAgent(id string) (AgentInfo, error)
 	AgentCount() int
 	MaxAgents() int
-	SendMessage(agentID, message string) error
-	Broadcast(message string) error
+	SendMessageAsync(agentID, message string) error
+	BroadcastAsync(message string) error
+	SearchMessages(agentID, query string, limit int) ([]SearchResult, error)
+	SearchBroadcasts(query string, limit int) ([]BroadcastResult, error)
 }
 
 // RegisterOrchestratorTools registers the internal orchestration tools with the proxy.
@@ -171,7 +187,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			if err := orchestrator.SendMessage(params.AgentID, params.Message); err != nil {
+			if err := orchestrator.SendMessageAsync(params.AgentID, params.Message); err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to send message: %v", err)}},
 					IsError: true,
@@ -179,7 +195,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			}
 
 			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: "message sent successfully"}},
+				Content: []ContentBlock{{Type: "text", Text: "message queued for delivery"}},
 			}, nil
 		},
 	)
@@ -208,15 +224,139 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			if err := orchestrator.Broadcast(params.Message); err != nil {
+			if err := orchestrator.BroadcastAsync(params.Message); err != nil {
 				return &ToolResult{
-					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("broadcast partially failed: %v", err)}},
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("broadcast failed: %v", err)}},
 					IsError: true,
 				}, nil
 			}
 
 			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: "broadcast sent successfully"}},
+				Content: []ContentBlock{{Type: "text", Text: "broadcast queued for delivery to all running agents"}},
+			}, nil
+		},
+	)
+
+	// Search messages tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_search_messages",
+			Description: "Search your past messages (direct messages, responses, tool results) by text content",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"agent_id": {"type": "string", "description": "The ID of the agent whose messages to search"},
+					"query": {"type": "string", "description": "Text to search for in message content"},
+					"limit": {"type": "integer", "description": "Maximum results to return (default 20, max 100)"}
+				},
+				"required": ["agent_id", "query"]
+			}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			var params struct {
+				AgentID string `json:"agent_id"`
+				Query   string `json:"query"`
+				Limit   int    `json:"limit"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if params.Query == "" {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: "query cannot be empty"}},
+					IsError: true,
+				}, nil
+			}
+
+			limit := params.Limit
+			if limit <= 0 {
+				limit = 20
+			} else if limit > 100 {
+				limit = 100
+			}
+
+			results, err := orchestrator.SearchMessages(params.AgentID, params.Query, limit)
+			if err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("search failed: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if len(results) == 0 {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("no messages found matching '%s'", params.Query)}},
+				}, nil
+			}
+
+			data, _ := json.MarshalIndent(results, "", "  ")
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: string(data)}},
+			}, nil
+		},
+	)
+
+	// Search broadcasts tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_search_broadcasts",
+			Description: "Search past swarm broadcasts by text content",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"query": {"type": "string", "description": "Text to search for in broadcast content"},
+					"limit": {"type": "integer", "description": "Maximum results to return (default 20, max 100)"}
+				},
+				"required": ["query"]
+			}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			var params struct {
+				Query string `json:"query"`
+				Limit int    `json:"limit"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if params.Query == "" {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: "query cannot be empty"}},
+					IsError: true,
+				}, nil
+			}
+
+			limit := params.Limit
+			if limit <= 0 {
+				limit = 20
+			} else if limit > 100 {
+				limit = 100
+			}
+
+			results, err := orchestrator.SearchBroadcasts(params.Query, limit)
+			if err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("search failed: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if len(results) == 0 {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("no broadcasts found matching '%s'", params.Query)}},
+				}, nil
+			}
+
+			data, _ := json.MarshalIndent(results, "", "  ")
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: string(data)}},
 			}, nil
 		},
 	)
