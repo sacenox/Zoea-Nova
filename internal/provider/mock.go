@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"sync"
+
+	"golang.org/x/time/rate"
 )
 
 // MockProvider is a test provider that returns predefined responses.
@@ -14,6 +16,8 @@ type MockProvider struct {
 	toolCalls []ToolCall
 	streamErr error
 	chatErr   error
+	limiter   *rate.Limiter
+	reasoning string
 }
 
 // NewMock creates a new mock provider.
@@ -22,6 +26,27 @@ func NewMock(name, response string) *MockProvider {
 		name:     name,
 		response: response,
 	}
+}
+
+type MockFactory struct {
+	name     string
+	response string
+	limiter  *rate.Limiter
+}
+
+func NewMockFactory(name, response string) *MockFactory {
+	return &MockFactory{name: name, response: response}
+}
+
+func NewMockFactoryWithLimiter(name, response string, limiter *rate.Limiter) *MockFactory {
+	return &MockFactory{name: name, response: response, limiter: limiter}
+}
+
+func (f *MockFactory) Name() string { return f.name }
+
+func (f *MockFactory) Create(model string, temperature float64) Provider {
+	p := NewMock(f.name, f.response)
+	return p.WithLimiter(f.limiter)
 }
 
 // WithChatError sets an error to return from Chat.
@@ -48,6 +73,20 @@ func (p *MockProvider) WithToolCalls(calls []ToolCall) *MockProvider {
 	return p
 }
 
+func (p *MockProvider) WithReasoning(reasoning string) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reasoning = reasoning
+	return p
+}
+
+func (p *MockProvider) WithLimiter(limiter *rate.Limiter) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.limiter = limiter
+	return p
+}
+
 // WithResponse sets the predefined response to return from Chat.
 func (p *MockProvider) WithResponse(response string) *MockProvider {
 	p.mu.Lock()
@@ -63,6 +102,12 @@ func (p *MockProvider) Name() string {
 
 // Chat returns the predefined response or error.
 func (p *MockProvider) Chat(ctx context.Context, messages []Message) (string, error) {
+	if p.limiter != nil {
+		if err := p.limiter.Wait(ctx); err != nil {
+			return "", err
+		}
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.chatErr != nil {
@@ -73,6 +118,12 @@ func (p *MockProvider) Chat(ctx context.Context, messages []Message) (string, er
 
 // ChatWithTools returns the predefined response or tool calls.
 func (p *MockProvider) ChatWithTools(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
+	if p.limiter != nil {
+		if err := p.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.chatErr != nil {
@@ -81,11 +132,18 @@ func (p *MockProvider) ChatWithTools(ctx context.Context, messages []Message, to
 	return &ChatResponse{
 		Content:   p.response,
 		ToolCalls: p.toolCalls,
+		Reasoning: p.reasoning,
 	}, nil
 }
 
 // Stream returns the predefined response as a single chunk.
 func (p *MockProvider) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
+	if p.limiter != nil {
+		if err := p.limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.streamErr != nil {

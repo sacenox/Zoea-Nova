@@ -60,7 +60,7 @@ func (c *Commander) LoadMyses() error {
 	defer c.mu.Unlock()
 
 	for _, sm := range stored {
-		p, err := c.registry.Get(sm.Provider)
+		p, err := c.registry.Create(sm.Provider, sm.Model, sm.Temperature)
 		if err != nil {
 			// Provider not available, skip mysis
 			continue
@@ -85,20 +85,20 @@ func (c *Commander) CreateMysis(name, providerName string) (*Mysis, error) {
 		return nil, fmt.Errorf("max myses (%d) reached", c.maxMyses)
 	}
 
-	// Get provider
-	p, err := c.registry.Get(providerName)
-	if err != nil {
-		return nil, fmt.Errorf("get provider: %w", err)
-	}
-
 	// Get provider config for model
 	provCfg, ok := c.config.Providers[providerName]
 	if !ok {
 		return nil, fmt.Errorf("provider config not found: %s", providerName)
 	}
 
+	// Create provider instance for this mysis
+	p, err := c.registry.Create(providerName, provCfg.Model, provCfg.Temperature)
+	if err != nil {
+		return nil, fmt.Errorf("create provider: %w", err)
+	}
+
 	// Create in store
-	stored, err := c.store.CreateMysis(name, providerName, provCfg.Model)
+	stored, err := c.store.CreateMysis(name, providerName, provCfg.Model, provCfg.Temperature)
 	if err != nil {
 		return nil, fmt.Errorf("create mysis in store: %w", err)
 	}
@@ -197,7 +197,7 @@ func (c *Commander) StopMysis(id string) error {
 }
 
 // ConfigureMysis updates a mysis provider and model.
-func (c *Commander) ConfigureMysis(id, providerName string) error {
+func (c *Commander) ConfigureMysis(id, providerName, model string) error {
 	c.mu.Lock()
 	mysis, ok := c.myses[id]
 	if !ok {
@@ -206,20 +206,21 @@ func (c *Commander) ConfigureMysis(id, providerName string) error {
 	}
 	c.mu.Unlock()
 
-	// Get new provider
-	p, err := c.registry.Get(providerName)
-	if err != nil {
-		return fmt.Errorf("get provider: %w", err)
-	}
-
 	// Get provider config
 	provCfg, ok := c.config.Providers[providerName]
 	if !ok {
 		return fmt.Errorf("provider config not found: %s", providerName)
 	}
+	temperature := provCfg.Temperature
+
+	// Get new provider
+	p, err := c.registry.Create(providerName, model, temperature)
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
 
 	// Update store
-	if err := c.store.UpdateMysisConfig(id, providerName, provCfg.Model); err != nil {
+	if err := c.store.UpdateMysisConfig(id, providerName, model, temperature); err != nil {
 		return fmt.Errorf("update store: %w", err)
 	}
 
@@ -233,7 +234,7 @@ func (c *Commander) ConfigureMysis(id, providerName string) error {
 		MysisName: mysis.Name(),
 		Data: ConfigChangeData{
 			Provider: providerName,
-			Model:    provCfg.Model,
+			Model:    model,
 		},
 		Timestamp: time.Now(),
 	})

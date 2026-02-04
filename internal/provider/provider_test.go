@@ -4,30 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 func TestRegistry(t *testing.T) {
 	reg := NewRegistry()
 
 	// Register mock providers
-	mock1 := NewMock("provider1", "response1")
-	mock2 := NewMock("provider2", "response2")
-
-	reg.Register(mock1)
-	reg.Register(mock2)
+	reg.RegisterFactory(NewMockFactory("provider1", "response1"))
+	reg.RegisterFactory(NewMockFactory("provider2", "response2"))
 
 	// Get existing provider
-	p, err := reg.Get("provider1")
+	p, err := reg.Create("provider1", "model", 0.7)
 	if err != nil {
-		t.Fatalf("Get() error: %v", err)
+		t.Fatalf("Create() error: %v", err)
 	}
 	if p.Name() != "provider1" {
 		t.Errorf("expected name=provider1, got %s", p.Name())
 	}
 
 	// Get non-existent provider
-	_, err = reg.Get("nonexistent")
+	_, err = reg.Create("nonexistent", "model", 0.7)
 	if !errors.Is(err, ErrProviderNotFound) {
 		t.Errorf("expected ErrProviderNotFound, got %v", err)
 	}
@@ -244,6 +245,23 @@ func TestMockProviderWithResponse(t *testing.T) {
 	}
 }
 
+func TestMockProviderWithReasoning(t *testing.T) {
+	reasoning := "thinking..."
+	mock := NewMock("test", "response").WithReasoning(reasoning)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	tools := []Tool{{Name: "test_tool", Description: "A test tool"}}
+
+	resp, err := mock.ChatWithTools(ctx, messages, tools)
+	if err != nil {
+		t.Fatalf("ChatWithTools() error: %v", err)
+	}
+	if resp.Reasoning != reasoning {
+		t.Errorf("expected reasoning=%q, got %q", reasoning, resp.Reasoning)
+	}
+}
+
 func TestMockProviderConcurrentAccess(t *testing.T) {
 	mock := NewMock("test", "response")
 	ctx := context.Background()
@@ -297,5 +315,42 @@ func TestToOpenAIMessagesMultipleToolCalls(t *testing.T) {
 	}
 	if result[0].ToolCalls[1].Function.Arguments != `{"b":2}` {
 		t.Errorf("expected arguments={\"b\":2}, got %s", result[0].ToolCalls[1].Function.Arguments)
+	}
+}
+
+func TestToOllamaMessagesSerializesEmptyContent(t *testing.T) {
+	messages := []Message{{Role: "assistant", Content: ""}}
+
+	result := toOllamaMessages(messages)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(result))
+	}
+
+	data, err := json.Marshal(result[0])
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	if !strings.Contains(string(data), `"content":""`) {
+		t.Fatalf("expected content field to be serialized, got %s", string(data))
+	}
+}
+
+func TestMockProviderRateLimit(t *testing.T) {
+	limiter := rate.NewLimiter(5, 1)
+	mock := NewMock("test", "ok").WithLimiter(limiter)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+
+	start := time.Now()
+	for i := 0; i < 2; i++ {
+		if _, err := mock.Chat(ctx, messages); err != nil {
+			t.Fatalf("Chat() error: %v", err)
+		}
+	}
+	elapsed := time.Since(start)
+	if elapsed < 180*time.Millisecond {
+		t.Fatalf("expected rate limiting delay, got %v", elapsed)
 	}
 }

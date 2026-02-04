@@ -9,6 +9,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
+	"golang.org/x/time/rate"
 )
 
 func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
@@ -24,16 +25,17 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	bus := NewEventBus(100)
 
 	reg := provider.NewRegistry()
-	reg.Register(provider.NewMock("mock", "mock response"))
-	reg.Register(provider.NewMock("ollama", "ollama response"))
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "ollama response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
 			MaxMyses: 16,
 		},
 		Providers: map[string]config.ProviderConfig{
-			"mock":   {Endpoint: "http://mock", Model: "mock-model"},
-			"ollama": {Endpoint: "http://ollama", Model: "llama3"},
+			"mock":   {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7},
+			"ollama": {Endpoint: "http://ollama", Model: "llama3", Temperature: 0.7},
 		},
 	}
 
@@ -137,14 +139,15 @@ func TestCommanderMaxMyses(t *testing.T) {
 	defer bus.Close()
 
 	reg := provider.NewRegistry()
-	reg.Register(provider.NewMock("mock", "response"))
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
 			MaxMyses: 2, // Low limit for testing
 		},
 		Providers: map[string]config.ProviderConfig{
-			"mock": {Endpoint: "http://mock", Model: "mock-model"},
+			"mock": {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7},
 		},
 	}
 
@@ -215,7 +218,7 @@ func TestCommanderConfigureMysis(t *testing.T) {
 		t.Fatal("timeout waiting for created event")
 	}
 
-	if err := cmd.ConfigureMysis(id, "ollama"); err != nil {
+	if err := cmd.ConfigureMysis(id, "ollama", "llama3"); err != nil {
 		t.Fatalf("ConfigureMysis() error: %v", err)
 	}
 
@@ -229,17 +232,31 @@ func TestCommanderConfigureMysis(t *testing.T) {
 		if data.Provider != "ollama" {
 			t.Errorf("expected provider=ollama, got %s", data.Provider)
 		}
+		if data.Model != "llama3" {
+			t.Errorf("expected model=llama3, got %s", data.Model)
+		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for config changed event")
 	}
 
+	stored, err := cmd.Store().GetMysis(id)
+	if err != nil {
+		t.Fatalf("GetMysis() error: %v", err)
+	}
+	if stored.Model != "llama3" {
+		t.Errorf("expected stored model=llama3, got %s", stored.Model)
+	}
+	if stored.Temperature != 0.7 {
+		t.Errorf("expected stored temperature=0.7, got %v", stored.Temperature)
+	}
+
 	// Configure with non-existent provider
-	if err := cmd.ConfigureMysis(id, "nonexistent"); err == nil {
+	if err := cmd.ConfigureMysis(id, "nonexistent", "model"); err == nil {
 		t.Error("expected error configuring with non-existent provider")
 	}
 
 	// Configure non-existent mysis
-	if err := cmd.ConfigureMysis("nonexistent", "mock"); err == nil {
+	if err := cmd.ConfigureMysis("nonexistent", "mock", "mock-model"); err == nil {
 		t.Error("expected error configuring non-existent mysis")
 	}
 }
@@ -416,19 +433,20 @@ func TestCommanderLoadMyses(t *testing.T) {
 	defer s.Close()
 
 	// Pre-populate store
-	s.CreateMysis("existing-1", "mock", "mock-model")
-	s.CreateMysis("existing-2", "mock", "mock-model")
+	s.CreateMysis("existing-1", "mock", "mock-model", 0.7)
+	s.CreateMysis("existing-2", "mock", "mock-model", 0.7)
 
 	bus := NewEventBus(100)
 	defer bus.Close()
 
 	reg := provider.NewRegistry()
-	reg.Register(provider.NewMock("mock", "response"))
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{MaxMyses: 16},
 		Providers: map[string]config.ProviderConfig{
-			"mock": {Endpoint: "http://mock", Model: "mock-model"},
+			"mock": {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7},
 		},
 	}
 

@@ -30,6 +30,7 @@ const (
 	EventNetworkLLM         EventType = "network_llm"  // LLM request started/finished
 	EventNetworkMCP         EventType = "network_mcp"  // MCP request started/finished
 	EventNetworkIdle        EventType = "network_idle" // Network activity finished
+	EventRateLimit          EventType = "rate_limit"
 )
 
 // Event represents something that happened in the swarm.
@@ -60,6 +61,11 @@ type StateChangeData struct {
 
 // ConfigChangeData contains data for config change events.
 type ConfigChangeData struct {
+	Provider string
+	Model    string
+}
+
+type RateLimitData struct {
 	Provider string
 	Model    string
 }

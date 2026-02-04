@@ -191,16 +191,16 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 
 	// Register Ollama provider
 	if ollCfg, ok := cfg.Providers["ollama"]; ok {
-		p := provider.NewOllama(ollCfg.Endpoint, ollCfg.Model)
-		registry.Register(p)
+		factory := provider.NewOllamaFactory(ollCfg.Endpoint, ollCfg.RateLimit, ollCfg.RateBurst)
+		registry.RegisterFactory(factory)
 	}
 
 	// Register OpenCode Zen provider
 	if zenCfg, ok := cfg.Providers["opencode_zen"]; ok {
 		apiKey := creds.GetAPIKey("opencode_zen")
 		if apiKey != "" {
-			p := provider.NewOpenCode(zenCfg.Endpoint, zenCfg.Model, apiKey)
-			registry.Register(p)
+			factory := provider.NewOpenCodeFactory(zenCfg.Endpoint, apiKey, zenCfg.RateLimit, zenCfg.RateBurst)
+			registry.RegisterFactory(factory)
 		}
 	}
 
@@ -269,6 +269,25 @@ func (a *commanderAdapter) SearchMessages(mysisID, query string, limit int) ([]m
 			Role:      string(m.Role),
 			Source:    string(m.Source),
 			Content:   m.Content,
+			CreatedAt: m.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+	return results, nil
+}
+
+func (a *commanderAdapter) SearchReasoning(mysisID, query string, limit int) ([]mcp.ReasoningResult, error) {
+	memories, err := a.commander.Store().SearchReasoning(mysisID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]mcp.ReasoningResult, len(memories))
+	for i, m := range memories {
+		results[i] = mcp.ReasoningResult{
+			Role:      string(m.Role),
+			Source:    string(m.Source),
+			Content:   m.Content,
+			Reasoning: m.Reasoning,
 			CreatedAt: m.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
@@ -428,6 +447,10 @@ func (m *mockOrchestrator) BroadcastAsync(message string) error {
 
 func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]mcp.SearchResult, error) {
 	return []mcp.SearchResult{}, nil
+}
+
+func (m *mockOrchestrator) SearchReasoning(mysisID, query string, limit int) ([]mcp.ReasoningResult, error) {
+	return []mcp.ReasoningResult{}, nil
 }
 
 func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]mcp.BroadcastResult, error) {

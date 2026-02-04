@@ -36,6 +36,7 @@ type ToolCall struct {
 type ChatResponse struct {
 	Content   string     // Text content (may be empty if tool calls)
 	ToolCalls []ToolCall // Tool calls (may be empty if text response)
+	Reasoning string     // Model reasoning content (optional)
 }
 
 // Provider defines the interface for LLM providers.
@@ -53,6 +54,11 @@ type Provider interface {
 	Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error)
 }
 
+type ProviderFactory interface {
+	Name() string
+	Create(model string, temperature float64) Provider
+}
+
 // StreamChunk represents a chunk of streamed response.
 type StreamChunk struct {
 	Content string
@@ -62,34 +68,32 @@ type StreamChunk struct {
 
 // Registry holds available providers.
 type Registry struct {
-	providers map[string]Provider
+	factories map[string]ProviderFactory
 }
 
 // NewRegistry creates a new provider registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		providers: make(map[string]Provider),
+		factories: make(map[string]ProviderFactory),
 	}
 }
 
-// Register adds a provider to the registry.
-func (r *Registry) Register(p Provider) {
-	r.providers[p.Name()] = p
+func (r *Registry) RegisterFactory(f ProviderFactory) {
+	r.factories[f.Name()] = f
 }
 
-// Get retrieves a provider by name.
-func (r *Registry) Get(name string) (Provider, error) {
-	p, ok := r.providers[name]
+func (r *Registry) Create(name, model string, temperature float64) (Provider, error) {
+	f, ok := r.factories[name]
 	if !ok {
 		return nil, ErrProviderNotFound
 	}
-	return p, nil
+	return f.Create(model, temperature), nil
 }
 
 // List returns all registered provider names.
 func (r *Registry) List() []string {
-	names := make([]string, 0, len(r.providers))
-	for name := range r.providers {
+	names := make([]string, 0, len(r.factories))
+	for name := range r.factories {
 		names = append(names, name)
 	}
 	return names

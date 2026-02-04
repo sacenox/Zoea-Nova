@@ -5,10 +5,16 @@ max_myses = 16
 [providers.ollama]
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
 
 [providers.opencode_zen]
 endpoint = "https://api.opencode.ai/v1"
-model = "zen-default"
+model = "glm-4.7-free"
+temperature = 0.7
+rate_limit = 10.0
+rate_burst = 5
 
 [mcp]
 upstream = "https://game.spacemolt.com/mcp"

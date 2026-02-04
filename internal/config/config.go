@@ -23,8 +23,11 @@ type SwarmConfig struct {
 
 // ProviderConfig holds LLM provider settings.
 type ProviderConfig struct {
-	Endpoint string `toml:"endpoint"`
-	Model    string `toml:"model"`
+	Endpoint    string  `toml:"endpoint"`
+	Model       string  `toml:"model"`
+	Temperature float64 `toml:"temperature"`
+	RateLimit   float64 `toml:"rate_limit"`
+	RateBurst   int     `toml:"rate_burst"`
 }
 
 // MCPConfig holds MCP proxy settings.
@@ -40,8 +43,18 @@ func DefaultConfig() *Config {
 		},
 		Providers: map[string]ProviderConfig{
 			"ollama": {
-				Endpoint: "http://localhost:11434",
-				Model:    "llama3",
+				Endpoint:    "http://localhost:11434",
+				Model:       "llama3",
+				Temperature: 0.7,
+				RateLimit:   2.0,
+				RateBurst:   3,
+			},
+			"opencode_zen": {
+				Endpoint:    "https://api.opencode.ai/v1",
+				Model:       "glm-4.7-free",
+				Temperature: 0.7,
+				RateLimit:   10.0,
+				RateBurst:   5,
 			},
 		},
 		MCP: MCPConfig{
@@ -95,6 +108,33 @@ func applyEnvOverrides(cfg *Config) {
 		}
 	}
 
+	if v := os.Getenv("ZOEA_OLLAMA_TEMPERATURE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if p, ok := cfg.Providers["ollama"]; ok {
+				p.Temperature = f
+				cfg.Providers["ollama"] = p
+			}
+		}
+	}
+
+	if v := os.Getenv("ZOEA_OLLAMA_RATE_LIMIT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if p, ok := cfg.Providers["ollama"]; ok {
+				p.RateLimit = f
+				cfg.Providers["ollama"] = p
+			}
+		}
+	}
+
+	if v := os.Getenv("ZOEA_OLLAMA_RATE_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if p, ok := cfg.Providers["ollama"]; ok {
+				p.RateBurst = n
+				cfg.Providers["ollama"] = p
+			}
+		}
+	}
+
 	if v := os.Getenv("ZOEA_OPENCODE_ENDPOINT"); v != "" {
 		if p, ok := cfg.Providers["opencode_zen"]; ok {
 			p.Endpoint = v
@@ -106,6 +146,33 @@ func applyEnvOverrides(cfg *Config) {
 		if p, ok := cfg.Providers["opencode_zen"]; ok {
 			p.Model = v
 			cfg.Providers["opencode_zen"] = p
+		}
+	}
+
+	if v := os.Getenv("ZOEA_OPENCODE_TEMPERATURE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if p, ok := cfg.Providers["opencode_zen"]; ok {
+				p.Temperature = f
+				cfg.Providers["opencode_zen"] = p
+			}
+		}
+	}
+
+	if v := os.Getenv("ZOEA_OPENCODE_RATE_LIMIT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if p, ok := cfg.Providers["opencode_zen"]; ok {
+				p.RateLimit = f
+				cfg.Providers["opencode_zen"] = p
+			}
+		}
+	}
+
+	if v := os.Getenv("ZOEA_OPENCODE_RATE_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if p, ok := cfg.Providers["opencode_zen"]; ok {
+				p.RateBurst = n
+				cfg.Providers["opencode_zen"] = p
+			}
 		}
 	}
 }

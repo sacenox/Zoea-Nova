@@ -53,6 +53,58 @@ upstream = "https://custom.mcp/endpoint"
 	}
 }
 
+func TestLoadWithTemperature(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+temperature = 0.5
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Providers["ollama"].Temperature != 0.5 {
+		t.Errorf("expected temperature=0.5, got %v", cfg.Providers["ollama"].Temperature)
+	}
+}
+
+func TestLoadWithRateLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+rate_limit = 3.5
+rate_burst = 4
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Providers["ollama"].RateLimit != 3.5 {
+		t.Errorf("expected rate_limit=3.5, got %v", cfg.Providers["ollama"].RateLimit)
+	}
+	if cfg.Providers["ollama"].RateBurst != 4 {
+		t.Errorf("expected rate_burst=4, got %d", cfg.Providers["ollama"].RateBurst)
+	}
+}
+
 func TestLoadWithEnvOverrides(t *testing.T) {
 	// Set env vars
 	os.Setenv("ZOEA_MAX_MYSES", "10")
