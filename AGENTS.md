@@ -13,7 +13,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Use interfaces for external dependencies (LLM providers, MCP, store).
 - Run `make fmt` before committing. Fix all warnings and linter errors.
 - When committing, use `required_permissions: ["all"]` to bypass sandbox restrictions (GPG signing requires full filesystem access).
-- Write unit tests for all modules. Target 95%+ coverage.
+- Write unit tests for all modules. Target 80%+ coverage (currently ~61%).
 - Never write data migrations. Schema changes require a fresh database.
 - Use `zerolog` for logging. Never log to stdout/stderr (TUI owns the terminal).
 - Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
@@ -42,6 +42,15 @@ Multi-byte Unicode characters cause width calculation bugs:
 - **Style padding affects alignment**: `lipgloss.Style.Padding(0, 1)` adds 1 space on each side. If one element has padding and another doesn't, their decorations won't align even if both are "width" chars total.
 - **`lipgloss.Width()` sets content width**: When using `style.Width(n)`, the `n` sets the CONTENT width. Borders and padding are added ON TOP. So `style.Width(98)` with a border produces total width 100.
 
+## Database Management:
+
+The application uses SQLite for persistence.
+
+- **Location**: `~/.zoea-nova/zoea.db`
+- **Querying**: Use `sqlite3 ~/.zoea-nova/zoea.db` to run manual queries.
+- **Wiping**: To reset the state or apply schema changes (since migrations are not supported), delete the database and its temporary files: `rm ~/.zoea-nova/zoea.db*`.
+- **Testing**: Tests use `t.TempDir()` for isolated database files. Never use the production database path in tests.
+
 ## Terminology:
 
 - **Agent**: An AI-controlled player instance with its own provider, memory, and state.
@@ -54,13 +63,14 @@ Multi-byte Unicode characters cause width calculation bugs:
 - **Dashboard**: TUI view showing swarm status, broadcast history, and agent list.
 - **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
 - **Source**: Origin of a memory—`direct` (single agent), `broadcast` (swarm), `system`, `llm`, or `tool`.
+- **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/CONTEXT_COMPRESSION.md](documentation/CONTEXT_COMPRESSION.md).
 
 ## Workflow:
 
 The user follows a structured development workflow. Respect these phases:
 
 1. **Design**: Documentation for this project is in `documentation/` Keep it up to date and accurate.
-2. **Plan**: Complex changes require a plan in `.cursor/plans/`. Reference the plan while implementing.
+2. **Plan**: Complex changes require a plan in `.opencode/plans/`. Reference the plan while implementing.
 3. **Implement**: Follow the plan phase-by-phase. Update tests alongside code, add more as needed.
 4. **Test**: Run `make test` after each phase. Fix failures before moving on.
 5. **Build**: Run `make build` to verify compilation. Address any warnings.
