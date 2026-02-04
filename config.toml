@@ -1,5 +1,4 @@
 [swarm]
-default_myses = 4
 max_myses = 16
 
 [providers.ollama]

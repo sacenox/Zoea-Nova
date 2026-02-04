@@ -47,30 +47,35 @@ Scrollable conversation viewport showing full message history with role-based st
 - **TUI Framework:** `bubbletea` (The Elm Architecture for Go).
 - **Styling & Components:** `lipgloss` for layouts/colors and `bubbles` for UI elements.
 - **LLM Integration:** `go-openai` (OpenAI-compatible client for Ollama and OpenCode Zen).
-- **MCP Protocol:** Researching `mcp-golang` or similar for robust Model Context Protocol support.
+- **MCP Protocol:** Custom MCP proxy and tool registry using Streamable HTTP.
 - **Configuration:** `github.com/BurntSushi/toml` for TOML parsing.
-- **Database:** `modernc.org/sqlite` (pure Go, no CGO) or `github.com/mattn/go-sqlite3` (CGO).
+- **Database:** `modernc.org/sqlite` (pure Go, no CGO).
 - **Logging:** `zerolog` for structured, non-blocking logs.
 
 ## Configuration
 
-- **Environment Variables:** Primary mechanism for runtime overrides (e.g., `ZOEA_LOG_LEVEL`, `ZOEA_MCP_ENDPOINT`).
+- **Environment Variables:** Runtime overrides (`ZOEA_MAX_MYSES`, `ZOEA_MCP_ENDPOINT`, `ZOEA_OLLAMA_ENDPOINT`, `ZOEA_OLLAMA_MODEL`, `ZOEA_OLLAMA_TEMPERATURE`, `ZOEA_OLLAMA_RATE_LIMIT`, `ZOEA_OLLAMA_RATE_BURST`, `ZOEA_OPENCODE_ENDPOINT`, `ZOEA_OPENCODE_MODEL`, `ZOEA_OPENCODE_TEMPERATURE`, `ZOEA_OPENCODE_RATE_LIMIT`, `ZOEA_OPENCODE_RATE_BURST`).
 - **Config File:** `config.toml` in project root for defaults and structure. Parsed via `github.com/BurntSushi/toml`.
 - **Credentials:** Stored in `$HOME/.zoea-nova/credentials.json`. Contains API keys for LLM providers. File permissions should be `0600`.
 
 Example `config.toml`:
 ```toml
 [swarm]
-default_myses = 4
 max_myses = 16
 
 [providers.ollama]
 endpoint = "http://localhost:11434"
-model = "llama3"
+model = "qwen3:4b"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
 
 [providers.opencode_zen]
-endpoint = "https://api.opencode.ai/v1"  # confirm from Zen dashboard
-model = "zen-default"
+endpoint = "https://api.opencode.ai/v1"
+model = "glm-4.7-free"
+temperature = 0.7
+rate_limit = 10.0
+rate_burst = 5
 
 [mcp]
 upstream = "https://game.spacemolt.com/mcp"
@@ -121,23 +126,15 @@ CREATE TABLE accounts (
 ```
 
 **Schema v6 → v7 Migration:**
-Requires fresh database. Reset with:
-```bash
-make db-reset-accounts
-```
-This exports usernames/passwords to `accounts-backup.sql` before recreating the DB.
+Requires fresh database. See `AGENTS.md` for the reset command and backup details.
 
 **Memory Sources:**
-- `direct` — Message sent directly to a specific Mysis
-- `broadcast` — Message broadcast to all Myses (swarm command)
-- `system` — System prompts
-- `llm` — LLM-generated responses
-- `tool` — Tool call results
+See `AGENTS.md` for the canonical terminology.
 
 ## Mysis Lifecycle
 
 - **Ownership:** The Commander (orchestrator) owns all Mysis lifecycles.
-- **Creation:** User creates Myses via TUI controls. Default swarm size: **4 Myses**.
+- **Creation:** User creates Myses via TUI controls.
 - **Limits:** Configurable `max_myses` (default 16). Enforced at Commander level, but user controls count from TUI.
 - **States:** `idle` → `running` → `stopped` / `errored`.
 - **TUI Controls:**
@@ -148,7 +145,7 @@ This exports usernames/passwords to `accounts-backup.sql` before recreating the 
   - **Broadcast Message:** Send a message/objective to all Myses.
   - **Direct Message:** Send a message to a specific Mysis.
   - **Configure Mysis:** Set model/provider per Mysis (Ollama or OpenCode Zen).
-- **Recovery:** On application restart, Myses are rehydrated from SQLite in `stopped` state; user must explicitly relaunch.
+- **Recovery:** On application restart, Myses are rehydrated from SQLite and auto-started.
 
 ## Keyboard Shortcuts
 
@@ -166,13 +163,8 @@ Minimal set matching TUI controls:
 
 ## Build & Operations
 
-- **Task Runner:** `Makefile` for standard commands.
-- **Commands:**
-  - `make fmt` — Format code (`go fmt ./...`)
-  - `make build` — Compile binary
-  - `make run` — Build and start
-  - `make test` — Run tests
-- **Versioning:** Semver. Version injected at build time via `-ldflags`.
+Use `Makefile` targets documented in `AGENTS.md`.
+Versioning follows the rules in `AGENTS.md`.
 
 ## Logging
 
