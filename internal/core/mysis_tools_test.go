@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,7 +181,7 @@ func TestMysisToolError(t *testing.T) {
 	for time.Now().Before(deadline) {
 		memories, _ := s.GetMemories(stored.ID)
 		for _, m := range memories {
-			if m.Role == store.MemoryRoleTool && m.Content == "call_err:Error: tool failed" {
+			if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, "call_err:Error calling error_tool: tool failed") {
 				foundError = true
 				break
 			}

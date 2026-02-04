@@ -8,6 +8,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 
 **YOU MUST**:
 
+- Not change the game servers api, if we detect an issue with the api, document it in `documentation/KNOWN_SERVER_ISSUES.md`
 - Use Go 1.22+ idioms. No CGO dependencies.
 - Keep all application code in `internal/` packages. Only `cmd/zoea/main.go` is public.
 - Use interfaces for external dependencies (LLM providers, MCP, store).

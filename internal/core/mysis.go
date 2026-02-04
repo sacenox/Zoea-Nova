@@ -51,10 +51,21 @@ Before each action, consider:
 - **Low on options?** Check missions (get_missions) for direction
 
 ## Memory
-Use captain's log (captains_log_add) to remember:
+Use captain's log to persist important information across sessions.
+
+SECURITY: Never store your password in captain's log or share it in any in-game tool calls or chat.
+
+CRITICAL: captains_log_add requires a non-empty entry field:
+CORRECT: captains_log_add({"entry": "Discovered iron ore at Sol-3. Coordinates: X:1234 Y:5678"})
+CORRECT: captains_log_add({"entry": "Player 'hostile_crab' attacked me at starbase. Avoid."})
+WRONG: captains_log_add({"entry": ""})
+WRONG: captains_log_add({})
+
+Remember in captain's log:
 - Discovered systems and their resources
 - Player encounters (friendly or hostile)
 - Current objectives and plans
+- Trade routes and profitable deals
 
 ## Swarm Coordination
 You're part of a swarm. Use zoea_* tools to:
@@ -87,7 +98,15 @@ const MaxToolIterations = 10
 const MaxContextMessages = 20
 
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy.
-const ContinuePrompt = "Turn complete. What is your next move? If you are waiting for something, describe what and why. Otherwise, continue your mission."
+const ContinuePrompt = `Turn complete. What is your next move?
+
+CRITICAL REMINDERS:
+- Use zoea_list_myses to find YOUR mysis ID (match your name)
+- When using captains_log_add, entry field must be non-empty
+- Never store or share your password in any in-game tool calls or chat
+- Never calculate ticks, use every turn to progress
+
+If waiting for something, describe what and why. Otherwise, continue your mission.`
 
 // Mysis represents a single AI mysis in the swarm.
 type Mysis struct {
@@ -564,7 +583,7 @@ func (a *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 // formatToolResult formats a tool result for storage (includes ID for LLM context).
 func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
 	if err != nil {
-		return fmt.Sprintf("%s:Error: %v", toolCallID, err)
+		return fmt.Sprintf("%s:Error calling %s: %v. Check the tool's required parameters and try again.", toolCallID, toolName, err)
 	}
 
 	var texts []string
@@ -576,7 +595,11 @@ func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolRe
 
 	content := strings.Join(texts, "\n")
 	if result.IsError {
-		content = "Error: " + content
+		if strings.Contains(content, "empty_entry") {
+			content = fmt.Sprintf("Error calling %s: %s. The entry field must contain non-empty text. Example: captains_log_add({\"entry\": \"Your message here\"})", toolName, content)
+		} else {
+			content = fmt.Sprintf("Error calling %s: %s", toolName, content)
+		}
 	}
 
 	return fmt.Sprintf("%s:%s", toolCallID, content)

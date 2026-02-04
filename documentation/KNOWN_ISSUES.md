@@ -4,8 +4,7 @@ These are the currently known issues to investigate:
 
 ## Authentication & Account Management
 
-- [ ] Captain's Log Bug: There is a consistent pattern of Myses failing to use captains_log_add. They appear to be trying to "remember" their registration password but are encountering an empty_entry error from the MCP server. This suggests the LLM might be misformatting the arguments for this specific tool. Related: Myses find each other's passwords and fail to login. Myses do not have a reliable way to re-use usernames they created in the past.
-- [ ] Evidence: System prompt mentions captains_log_add but does not define argument shape; MCP proxy forwards raw arguments upstream. Myses can send empty or malformed payloads and hit empty_entry.
+- [ ] Related: Myses find each other's passwords and fail to login. Myses do not have a reliable way to re-use usernames they created in the past.
 
 ## Context & Memory Management
 
@@ -15,7 +14,7 @@ These are the currently known issues to investigate:
 ## Prompt & Behavior
 
 - [ ] Mysis prompt review: Encourage myses to collaborate together via zoea tooling to create a goal and collaborate towards it. Encourage to pick a Crustacean Cosmos + Zoea/Mysis themed username. Critical rules must be in every prompt, not only the first one.
-- [ ] Evidence: SystemPrompt includes collaboration + themed usernames; ContinuePrompt does not include CRITICAL RULES, so enforcement depends on system prompt being present in the 20-message window.
+- [ ] Evidence: SystemPrompt includes collaboration + themed usernames; ContinuePrompt now includes limited CRITICAL REMINDERS but not the full CRITICAL RULES, so enforcement still depends on the system prompt being present in the 20-message window.
 
 - [ ] Cognitive Looping and Prompt Inefficiency: Myses can get stuck in "cooldown" loops or redundant "waiting" states, consuming tokens every 30 seconds without operational progress. The system prompts Myses every tick regardless of their state. Myses may hallucinate non-existent cooldowns or fail to use non-traveling actions during long journeys.
 - [ ] Evidence: ContinuePrompt is sent on a fixed 30-second ticker with no state-aware suppression.
@@ -32,9 +31,13 @@ These are the currently known issues to investigate:
 - [ ] Username status for each mysis focus view and in commander view.
 - [ ] Evidence: Focus view labels are based on Role only (broadcast source ignored); reasoning is stored but not rendered; TUI models do not include account username fields.
 
+## Opencode Zen auth
+
+- [ ] Zen requires an api key, where are configuring this?
+
 ## Notes
 
-- [ ] Create an OpenCode workflow command to enforce: "Follow the plan, create todo list first. Stop if anything deviates from the plan."
+- [ ] Create an OpenCode workflow command to enforce: "Save the plan, make a todo list, then follow the plan. Stop if anything deviates from the plan."
 
 - [ ] Add a Make command that:
   - extracts username/passwords from the current DB to a root-level file

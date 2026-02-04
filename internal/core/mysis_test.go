@@ -3,9 +3,11 @@ package core
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -332,5 +334,68 @@ func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
 	// First memory should still be system prompt
 	if memories[0].Role != store.MemoryRoleSystem {
 		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
+	}
+}
+
+func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "captains_log_add({\"entry\":") {
+		t.Fatal("SystemPrompt missing captains_log_add example")
+	}
+	if !strings.Contains(SystemPrompt, "non-empty entry field") {
+		t.Fatal("SystemPrompt missing non-empty entry reminder")
+	}
+}
+
+func TestContinuePromptContainsCriticalReminders(t *testing.T) {
+	if !strings.Contains(ContinuePrompt, "zoea_list_myses") {
+		t.Fatal("ContinuePrompt missing mysis ID reminder")
+	}
+	if !strings.Contains(ContinuePrompt, "captains_log_add") {
+		t.Fatal("ContinuePrompt missing captains_log_add reminder")
+	}
+}
+
+func TestFormatToolResult_EmptyEntryError(t *testing.T) {
+	m := &Mysis{}
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: "empty_entry"}},
+		IsError: true,
+	}
+	got := m.formatToolResult("call_1", "captains_log_add", result, nil)
+	if !strings.Contains(got, "entry field must contain non-empty text") {
+		t.Fatal("expected actionable guidance for empty_entry")
+	}
+	if !strings.Contains(got, "Error calling captains_log_add:") {
+		t.Fatal("expected tool name in error message")
+	}
+}
+
+func TestFormatToolResult_GenericError(t *testing.T) {
+	m := &Mysis{}
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: "some_other_error"}},
+		IsError: true,
+	}
+	got := m.formatToolResult("call_1", "some_tool", result, nil)
+	if !strings.Contains(got, "Error calling some_tool:") {
+		t.Fatal("expected tool name in generic error format")
+	}
+	if strings.Contains(got, "entry field") {
+		t.Fatal("should not contain empty_entry guidance for generic errors")
+	}
+}
+
+func TestFormatToolResult_Success(t *testing.T) {
+	m := &Mysis{}
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: "success result"}},
+		IsError: false,
+	}
+	got := m.formatToolResult("call_1", "test_tool", result, nil)
+	if !strings.Contains(got, "call_1:success result") {
+		t.Fatalf("expected success format, got: %s", got)
+	}
+	if strings.Contains(got, "Error") {
+		t.Fatal("should not contain Error prefix for successful results")
 	}
 }

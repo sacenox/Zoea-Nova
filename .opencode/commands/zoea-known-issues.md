@@ -7,8 +7,10 @@ Instructions:
 
 Read `documentation/KNOWN_ISSUES.md` and:
 
-- Remove completed items first. If no items remain stop, and report back. Update KNOWN_ISSUES.md to reflect that no isses exist.
-- Then investigate the first item. Gather information first. Then create a plan and a todo list for the fixes and tests required to verify the changes.
+- Investigate the first item.
+- Gather information first.
+- Then create a plan and a todo list with your tooling for the fixes and tests required to verify the changes.
+- Dont make changes.
 
 **IMPORTANT**:
 
@@ -16,4 +18,4 @@ Read `documentation/KNOWN_ISSUES.md` and:
 - Read the documentation before investigating.
 - Gather all required context first.
 - Use explorer subagents to gather information.
-- Use zoea_analyzer agents if you need database information.
+- Use zoea_analyzer subagents if you need database information.

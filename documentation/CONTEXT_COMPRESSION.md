@@ -151,11 +151,20 @@ The system prompt instructs Myses to use their captain's log for persistent memo
 
 ```
 ## Memory
-Use captain's log (captains_log_add) to remember:
-- Your password (CRITICAL)
+Use captain's log to persist important information across sessions.
+
+SECURITY: Never store your password in captain's log or share it in any in-game tool calls or chat.
+
+CRITICAL: captains_log_add requires a non-empty entry field:
+CORRECT: captains_log_add({"entry": "Discovered iron ore at Sol-3. Coordinates: X:1234 Y:5678"})
+WRONG: captains_log_add({"entry": ""})
+WRONG: captains_log_add({})
+
+Remember in captain's log:
 - Discovered systems and their resources
 - Player encounters (friendly or hostile)
 - Current objectives and plans
+- Trade routes and profitable deals
 ```
 
 This encourages Myses to externalize important information to the game's built-in note system, which persists across context windows.
