@@ -49,3 +49,7 @@ make run          # Build and start
 | `Esc`   | Return to dashboard      |
 | `?`     | Show help                |
 | `q`     | Quit                     |
+
+## Known Issues
+
+For a list of current bugs, technical debt, and planned improvements, see [KNOWN_ISSUES.md](documentation/KNOWN_ISSUES.md).
