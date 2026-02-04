@@ -20,6 +20,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Follow the Bubble Tea Elm Architecture: Model → Update → View.
 - No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
 - Keep track of known issues in `documentation/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
+- Not duplicate information between README.md and AGENTS.md files. Use AGENTS for technical information, and README for user facing information. Keep README minimal and concise.
 
 ## TUI Testing:
 
