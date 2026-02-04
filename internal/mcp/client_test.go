@@ -87,3 +87,17 @@ func TestClientParseSSEResponse(t *testing.T) {
 		t.Errorf("expected ID=2, got %v", resp.ID)
 	}
 }
+
+func TestClientParseSSEResponseLargePayload(t *testing.T) {
+	client := NewClient("")
+
+	largeValue := strings.Repeat("a", 70*1024)
+	sseData := "data: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"payload\":\"" + largeValue + "\"}}\n\n"
+	resp, err := client.parseSSEResponse(strings.NewReader(sseData))
+	if err != nil {
+		t.Fatalf("parseSSEResponse() error: %v", err)
+	}
+	if resp.ID != float64(3) {
+		t.Errorf("expected ID=3, got %v", resp.ID)
+	}
+}

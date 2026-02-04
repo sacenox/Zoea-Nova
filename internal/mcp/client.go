@@ -113,6 +113,8 @@ func (c *Client) send(ctx context.Context, req *Request) (*Response, error) {
 // parseSSEResponse parses a Server-Sent Events stream for MCP responses.
 func (c *Client) parseSSEResponse(body io.Reader) (*Response, error) {
 	scanner := bufio.NewScanner(body)
+	maxTokenSize := 2 * 1024 * 1024
+	scanner.Buffer(make([]byte, 0, 64*1024), maxTokenSize)
 	var dataLines []string
 
 	for scanner.Scan() {
