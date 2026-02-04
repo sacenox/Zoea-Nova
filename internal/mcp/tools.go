@@ -4,12 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/xonecas/zoea-nova/internal/core"
 )
 
+// AgentInfo represents agent information returned by the orchestrator.
+type AgentInfo struct {
+	ID        string
+	Name      string
+	State     string
+	Provider  string
+	LastError error
+}
+
+// Orchestrator defines the interface for swarm orchestration.
+// This interface breaks the import cycle between mcp and core packages.
+type Orchestrator interface {
+	ListAgents() []AgentInfo
+	GetAgent(id string) (AgentInfo, error)
+	AgentCount() int
+	MaxAgents() int
+	SendMessage(agentID, message string) error
+	Broadcast(message string) error
+}
+
 // RegisterOrchestratorTools registers the internal orchestration tools with the proxy.
-func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
+func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 	// List agents tool
 	proxy.RegisterTool(
 		Tool{
@@ -18,14 +36,14 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			agents := commander.ListAgents()
+			agents := orchestrator.ListAgents()
 			var result []map[string]interface{}
 			for _, a := range agents {
 				result = append(result, map[string]interface{}{
-					"id":       a.ID(),
-					"name":     a.Name(),
-					"state":    string(a.State()),
-					"provider": a.ProviderName(),
+					"id":       a.ID,
+					"name":     a.Name,
+					"state":    a.State,
+					"provider": a.Provider,
 				})
 			}
 
@@ -60,7 +78,7 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 				}, nil
 			}
 
-			agent, err := commander.GetAgent(params.AgentID)
+			agent, err := orchestrator.GetAgent(params.AgentID)
 			if err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("agent not found: %s", params.AgentID)}},
@@ -69,13 +87,13 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 			}
 
 			info := map[string]interface{}{
-				"id":       agent.ID(),
-				"name":     agent.Name(),
-				"state":    string(agent.State()),
-				"provider": agent.ProviderName(),
+				"id":       agent.ID,
+				"name":     agent.Name,
+				"state":    agent.State,
+				"provider": agent.Provider,
 			}
-			if err := agent.LastError(); err != nil {
-				info["last_error"] = err.Error()
+			if agent.LastError != nil {
+				info["last_error"] = agent.LastError.Error()
 			}
 
 			data, _ := json.MarshalIndent(info, "", "  ")
@@ -93,25 +111,25 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			agents := commander.ListAgents()
+			agents := orchestrator.ListAgents()
 
 			var running, idle, stopped, errored int
 			for _, a := range agents {
-				switch a.State() {
-				case core.AgentStateRunning:
+				switch a.State {
+				case "running":
 					running++
-				case core.AgentStateIdle:
+				case "idle":
 					idle++
-				case core.AgentStateStopped:
+				case "stopped":
 					stopped++
-				case core.AgentStateErrored:
+				case "errored":
 					errored++
 				}
 			}
 
 			status := map[string]interface{}{
-				"total_agents": commander.AgentCount(),
-				"max_agents":   commander.MaxAgents(),
+				"total_agents": orchestrator.AgentCount(),
+				"max_agents":   orchestrator.MaxAgents(),
 				"states": map[string]int{
 					"running": running,
 					"idle":    idle,
@@ -153,7 +171,7 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 				}, nil
 			}
 
-			if err := commander.SendMessage(params.AgentID, params.Message); err != nil {
+			if err := orchestrator.SendMessage(params.AgentID, params.Message); err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to send message: %v", err)}},
 					IsError: true,
@@ -190,7 +208,7 @@ func RegisterOrchestratorTools(proxy *Proxy, commander *core.Commander) {
 				}, nil
 			}
 
-			if err := commander.Broadcast(params.Message); err != nil {
+			if err := orchestrator.Broadcast(params.Message); err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("broadcast partially failed: %v", err)}},
 					IsError: true,

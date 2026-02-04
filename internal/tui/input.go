@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,11 +17,16 @@ const (
 	InputModeConfigProvider
 )
 
+const maxHistorySize = 100
+
 // InputModel handles text input for messages.
 type InputModel struct {
-	textInput textinput.Model
-	mode      InputMode
-	targetID  string // For direct messages
+	textInput    textinput.Model
+	mode         InputMode
+	targetID     string   // For direct messages
+	history      []string // Previous messages
+	historyIndex int      // Current position in history (-1 = not browsing)
+	draft        string   // Saved draft when browsing history
 }
 
 // NewInputModel creates a new input model.
@@ -31,8 +37,10 @@ func NewInputModel() InputModel {
 	ti.Width = 60
 
 	return InputModel{
-		textInput: ti,
-		mode:      InputModeNone,
+		textInput:    ti,
+		mode:         InputModeNone,
+		history:      make([]string, 0, maxHistorySize),
+		historyIndex: -1,
 	}
 }
 
@@ -87,11 +95,76 @@ func (m InputModel) IsActive() bool {
 	return m.mode != InputModeNone
 }
 
+// Focus returns the command to start the text input cursor.
+func (m InputModel) Focus() tea.Cmd {
+	return textinput.Blink
+}
+
+// History key bindings
+var historyKeys = struct {
+	Up   key.Binding
+	Down key.Binding
+}{
+	Up:   key.NewBinding(key.WithKeys("up")),
+	Down: key.NewBinding(key.WithKeys("down")),
+}
+
 // Update handles input updates.
 func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
+	// Handle history navigation for message modes
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if m.mode == InputModeBroadcast || m.mode == InputModeMessage {
+			switch {
+			case key.Matches(keyMsg, historyKeys.Up):
+				m.navigateHistory(1) // Go back in history
+				return m, nil
+			case key.Matches(keyMsg, historyKeys.Down):
+				m.navigateHistory(-1) // Go forward in history
+				return m, nil
+			}
+		}
+	}
+
 	var cmd tea.Cmd
 	m.textInput, cmd = m.textInput.Update(msg)
 	return m, cmd
+}
+
+// navigateHistory moves through the history.
+// direction: 1 = older (up), -1 = newer (down)
+func (m *InputModel) navigateHistory(direction int) {
+	if len(m.history) == 0 {
+		return
+	}
+
+	// Save current input as draft when starting to browse
+	if m.historyIndex == -1 && direction == 1 {
+		m.draft = m.textInput.Value()
+	}
+
+	newIndex := m.historyIndex + direction
+
+	// Clamp to valid range
+	if newIndex < -1 {
+		newIndex = -1
+	}
+	if newIndex >= len(m.history) {
+		newIndex = len(m.history) - 1
+	}
+
+	m.historyIndex = newIndex
+
+	// Update input value
+	if m.historyIndex == -1 {
+		// Back to draft
+		m.textInput.SetValue(m.draft)
+		m.textInput.CursorEnd()
+	} else {
+		// Show history item (most recent is at end of slice)
+		historyIdx := len(m.history) - 1 - m.historyIndex
+		m.textInput.SetValue(m.history[historyIdx])
+		m.textInput.CursorEnd()
+	}
 }
 
 // View renders the input.
@@ -107,7 +180,28 @@ func (m *InputModel) Reset() {
 	m.textInput.Reset()
 	m.mode = InputModeNone
 	m.targetID = ""
+	m.historyIndex = -1
+	m.draft = ""
 	m.textInput.Blur()
+}
+
+// AddToHistory adds a message to the history.
+func (m *InputModel) AddToHistory(message string) {
+	if message == "" {
+		return
+	}
+
+	// Avoid duplicate consecutive entries
+	if len(m.history) > 0 && m.history[len(m.history)-1] == message {
+		return
+	}
+
+	m.history = append(m.history, message)
+
+	// Trim if too large
+	if len(m.history) > maxHistorySize {
+		m.history = m.history[len(m.history)-maxHistorySize:]
+	}
 }
 
 // SetWidth sets the input width.

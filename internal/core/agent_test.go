@@ -37,7 +37,7 @@ func TestAgentLifecycle(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "Hello from agent!")
-	agent := NewAgent(stored.ID, stored.Name, mock, s, bus)
+	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Initial state
 	if agent.State() != AgentStateIdle {
@@ -83,10 +83,10 @@ func TestAgentSendMessage(t *testing.T) {
 
 	stored, _ := s.CreateAgent("msg-agent", "mock", "test-model")
 	mock := provider.NewMock("mock", "I received your message!")
-	agent := NewAgent(stored.ID, stored.Name, mock, s, bus)
+	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Can't send to non-running agent
-	if err := agent.SendMessage("Hello"); err == nil {
+	if err := agent.SendMessage("Hello", store.MemorySourceDirect); err == nil {
 		t.Error("expected error sending to non-running agent")
 	}
 
@@ -97,22 +97,23 @@ func TestAgentSendMessage(t *testing.T) {
 	events := bus.Subscribe()
 
 	// Send message
-	if err := agent.SendMessage("Hello, agent!"); err != nil {
+	if err := agent.SendMessage("Hello, agent!", store.MemorySourceDirect); err != nil {
 		t.Fatalf("SendMessage() error: %v", err)
 	}
 
 	// Should receive message and response events
+	// Also receives network events (LLM start, idle)
 	var messageEvent, responseEvent bool
 	timeout := time.After(500 * time.Millisecond)
 
-	for i := 0; i < 3; i++ { // State change + message + response
+eventLoop:
+	for i := 0; i < 10; i++ { // Allow for all events including network events
 		select {
 		case e := <-events:
 			if e.Type == EventAgentMessage {
-				messageEvent = true
-				data := e.Data.(MessageData)
-				if data.Content != "Hello, agent!" {
-					t.Errorf("expected message content 'Hello, agent!', got %s", data.Content)
+				data, ok := e.Data.(MessageData)
+				if ok && data.Content == "Hello, agent!" {
+					messageEvent = true
 				}
 			}
 			if e.Type == EventAgentResponse {
@@ -122,8 +123,12 @@ func TestAgentSendMessage(t *testing.T) {
 					t.Errorf("expected response 'I received your message!', got %s", data.Content)
 				}
 			}
+			// Break early if we have both events
+			if messageEvent && responseEvent {
+				break eventLoop
+			}
 		case <-timeout:
-			break
+			break eventLoop
 		}
 	}
 
@@ -136,8 +141,8 @@ func TestAgentSendMessage(t *testing.T) {
 
 	// Check memories were stored
 	memories, _ := s.GetMemories(stored.ID)
-	if len(memories) != 2 { // user + assistant
-		t.Errorf("expected 2 memories, got %d", len(memories))
+	if len(memories) != 3 { // system prompt + user + assistant
+		t.Errorf("expected 3 memories, got %d", len(memories))
 	}
 
 	agent.Stop()
@@ -149,7 +154,7 @@ func TestAgentProviderName(t *testing.T) {
 
 	stored, _ := s.CreateAgent("provider-test", "mock", "test-model")
 	mock := provider.NewMock("test-provider", "response")
-	agent := NewAgent(stored.ID, stored.Name, mock, s, bus)
+	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	if agent.ProviderName() != "test-provider" {
 		t.Errorf("expected provider name=test-provider, got %s", agent.ProviderName())
@@ -168,7 +173,7 @@ func TestAgentStateEvents(t *testing.T) {
 
 	stored, _ := s.CreateAgent("event-test", "mock", "test-model")
 	mock := provider.NewMock("mock", "response")
-	agent := NewAgent(stored.ID, stored.Name, mock, s, bus)
+	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	events := bus.Subscribe()
 

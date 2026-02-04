@@ -22,7 +22,10 @@ var helpItems = []helpItem{
 	{"c", "Configure selected agent"},
 	{"Tab / Shift+Tab", "Navigate agents"},
 	{"Enter", "Focus selected agent"},
-	{"Esc", "Back to dashboard"},
+	{"Esc", "Back / Cancel"},
+	{"↑ / ↓", "Scroll / Browse history"},
+	{"PgUp / PgDn", "Scroll page"},
+	{"G / End", "Go to bottom (auto-scroll)"},
 	{"?", "Toggle help"},
 }
 

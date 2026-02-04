@@ -91,6 +91,10 @@ var (
 			Foreground(colorMuted).
 			Italic(true)
 
+	logToolStyle = lipgloss.NewStyle().
+			Foreground(colorSecondary).
+			Italic(true)
+
 	// Input
 	inputStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -164,6 +168,8 @@ func RoleStyle(role string) lipgloss.Style {
 		return logAssistantStyle
 	case "system":
 		return logSystemStyle
+	case "tool":
+		return logToolStyle
 	default:
 		return logSystemStyle
 	}

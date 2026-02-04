@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 
@@ -45,6 +46,65 @@ func (p *OpenCodeProvider) Chat(ctx context.Context, messages []Message) (string
 	}
 
 	return resp.Choices[0].Message.Content, nil
+}
+
+// ChatWithTools sends messages with available tools and returns response with potential tool calls.
+func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
+	// Convert tools to OpenAI format
+	openaiTools := make([]openai.Tool, len(tools))
+	for i, t := range tools {
+		var params map[string]interface{}
+		if len(t.Parameters) > 0 {
+			json.Unmarshal(t.Parameters, &params)
+		}
+		if params == nil {
+			params = map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			}
+		}
+
+		openaiTools[i] = openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  params,
+			},
+		}
+	}
+
+	resp, err := p.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:    p.model,
+		Messages: toOpenAIMessages(messages),
+		Tools:    openaiTools,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("no response choices")
+	}
+
+	choice := resp.Choices[0]
+	result := &ChatResponse{
+		Content: choice.Message.Content,
+	}
+
+	// Extract tool calls if present
+	if len(choice.Message.ToolCalls) > 0 {
+		result.ToolCalls = make([]ToolCall, len(choice.Message.ToolCalls))
+		for i, tc := range choice.Message.ToolCalls {
+			result.ToolCalls[i] = ToolCall{
+				ID:        tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: json.RawMessage(tc.Function.Arguments),
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // Stream sends messages and returns a channel that streams response chunks.

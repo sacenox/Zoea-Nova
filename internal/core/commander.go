@@ -1,11 +1,13 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -19,6 +21,7 @@ type Commander struct {
 	registry  *provider.Registry
 	bus       *EventBus
 	config    *config.Config
+	mcp       *mcp.Proxy
 	maxAgents int
 }
 
@@ -32,6 +35,17 @@ func NewCommander(s *store.Store, reg *provider.Registry, bus *EventBus, cfg *co
 		config:    cfg,
 		maxAgents: cfg.Swarm.MaxAgents,
 	}
+}
+
+// SetMCP sets the MCP proxy for all agents.
+func (c *Commander) SetMCP(proxy *mcp.Proxy) {
+	c.mu.Lock()
+	c.mcp = proxy
+	// Set MCP on all existing agents
+	for _, agent := range c.agents {
+		agent.SetMCP(proxy)
+	}
+	c.mu.Unlock()
 }
 
 // LoadAgents loads existing agents from the store.
@@ -52,7 +66,10 @@ func (c *Commander) LoadAgents() error {
 			continue
 		}
 
-		agent := NewAgent(sa.ID, sa.Name, p, c.store, c.bus)
+		agent := NewAgent(sa.ID, sa.Name, sa.CreatedAt, p, c.store, c.bus)
+		if c.mcp != nil {
+			agent.SetMCP(c.mcp)
+		}
 		c.agents[sa.ID] = agent
 	}
 
@@ -87,7 +104,10 @@ func (c *Commander) CreateAgent(name, providerName string) (*Agent, error) {
 	}
 
 	// Create runtime agent
-	agent := NewAgent(stored.ID, stored.Name, p, c.store, c.bus)
+	agent := NewAgent(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus)
+	if c.mcp != nil {
+		agent.SetMCP(c.mcp)
+	}
 	c.agents[stored.ID] = agent
 
 	// Emit event
@@ -227,7 +247,7 @@ func (c *Commander) SendMessage(id, content string) error {
 	if err != nil {
 		return err
 	}
-	return agent.SendMessage(content)
+	return agent.SendMessage(content, store.MemorySourceDirect)
 }
 
 // Broadcast sends a message to all running agents.
@@ -248,14 +268,17 @@ func (c *Commander) Broadcast(content string) error {
 		Timestamp: time.Now(),
 	})
 
-	var lastErr error
+	var errs []error
 	for _, a := range agents {
-		if err := a.SendMessage(content); err != nil {
-			lastErr = err
+		if err := a.SendMessage(content, store.MemorySourceBroadcast); err != nil {
+			errs = append(errs, fmt.Errorf("agent %s: %w", a.ID(), err))
 		}
 	}
 
-	return lastErr
+	if len(errs) > 0 {
+		return fmt.Errorf("broadcast failed for %d agent(s): %w", len(errs), errors.Join(errs...))
+	}
+	return nil
 }
 
 // StopAll stops all running agents.
@@ -284,4 +307,9 @@ func (c *Commander) AgentCount() int {
 // MaxAgents returns the maximum allowed agents.
 func (c *Commander) MaxAgents() int {
 	return c.maxAgents
+}
+
+// Store returns the store for direct access (e.g., for testing).
+func (c *Commander) Store() *store.Store {
+	return c.store
 }

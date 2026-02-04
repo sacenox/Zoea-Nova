@@ -8,6 +8,7 @@ import (
 type MockProvider struct {
 	name      string
 	response  string
+	toolCalls []ToolCall
 	streamErr error
 	chatErr   error
 }
@@ -32,6 +33,12 @@ func (p *MockProvider) WithStreamError(err error) *MockProvider {
 	return p
 }
 
+// WithToolCalls sets tool calls to return from ChatWithTools.
+func (p *MockProvider) WithToolCalls(calls []ToolCall) *MockProvider {
+	p.toolCalls = calls
+	return p
+}
+
 // Name returns the provider identifier.
 func (p *MockProvider) Name() string {
 	return p.name
@@ -43,6 +50,17 @@ func (p *MockProvider) Chat(ctx context.Context, messages []Message) (string, er
 		return "", p.chatErr
 	}
 	return p.response, nil
+}
+
+// ChatWithTools returns the predefined response or tool calls.
+func (p *MockProvider) ChatWithTools(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
+	if p.chatErr != nil {
+		return nil, p.chatErr
+	}
+	return &ChatResponse{
+		Content:   p.response,
+		ToolCalls: p.toolCalls,
+	}, nil
 }
 
 // Stream returns the predefined response as a single chunk.

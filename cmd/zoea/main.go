@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rs/zerolog"
@@ -29,12 +31,18 @@ func main() {
 		showVersion = flag.Bool("version", false, "Show version and exit")
 		configPath  = flag.String("config", "config.toml", "Path to config file")
 		debug       = flag.Bool("debug", false, "Enable debug logging")
+		testMCP     = flag.Bool("test-mcp", false, "Test MCP connection and tool calling, then exit")
 	)
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("Zoea Nova %s\n", Version)
 		os.Exit(0)
+	}
+
+	if *testMCP {
+		runMCPTest(*configPath)
+		return
 	}
 
 	// Initialize logging
@@ -86,7 +94,31 @@ func main() {
 
 	// Initialize MCP proxy
 	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
-	mcp.RegisterOrchestratorTools(mcpProxy, commander)
+	mcp.RegisterOrchestratorTools(mcpProxy, &commanderAdapter{commander})
+
+	// Initialize upstream MCP connection if configured
+	if mcpProxy.HasUpstream() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := mcpProxy.Initialize(ctx); err != nil {
+			log.Error().Err(err).Str("upstream", cfg.MCP.Upstream).Msg("Failed to initialize MCP upstream - game tools will be unavailable")
+		} else {
+			// List available tools to verify connection
+			tools, err := mcpProxy.ListTools(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to list MCP tools")
+			} else {
+				log.Info().Int("total_tools", len(tools)).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP tools available")
+				for _, t := range tools {
+					log.Debug().Str("tool", t.Name).Str("description", t.Description).Msg("Available tool")
+				}
+			}
+		}
+		cancel()
+	}
+
+	// Connect MCP proxy to commander so agents can use tools
+	commander.SetMCP(mcpProxy)
+
 	log.Debug().Bool("upstream", mcpProxy.HasUpstream()).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP proxy initialized")
 
 	// Set up signal handling for graceful shutdown
@@ -166,4 +198,189 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 	}
 
 	return registry
+}
+
+// commanderAdapter adapts core.Commander to the mcp.Orchestrator interface.
+type commanderAdapter struct {
+	commander *core.Commander
+}
+
+func (a *commanderAdapter) ListAgents() []mcp.AgentInfo {
+	agents := a.commander.ListAgents()
+	result := make([]mcp.AgentInfo, len(agents))
+	for i, agent := range agents {
+		result[i] = mcp.AgentInfo{
+			ID:        agent.ID(),
+			Name:      agent.Name(),
+			State:     string(agent.State()),
+			Provider:  agent.ProviderName(),
+			LastError: agent.LastError(),
+		}
+	}
+	return result
+}
+
+func (a *commanderAdapter) GetAgent(id string) (mcp.AgentInfo, error) {
+	agent, err := a.commander.GetAgent(id)
+	if err != nil {
+		return mcp.AgentInfo{}, err
+	}
+	return mcp.AgentInfo{
+		ID:        agent.ID(),
+		Name:      agent.Name(),
+		State:     string(agent.State()),
+		Provider:  agent.ProviderName(),
+		LastError: agent.LastError(),
+	}, nil
+}
+
+func (a *commanderAdapter) AgentCount() int {
+	return a.commander.AgentCount()
+}
+
+func (a *commanderAdapter) MaxAgents() int {
+	return a.commander.MaxAgents()
+}
+
+func (a *commanderAdapter) SendMessage(agentID, message string) error {
+	return a.commander.SendMessage(agentID, message)
+}
+
+func (a *commanderAdapter) Broadcast(message string) error {
+	return a.commander.Broadcast(message)
+}
+
+// runMCPTest tests the MCP connection and tool calling.
+func runMCPTest(configPath string) {
+	fmt.Println("=== MCP Tool Test ===")
+	fmt.Println()
+
+	// Load config
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create MCP proxy
+	fmt.Printf("Upstream MCP: %s\n", cfg.MCP.Upstream)
+	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
+
+	// Create a mock orchestrator for local tools
+	mockOrch := &mockOrchestrator{}
+	mcp.RegisterOrchestratorTools(mcpProxy, mockOrch)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Initialize upstream if configured
+	if mcpProxy.HasUpstream() {
+		fmt.Println("\nInitializing upstream MCP connection...")
+		if err := mcpProxy.Initialize(ctx); err != nil {
+			fmt.Printf("ERROR: Failed to initialize upstream: %v\n", err)
+			fmt.Println("(Continuing with local tools only)")
+		} else {
+			fmt.Println("OK: Upstream initialized")
+		}
+	} else {
+		fmt.Println("\nNo upstream configured - local tools only")
+	}
+
+	// List all tools
+	fmt.Println("\n--- Available Tools ---")
+	tools, err := mcpProxy.ListTools(ctx)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to list tools: %v\n", err)
+		fmt.Println("(This may indicate the upstream server doesn't support tools/list or returned an error)")
+	}
+
+	if len(tools) == 0 {
+		fmt.Println("WARNING: No tools available!")
+	} else {
+		localCount := 0
+		upstreamCount := 0
+		for _, t := range tools {
+			prefix := "  "
+			if len(t.Name) > 5 && t.Name[:5] == "zoea_" {
+				prefix = "  [local] "
+				localCount++
+			} else {
+				prefix = "  [upstream] "
+				upstreamCount++
+			}
+			fmt.Printf("%s%s - %s\n", prefix, t.Name, t.Description)
+		}
+		fmt.Printf("\nTotal: %d tools (%d local, %d upstream)\n", len(tools), localCount, upstreamCount)
+	}
+
+	// Test calling a local tool
+	fmt.Println("\n--- Testing Local Tool Call ---")
+	fmt.Println("Calling: zoea_swarm_status")
+	result, err := mcpProxy.CallTool(ctx, "zoea_swarm_status", nil)
+	if err != nil {
+		fmt.Printf("ERROR: %v\n", err)
+	} else if result.IsError {
+		fmt.Printf("TOOL ERROR: %s\n", result.Content[0].Text)
+	} else {
+		fmt.Printf("OK: %s\n", result.Content[0].Text)
+	}
+
+	// Test calling an upstream tool if available
+	if mcpProxy.HasUpstream() {
+		fmt.Println("\n--- Testing Upstream Tool Call ---")
+		// Try to find a non-zoea tool to call
+		var upstreamTool *mcp.Tool
+		for i := range tools {
+			if len(tools[i].Name) < 5 || tools[i].Name[:5] != "zoea_" {
+				upstreamTool = &tools[i]
+				break
+			}
+		}
+		if upstreamTool != nil {
+			fmt.Printf("Calling: %s\n", upstreamTool.Name)
+			result, err := mcpProxy.CallTool(ctx, upstreamTool.Name, nil)
+			if err != nil {
+				fmt.Printf("ERROR: %v\n", err)
+			} else if result.IsError {
+				fmt.Printf("TOOL ERROR: %s\n", result.Content[0].Text)
+			} else {
+				text := result.Content[0].Text
+				if len(text) > 200 {
+					text = text[:197] + "..."
+				}
+				fmt.Printf("OK: %s\n", text)
+			}
+		} else {
+			fmt.Println("No upstream tools found to test")
+		}
+	}
+
+	fmt.Println("\n=== Test Complete ===")
+}
+
+// mockOrchestrator is a simple orchestrator for testing.
+type mockOrchestrator struct{}
+
+func (m *mockOrchestrator) ListAgents() []mcp.AgentInfo {
+	return []mcp.AgentInfo{}
+}
+
+func (m *mockOrchestrator) GetAgent(id string) (mcp.AgentInfo, error) {
+	return mcp.AgentInfo{}, fmt.Errorf("no agents in test mode")
+}
+
+func (m *mockOrchestrator) AgentCount() int {
+	return 0
+}
+
+func (m *mockOrchestrator) MaxAgents() int {
+	return 16
+}
+
+func (m *mockOrchestrator) SendMessage(agentID, message string) error {
+	return fmt.Errorf("not available in test mode")
+}
+
+func (m *mockOrchestrator) Broadcast(message string) error {
+	return fmt.Errorf("not available in test mode")
 }

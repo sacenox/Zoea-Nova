@@ -15,9 +15,31 @@ Control several automated players in the game https://www.spacemolt.com/. Each i
   - Capability to broadcast shared objectives to the entire swarm simultaneously.
   - Targeted messaging/tasking for individual swarm members.
 - **Command Center TUI:**
-  - **Aggregated Dashboard:** High-level swarm status, health, and positioning to prevent UI noise.
-  - **Focus Mode:** Detailed logs and direct control for individual agents.
+  - **Aggregated Dashboard:** High-level swarm status, health, swarm message history, and agent list.
+  - **Focus Mode:** Detailed conversation logs and direct control for individual agents.
   - **Aesthetic:** Retro-futuristic (80s/90s) CRT-style visuals with reactive animations.
+
+### Dashboard Layout
+
+```
+╔═══ ZOEA NOVA COMMAND CENTER ═══╗
+● 2  ○ 1  ◌ 0  ✖ 0              ← Agent state counts (running/idle/stopped/errored)
+─── Swarm Messages ───           ← Recent broadcast messages (up to 10)
+14:30:05 Hello everyone, mine!
+14:32:12 Check your inventories
+─── Agents ───                   ← Agent list with status and last message
+⠋ agent-1    running  [ollama] │ I found some ore...
+○ agent-2    idle     [ollama] │ Ready to start
+Press ? for help
+```
+
+### Focus Mode Layout
+
+Scrollable conversation viewport showing full message history with role-based styling:
+- **System** messages in cyan
+- **User** messages in green
+- **Assistant** messages in magenta
+- **Tool** calls/results in yellow
 
 ## Tech Stack & Dependencies
 
@@ -58,8 +80,41 @@ upstream = "https://game.spacemolt.com/mcp"
 
 - **Database:** Single SQLite file at `$HOME/.zoea-nova/zoea.db`.
 - **Scope:** Agent memories, conversation history, swarm state, per-agent provider config, and user preferences.
-- **Migrations:** Schema managed via embedded SQL migrations (e.g., `golang-migrate` or manual versioning). Never support backwards, never write data migrations. If we change the scheme we crate a new db fresh.
+- **Migrations:** Schema managed via embedded SQL migrations (e.g., `golang-migrate` or manual versioning). Never support backwards, never write data migrations. If we change the schema we create a new db fresh.
 - **Backup:** Consider periodic WAL checkpoints; SQLite handles crash recovery.
+
+### Database Schema (v2)
+
+```sql
+-- Agents table
+CREATE TABLE agents (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'idle',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Memories table (conversation history)
+CREATE TABLE memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    role TEXT NOT NULL,        -- system, user, assistant, tool
+    source TEXT NOT NULL,      -- direct, broadcast, system, llm, tool
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+);
+```
+
+**Memory Sources:**
+- `direct` — Message sent directly to a specific agent
+- `broadcast` — Message broadcast to all agents (swarm command)
+- `system` — System prompts
+- `llm` — LLM-generated responses
+- `tool` — Tool call results
 
 ## Agent Lifecycle
 

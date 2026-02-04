@@ -11,9 +11,9 @@ import (
 
 // Config is the root configuration structure.
 type Config struct {
-	Swarm     SwarmConfig              `toml:"swarm"`
+	Swarm     SwarmConfig               `toml:"swarm"`
 	Providers map[string]ProviderConfig `toml:"providers"`
-	MCP       MCPConfig                `toml:"mcp"`
+	MCP       MCPConfig                 `toml:"mcp"`
 }
 
 // SwarmConfig holds swarm-related settings.

@@ -226,14 +226,23 @@ func TestRenderDashboard(t *testing.T) {
 		{ID: "2", Name: "agent-2", State: "idle", Provider: "ollama"},
 	}
 
-	dashboard := RenderDashboard(agents, 0, 80, 24)
+	loadingSet := make(map[string]bool)
+	swarmMsgs := []SwarmMessageInfo{}
+	dashboard := RenderDashboard(agents, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard")
+	}
+
+	// Test with loading state
+	loadingSet["1"] = true
+	dashboardWithLoading := RenderDashboard(agents, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
+	if dashboardWithLoading == "" {
+		t.Error("expected non-empty dashboard with loading")
 	}
 }
 
 func TestRenderDashboardEmpty(t *testing.T) {
-	dashboard := RenderDashboard([]AgentInfo{}, 0, 80, 24)
+	dashboard := RenderDashboard([]AgentInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋")
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard even with no agents")
 	}
@@ -243,12 +252,18 @@ func TestRenderFocusView(t *testing.T) {
 	agent := AgentInfo{ID: "1", Name: "test-agent", State: "running", Provider: "ollama"}
 	logs := []LogEntry{
 		{Role: "user", Content: "Hello"},
-		{Role: "assistant", Content: "Hi there!"},
+		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
 	}
 
-	view := RenderFocusView(agent, logs, 80, 24)
+	view := RenderFocusView(agent, logs, 80, 24, false, "⠋")
 	if view == "" {
 		t.Error("expected non-empty focus view")
+	}
+
+	// Test with loading state
+	viewLoading := RenderFocusView(agent, logs, 80, 24, true, "⠋")
+	if viewLoading == "" {
+		t.Error("expected non-empty focus view with loading")
 	}
 }
 

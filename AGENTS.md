@@ -17,7 +17,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Use `zerolog` for logging. Never log to stdout/stderr (TUI owns the terminal).
 - Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
 - Follow the Bubble Tea Elm Architecture: Model → Update → View.
-- No "nice to haves." This is an MVP. Keep scope minimal.
+- No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
 
 ## Terminology:
 
@@ -27,16 +27,18 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - **Provider**: An LLM backend (Ollama local or OpenCode Zen remote).
 - **MCP**: Model Context Protocol—the interface to SpaceMolt game actions.
 - **Event Bus**: Channel-based pub/sub for TUI updates from core goroutines.
-- **Focus Mode**: TUI view showing detailed logs for a single agent.
-- **Dashboard**: TUI view showing aggregated swarm status.
+- **Focus Mode**: TUI view showing detailed conversation logs for a single agent.
+- **Dashboard**: TUI view showing swarm status, broadcast history, and agent list.
+- **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
+- **Source**: Origin of a memory—`direct` (single agent), `broadcast` (swarm), `system`, `llm`, or `tool`.
 
 ## Workflow:
 
 The user follows a structured development workflow. Respect these phases:
 
-1. **Design**: Changes to architecture or new features start in `INITIAL_IMPLEMENTATION_DESIGN.md`. Don't implement without design approval.
+1. **Design**: Documentation for this project is in `documentation/` Keep it up to date and accurate.
 2. **Plan**: Complex changes require a plan in `.cursor/plans/`. Reference the plan while implementing.
-3. **Implement**: Follow the plan phase-by-phase. Update tests alongside code.
+3. **Implement**: Follow the plan phase-by-phase. Update tests alongside code, add more as needed.
 4. **Test**: Run `make test` after each phase. Fix failures before moving on.
 5. **Build**: Run `make build` to verify compilation. Address any warnings.
 

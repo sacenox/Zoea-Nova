@@ -4,7 +4,7 @@ max_agents = 16
 
 [providers.ollama]
 endpoint = "http://localhost:11434"
-model = "llama3"
+model = "qwen3:4b"
 
 [providers.opencode_zen]
 endpoint = "https://api.opencode.ai/v1"

@@ -2,23 +2,50 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
+
+// SystemPrompt is the initial prompt sent to every agent when they first start.
+const SystemPrompt = `You are an AI agent playing SpaceMolt, an online multiplayer game.
+
+You have function calling capabilities. Use the tools provided to interact with the game.
+
+When you start, explore the available tools to understand what actions you can take. Register or login, then play the game - interact with other players and explore.
+
+Play indefinitely and provide updates to the user about your progress. If you encounter errors, try different approaches.
+
+## Swarm Coordination
+
+You are part of a swarm of AI agents. You can coordinate with other agents using these tools:
+
+- zoea_list_agents: See all agents in the swarm and their status
+- zoea_get_agent: Get details about a specific agent
+- zoea_swarm_status: Get overall swarm statistics
+- zoea_send_message: Send a message to another agent
+- zoea_broadcast: Send a message to all running agents`
+
+// MaxToolIterations limits the number of tool call loops to prevent infinite loops.
+const MaxToolIterations = 10
 
 // Agent represents a single AI agent in the swarm.
 type Agent struct {
 	mu sync.RWMutex
 
-	id       string
-	name     string
-	provider provider.Provider
-	store    *store.Store
-	bus      *EventBus
+	id        string
+	name      string
+	createdAt time.Time
+	provider  provider.Provider
+	store     *store.Store
+	bus       *EventBus
+	mcp       *mcp.Proxy
 
 	state  AgentState
 	cancel context.CancelFunc
@@ -28,15 +55,23 @@ type Agent struct {
 }
 
 // NewAgent creates a new agent from stored data.
-func NewAgent(id, name string, p provider.Provider, s *store.Store, bus *EventBus) *Agent {
+func NewAgent(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Agent {
 	return &Agent{
-		id:       id,
-		name:     name,
-		provider: p,
-		store:    s,
-		bus:      bus,
-		state:    AgentStateIdle,
+		id:        id,
+		name:      name,
+		createdAt: createdAt,
+		provider:  p,
+		store:     s,
+		bus:       bus,
+		state:     AgentStateIdle,
 	}
+}
+
+// SetMCP sets the MCP proxy for tool calling.
+func (a *Agent) SetMCP(proxy *mcp.Proxy) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mcp = proxy
 }
 
 // ID returns the agent's unique identifier.
@@ -49,6 +84,11 @@ func (a *Agent) Name() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.name
+}
+
+// CreatedAt returns when the agent was created.
+func (a *Agent) CreatedAt() time.Time {
+	return a.createdAt
 }
 
 // State returns the agent's current state.
@@ -107,6 +147,12 @@ func (a *Agent) Start() error {
 		return err
 	}
 
+	// Add system prompt if this is the first time starting (no memories yet)
+	count, err := a.store.CountMemories(a.id)
+	if err == nil && count == 0 {
+		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt)
+	}
+
 	// Emit state change event
 	a.emitStateChange(oldState, AgentStateRunning)
 
@@ -145,10 +191,13 @@ func (a *Agent) Stop() error {
 }
 
 // SendMessage sends a message to the agent for processing.
-func (a *Agent) SendMessage(content string) error {
+// This implements the agentic loop with tool calling support.
+// The source parameter indicates whether this is a direct or broadcast message.
+func (a *Agent) SendMessage(content string, source store.MemorySource) error {
 	a.mu.RLock()
 	state := a.state
 	p := a.provider
+	mcpProxy := a.mcp
 	a.mu.RUnlock()
 
 	if state != AgentStateRunning {
@@ -156,7 +205,7 @@ func (a *Agent) SendMessage(content string) error {
 	}
 
 	// Store the user message
-	if _, err := a.store.AddMemory(a.id, store.MemoryRoleUser, content); err != nil {
+	if _, err := a.store.AddMemory(a.id, store.MemoryRoleUser, source, content); err != nil {
 		return fmt.Errorf("store message: %w", err)
 	}
 
@@ -169,56 +218,314 @@ func (a *Agent) SendMessage(content string) error {
 		Timestamp: time.Now(),
 	})
 
-	// Get conversation history
-	memories, err := a.store.GetMemories(a.id)
-	if err != nil {
-		return fmt.Errorf("get memories: %w", err)
-	}
-
-	// Convert to provider messages
-	messages := make([]provider.Message, len(memories))
-	for i, m := range memories {
-		messages[i] = provider.Message{
-			Role:    string(m.Role),
-			Content: m.Content,
-		}
-	}
-
-	// Get response from provider
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Create context for the entire conversation turn
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	response, err := p.Chat(ctx, messages)
-	if err != nil {
-		a.mu.Lock()
-		a.lastError = err
-		a.mu.Unlock()
-
+	// Get available tools from MCP proxy
+	var tools []provider.Tool
+	if mcpProxy != nil {
+		mcpTools, err := mcpProxy.ListTools(ctx)
+		if err != nil {
+			// Log error but continue - agent can still chat without tools
+			a.bus.Publish(Event{
+				Type:      EventAgentError,
+				AgentID:   a.id,
+				AgentName: a.name,
+				Data:      ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
+				Timestamp: time.Now(),
+			})
+		} else {
+			tools = make([]provider.Tool, len(mcpTools))
+			toolNames := make([]string, len(mcpTools))
+			for i, t := range mcpTools {
+				tools[i] = provider.Tool{
+					Name:        t.Name,
+					Description: t.Description,
+					Parameters:  t.InputSchema,
+				}
+				toolNames[i] = t.Name
+			}
+			// Log available tools (only on first message or if debugging)
+			if len(tools) > 0 {
+				a.bus.Publish(Event{
+					Type:      EventAgentMessage,
+					AgentID:   a.id,
+					AgentName: a.name,
+					Data:      MessageData{Role: "system", Content: fmt.Sprintf("Tools available: %s", strings.Join(toolNames, ", "))},
+					Timestamp: time.Now(),
+				})
+			}
+		}
+	} else {
 		a.bus.Publish(Event{
 			Type:      EventAgentError,
 			AgentID:   a.id,
 			AgentName: a.name,
-			Data:      ErrorData{Error: err.Error()},
+			Data:      ErrorData{Error: "MCP proxy not configured - no tools available"},
 			Timestamp: time.Now(),
 		})
-		return fmt.Errorf("provider chat: %w", err)
 	}
 
-	// Store the assistant response
-	if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, response); err != nil {
-		return fmt.Errorf("store response: %w", err)
+	// Agentic loop: keep calling LLM until we get a final text response
+	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+		// Get conversation history
+		memories, err := a.store.GetMemories(a.id)
+		if err != nil {
+			return fmt.Errorf("get memories: %w", err)
+		}
+
+		// Convert to provider messages
+		messages := a.memoriesToMessages(memories)
+
+		// Signal LLM activity start
+		a.bus.Publish(Event{
+			Type:      EventNetworkLLM,
+			AgentID:   a.id,
+			AgentName: a.name,
+			Timestamp: time.Now(),
+		})
+
+		// Get response from provider
+		var response *provider.ChatResponse
+		if len(tools) > 0 {
+			response, err = p.ChatWithTools(ctx, messages, tools)
+		} else {
+			// No tools available, use simple chat
+			text, chatErr := p.Chat(ctx, messages)
+			if chatErr != nil {
+				err = chatErr
+			} else {
+				response = &provider.ChatResponse{Content: text}
+			}
+		}
+
+		if err != nil {
+			a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+			a.setError(err)
+			return fmt.Errorf("provider chat: %w", err)
+		}
+
+		// If we have tool calls, execute them
+		if len(response.ToolCalls) > 0 {
+			// Store the assistant's tool call request
+			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
+			if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON); err != nil {
+				return fmt.Errorf("store tool call: %w", err)
+			}
+
+			// Emit event showing which tools are being called
+			toolNames := make([]string, len(response.ToolCalls))
+			for i, tc := range response.ToolCalls {
+				toolNames[i] = tc.Name
+			}
+			a.bus.Publish(Event{
+				Type:      EventAgentMessage,
+				AgentID:   a.id,
+				AgentName: a.name,
+				Data:      MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
+				Timestamp: time.Now(),
+			})
+
+			// Execute each tool call
+			for _, tc := range response.ToolCalls {
+				// Signal MCP activity
+				a.bus.Publish(Event{
+					Type:      EventNetworkMCP,
+					AgentID:   a.id,
+					AgentName: a.name,
+					Timestamp: time.Now(),
+				})
+
+				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
+
+				// Store the tool result
+				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
+				if _, err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent); err != nil {
+					return fmt.Errorf("store tool result: %w", err)
+				}
+
+				// Emit tool result event
+				a.bus.Publish(Event{
+					Type:      EventAgentMessage,
+					AgentID:   a.id,
+					AgentName: a.name,
+					Data:      MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
+					Timestamp: time.Now(),
+				})
+			}
+
+			// Continue loop to get next LLM response
+			continue
+		}
+
+		// No tool calls - we have a final response
+		finalResponse := response.Content
+		if finalResponse == "" {
+			finalResponse = "(no response)"
+		}
+
+		// Store the assistant response
+		if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse); err != nil {
+			return fmt.Errorf("store response: %w", err)
+		}
+
+		// Signal network idle
+		a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+
+		// Emit response event
+		a.bus.Publish(Event{
+			Type:      EventAgentResponse,
+			AgentID:   a.id,
+			AgentName: a.name,
+			Data:      MessageData{Role: "assistant", Content: finalResponse},
+			Timestamp: time.Now(),
+		})
+
+		return nil
 	}
 
-	// Emit response event
+	// Signal network idle on max iterations
+	a.bus.Publish(Event{Type: EventNetworkIdle, AgentID: a.id, Timestamp: time.Now()})
+
+	return fmt.Errorf("max tool iterations (%d) exceeded", MaxToolIterations)
+}
+
+// memoriesToMessages converts stored memories to provider messages.
+func (a *Agent) memoriesToMessages(memories []*store.Memory) []provider.Message {
+	messages := make([]provider.Message, 0, len(memories))
+
+	for _, m := range memories {
+		msg := provider.Message{
+			Role:    string(m.Role),
+			Content: m.Content,
+		}
+
+		// Handle tool role - needs ToolCallID
+		if m.Role == store.MemoryRoleTool {
+			// Extract tool call ID from stored format: "tool_call_id:content"
+			if idx := strings.Index(m.Content, ":"); idx > 0 {
+				msg.ToolCallID = m.Content[:idx]
+				msg.Content = m.Content[idx+1:]
+			}
+		}
+
+		// Handle assistant messages with tool calls
+		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, "[TOOL_CALLS]") {
+			// Parse tool calls from stored format
+			msg.Content = ""
+			msg.ToolCalls = a.parseStoredToolCalls(m.Content)
+		}
+
+		messages = append(messages, msg)
+	}
+
+	return messages
+}
+
+// executeToolCall executes a single tool call via MCP proxy.
+func (a *Agent) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc provider.ToolCall) (*mcp.ToolResult, error) {
+	if mcpProxy == nil {
+		return &mcp.ToolResult{
+			Content: []mcp.ContentBlock{{Type: "text", Text: "MCP not configured"}},
+			IsError: true,
+		}, nil
+	}
+
+	return mcpProxy.CallTool(ctx, tc.Name, tc.Arguments)
+}
+
+// formatToolCallsForStorage formats tool calls for storage in memory.
+func (a *Agent) formatToolCallsForStorage(calls []provider.ToolCall) string {
+	var parts []string
+	for _, tc := range calls {
+		parts = append(parts, fmt.Sprintf("%s:%s:%s", tc.ID, tc.Name, string(tc.Arguments)))
+	}
+	return "[TOOL_CALLS]" + strings.Join(parts, "|")
+}
+
+// parseStoredToolCalls parses tool calls from stored format.
+func (a *Agent) parseStoredToolCalls(stored string) []provider.ToolCall {
+	stored = strings.TrimPrefix(stored, "[TOOL_CALLS]")
+	if stored == "" {
+		return nil
+	}
+
+	var calls []provider.ToolCall
+	parts := strings.Split(stored, "|")
+	for _, part := range parts {
+		fields := strings.SplitN(part, ":", 3)
+		if len(fields) >= 3 {
+			calls = append(calls, provider.ToolCall{
+				ID:        fields[0],
+				Name:      fields[1],
+				Arguments: json.RawMessage(fields[2]),
+			})
+		}
+	}
+	return calls
+}
+
+// formatToolResult formats a tool result for storage (includes ID for LLM context).
+func (a *Agent) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
+	if err != nil {
+		return fmt.Sprintf("%s:Error: %v", toolCallID, err)
+	}
+
+	var texts []string
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			texts = append(texts, block.Text)
+		}
+	}
+
+	content := strings.Join(texts, "\n")
+	if result.IsError {
+		content = "Error: " + content
+	}
+
+	return fmt.Sprintf("%s:%s", toolCallID, content)
+}
+
+// formatToolResultDisplay formats a tool result for UI display (human-readable).
+func (a *Agent) formatToolResultDisplay(result *mcp.ToolResult, err error) string {
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	var texts []string
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			texts = append(texts, block.Text)
+		}
+	}
+
+	content := strings.Join(texts, "\n")
+	if result.IsError {
+		content = "Error: " + content
+	}
+
+	// Truncate long results for display
+	if len(content) > 500 {
+		content = content[:497] + "..."
+	}
+
+	return content
+}
+
+// setError sets the agent's last error and emits an error event.
+func (a *Agent) setError(err error) {
+	a.mu.Lock()
+	a.lastError = err
+	a.mu.Unlock()
+
 	a.bus.Publish(Event{
-		Type:      EventAgentResponse,
+		Type:      EventAgentError,
 		AgentID:   a.id,
 		AgentName: a.name,
-		Data:      MessageData{Role: "assistant", Content: response},
+		Data:      ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
-
-	return nil
 }
 
 // run is the agent's main processing loop.

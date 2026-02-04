@@ -27,6 +27,9 @@ const (
 	EventAgentResponse      EventType = "agent_response"
 	EventAgentError         EventType = "agent_error"
 	EventBroadcast          EventType = "broadcast"
+	EventNetworkLLM         EventType = "network_llm"  // LLM request started/finished
+	EventNetworkMCP         EventType = "network_mcp"  // MCP request started/finished
+	EventNetworkIdle        EventType = "network_idle" // Network activity finished
 )
 
 // Event represents something that happened in the swarm.

@@ -3,10 +3,15 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -36,7 +41,26 @@ type Model struct {
 	logs    []LogEntry
 	focusID string
 
+	// Swarm broadcast history
+	swarmMessages []SwarmMessage
+
+	spinner    spinner.Model
+	loadingSet map[string]bool // agentIDs currently loading
+
+	// Conversation viewport
+	viewport   viewport.Model
+	autoScroll bool // true if viewport should auto-scroll to bottom
+
+	// Network activity indicator
+	netIndicator NetIndicator
+
 	err error
+}
+
+// SwarmMessage represents a broadcast message for display.
+type SwarmMessage struct {
+	Content   string
+	CreatedAt time.Time
 }
 
 // EventMsg wraps a core event for the TUI.
@@ -46,21 +70,40 @@ type EventMsg struct {
 
 // New creates a new TUI model.
 func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) Model {
+	// Initialize spinner with retro dots style
+	sp := spinner.New()
+	sp.Spinner = spinner.Spinner{
+		Frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		FPS:    time.Second / 10, // 10 frames per second
+	}
+	sp.Style = lipgloss.NewStyle().Foreground(colorSecondary)
+
+	// Initialize viewport for conversation scrolling
+	vp := viewport.New(80, 20)
+	vp.Style = logStyle
+
 	return Model{
-		commander: commander,
-		store:     s,
-		eventCh:   eventCh,
-		view:      ViewDashboard,
-		input:     NewInputModel(),
-		agents:    []AgentInfo{},
+		commander:    commander,
+		store:        s,
+		eventCh:      eventCh,
+		view:         ViewDashboard,
+		input:        NewInputModel(),
+		agents:       []AgentInfo{},
+		spinner:      sp,
+		loadingSet:   make(map[string]bool),
+		viewport:     vp,
+		autoScroll:   true,
+		netIndicator: NewNetIndicator(),
 	}
 }
 
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
+		m.netIndicator.Init(),
 		m.refreshAgents(),
 		m.listenForEvents(),
+		m.spinner.Tick,
 	)
 }
 
@@ -73,6 +116,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width - 4)
+
+		// Update viewport size (account for header, info panel, title, footer)
+		headerHeight := 6 // approximate height used by header/info/title
+		footerHeight := 2
+		vpHeight := msg.Height - headerHeight - footerHeight - 3
+		if vpHeight < 5 {
+			vpHeight = 5
+		}
+		m.viewport.Width = msg.Width - 6
+		m.viewport.Height = vpHeight
+
+		// Re-render content if in focus view
+		if m.view == ViewFocus {
+			m.updateViewportContent()
+		}
 
 	case tea.KeyMsg:
 		// Handle input mode first
@@ -118,6 +176,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshAgentsMsg:
 		m.refreshAgentList()
+		m.refreshSwarmMessages()
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case sendMessageResult:
+		// Message finished sending (success or failure)
+		delete(m.loadingSet, msg.agentID)
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		// Check if any loading is still active
+		if len(m.loadingSet) == 0 {
+			m.netIndicator.SetActivity(NetActivityIdle)
+		}
+		if m.view == ViewFocus && msg.agentID == m.focusID {
+			m.loadAgentLogs()
+		}
+
+	case broadcastResult:
+		// Broadcast finished - clear all loading states
+		m.loadingSet = make(map[string]bool)
+		m.netIndicator.SetActivity(NetActivityIdle)
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		// Refresh swarm messages to show the new broadcast
+		m.refreshSwarmMessages()
+
+	case NetIndicatorTickMsg:
+		var cmd tea.Cmd
+		m.netIndicator, cmd = m.netIndicator.Update(msg)
+		return m, cmd
 	}
 
 	return m, tea.Batch(cmds...)
@@ -131,12 +224,26 @@ func (m Model) View() string {
 
 	var content string
 
+	// Check if currently focused agent is loading
+	isLoading := m.loadingSet[m.focusID]
+
+	// Reserve space for status bar
+	contentHeight := m.height - 1
+
 	if m.showHelp {
-		content = RenderHelp(m.width, m.height)
+		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
-		content = RenderFocusView(m.agentByID(m.focusID), m.logs, m.width, m.height-3)
+		content = RenderFocusViewWithViewport(m.agentByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll)
 	} else {
-		content = RenderDashboard(m.agents, m.selectedIdx, m.width, m.height-3)
+		// Convert swarm messages for display
+		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
+		for i, msg := range m.swarmMessages {
+			swarmInfos[i] = SwarmMessageInfo{
+				Content:   msg.Content,
+				CreatedAt: msg.CreatedAt,
+			}
+		}
+		content = RenderDashboard(m.agents, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
 	}
 
 	// Add input if active
@@ -150,7 +257,69 @@ func (m Model) View() string {
 		content += "\n" + errMsg
 	}
 
-	return content
+	// Build status bar
+	statusBar := m.renderStatusBar()
+
+	return content + "\n" + statusBar
+}
+
+// renderStatusBar renders the bottom status bar with network indicator.
+func (m Model) renderStatusBar() string {
+	// Network indicator on the left
+	netStatus := m.netIndicator.View()
+
+	// View indicator in the middle
+	var viewName string
+	switch m.view {
+	case ViewDashboard:
+		viewName = "DASHBOARD"
+	case ViewFocus:
+		idPreview := m.focusID
+		if len(idPreview) > 8 {
+			idPreview = idPreview[:8]
+		}
+		viewName = "FOCUS: " + idPreview
+	}
+
+	// Agent count on the right
+	running := 0
+	for _, a := range m.agents {
+		if a.State == "running" {
+			running++
+		}
+	}
+	agentStatus := fmt.Sprintf("Agents: %d/%d running", running, len(m.agents))
+
+	// Calculate spacing
+	leftWidth := lipgloss.Width(netStatus)
+	rightWidth := lipgloss.Width(agentStatus)
+	middleWidth := lipgloss.Width(viewName)
+	totalUsed := leftWidth + rightWidth + middleWidth
+	spacing := m.width - totalUsed - 4 // -4 for some padding
+
+	if spacing < 2 {
+		spacing = 2
+	}
+
+	leftPad := spacing / 2
+	rightPad := spacing - leftPad
+
+	// Style the status bar
+	barStyle := lipgloss.NewStyle().
+		Background(colorBorder).
+		Foreground(colorPrimary).
+		Width(m.width)
+
+	viewStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	agentStyle := lipgloss.NewStyle().Foreground(colorSecondary)
+
+	bar := netStatus +
+		strings.Repeat(" ", leftPad) +
+		viewStyle.Render(viewName) +
+		strings.Repeat(" ", rightPad) +
+		agentStyle.Render(agentStatus)
+
+	return barStyle.Render(bar)
 }
 
 func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -169,11 +338,13 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
 			m.focusID = m.agents[m.selectedIdx].ID
 			m.view = ViewFocus
+			m.autoScroll = true // Start at bottom when entering focus view
 			m.loadAgentLogs()
 		}
 
 	case key.Matches(msg, keys.NewAgent):
 		m.input.SetMode(InputModeNewAgent, "")
+		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Delete):
 		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
@@ -199,17 +370,20 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Broadcast):
 		m.input.SetMode(InputModeBroadcast, "")
+		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Message):
 		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
 			id := m.agents[m.selectedIdx].ID
 			m.input.SetMode(InputModeMessage, id)
+			return m, m.input.Focus()
 		}
 
 	case key.Matches(msg, keys.Configure):
 		if len(m.agents) > 0 && m.selectedIdx < len(m.agents) {
 			id := m.agents[m.selectedIdx].ID
 			m.input.SetMode(InputModeConfigProvider, id)
+			return m, m.input.Focus()
 		}
 	}
 
@@ -220,18 +394,42 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Message):
 		m.input.SetMode(InputModeMessage, m.focusID)
+		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Relaunch):
 		m.err = m.commander.StartAgent(m.focusID)
+		return m, nil
 
 	case key.Matches(msg, keys.Stop):
 		m.err = m.commander.StopAgent(m.focusID)
+		return m, nil
 
 	case key.Matches(msg, keys.Configure):
 		m.input.SetMode(InputModeConfigProvider, m.focusID)
+		return m, m.input.Focus()
+
+	case key.Matches(msg, keys.End):
+		// Go to bottom and enable auto-scroll
+		m.viewport.GotoBottom()
+		m.autoScroll = true
+		return m, nil
 	}
 
-	return m, nil
+	// Pass other keys to viewport for scrolling
+	var cmd tea.Cmd
+	wasAtBottom := m.viewport.AtBottom()
+	m.viewport, cmd = m.viewport.Update(msg)
+
+	// If user scrolled up, disable auto-scroll
+	if wasAtBottom && !m.viewport.AtBottom() {
+		m.autoScroll = false
+	}
+	// If user scrolled to bottom, enable auto-scroll
+	if m.viewport.AtBottom() {
+		m.autoScroll = true
+	}
+
+	return m, cmd
 }
 
 func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -247,18 +445,42 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		var cmd tea.Cmd
+
 		switch m.input.Mode() {
 		case InputModeBroadcast:
-			m.err = m.commander.Broadcast(value)
+			// Add to history before sending
+			m.input.AddToHistory(value)
+			// Mark all running agents as loading
+			agents := m.commander.ListAgents()
+			for _, a := range agents {
+				if a.State() == core.AgentStateRunning {
+					m.loadingSet[a.ID()] = true
+				}
+			}
+			m.netIndicator.SetActivity(NetActivityLLM)
+			// Use Broadcast to properly set source='broadcast'
+			cmd = m.broadcastAsync(value)
 
 		case InputModeMessage:
-			m.err = m.commander.SendMessage(m.input.TargetID(), value)
+			// Add to history before sending
+			m.input.AddToHistory(value)
+			targetID := m.input.TargetID()
+			m.loadingSet[targetID] = true
+			m.netIndicator.SetActivity(NetActivityLLM)
+			cmd = m.sendMessageAsync(targetID, value)
 			if m.view == ViewFocus {
 				m.loadAgentLogs()
 			}
 
 		case InputModeNewAgent:
-			_, m.err = m.commander.CreateAgent(value, "ollama")
+			agent, err := m.commander.CreateAgent(value, "ollama")
+			if err == nil {
+				// Auto-start newly created agents
+				m.err = m.commander.StartAgent(agent.ID())
+			} else {
+				m.err = err
+			}
 			m.refreshAgentList()
 
 		case InputModeConfigProvider:
@@ -266,7 +488,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		m.input.Reset()
-		return m, nil
+		return m, cmd
 	}
 
 	// Pass to text input
@@ -275,14 +497,51 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// sendMessageAsync sends a message to an agent asynchronously.
+func (m Model) sendMessageAsync(agentID, content string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.commander.SendMessage(agentID, content)
+		return sendMessageResult{agentID: agentID, err: err}
+	}
+}
+
+type broadcastResult struct {
+	err error
+}
+
+func (m Model) broadcastAsync(content string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.commander.Broadcast(content)
+		return broadcastResult{err: err}
+	}
+}
+
 func (m *Model) handleEvent(event core.Event) {
 	switch event.Type {
 	case core.EventAgentCreated, core.EventAgentDeleted, core.EventAgentStateChanged, core.EventAgentConfigChanged:
 		m.refreshAgentList()
 
-	case core.EventAgentResponse:
+	case core.EventAgentResponse, core.EventAgentMessage:
+		// Refresh dashboard to update last message
+		m.refreshAgentList()
 		if m.view == ViewFocus && event.AgentID == m.focusID {
 			m.loadAgentLogs()
+		}
+
+	case core.EventBroadcast:
+		// Refresh swarm message history
+		m.refreshSwarmMessages()
+
+	case core.EventNetworkLLM:
+		m.netIndicator.SetActivity(NetActivityLLM)
+
+	case core.EventNetworkMCP:
+		m.netIndicator.SetActivity(NetActivityMCP)
+
+	case core.EventNetworkIdle:
+		// Only go idle if no agents are loading
+		if len(m.loadingSet) == 0 {
+			m.netIndicator.SetActivity(NetActivityIdle)
 		}
 	}
 
@@ -294,13 +553,43 @@ func (m *Model) refreshAgentList() {
 	agents := m.commander.ListAgents()
 	m.agents = make([]AgentInfo, len(agents))
 	for i, a := range agents {
-		m.agents[i] = AgentInfoFromCore(a)
+		info := AgentInfoFromCore(a)
+
+		// Fetch last message for this agent
+		memories, err := m.store.GetRecentMemories(a.ID(), 1)
+		if err == nil && len(memories) > 0 {
+			info.LastMessage = memories[0].Content
+		}
+
+		m.agents[i] = info
+	}
+
+	// Sort by creation time (oldest first)
+	sort.Slice(m.agents, func(i, j int) bool {
+		return m.agents[i].CreatedAt.Before(m.agents[j].CreatedAt)
+	})
+}
+
+func (m *Model) refreshSwarmMessages() {
+	broadcasts, err := m.store.GetRecentBroadcasts(10)
+	if err != nil {
+		m.swarmMessages = nil
+		return
+	}
+
+	m.swarmMessages = make([]SwarmMessage, len(broadcasts))
+	for i, b := range broadcasts {
+		m.swarmMessages[i] = SwarmMessage{
+			Content:   b.Content,
+			CreatedAt: b.CreatedAt,
+		}
 	}
 }
 
 func (m *Model) loadAgentLogs() {
 	if m.focusID == "" {
 		m.logs = nil
+		m.viewport.SetContent("")
 		return
 	}
 
@@ -314,6 +603,30 @@ func (m *Model) loadAgentLogs() {
 	for i, mem := range memories {
 		m.logs[i] = LogEntryFromMemory(mem)
 	}
+
+	m.updateViewportContent()
+}
+
+// updateViewportContent renders log entries and sets viewport content.
+func (m *Model) updateViewportContent() {
+	if len(m.logs) == 0 {
+		m.viewport.SetContent(dimmedStyle.Render("No conversation history."))
+		return
+	}
+
+	var lines []string
+	for _, entry := range m.logs {
+		entryLines := renderLogEntry(entry, m.viewport.Width-2)
+		lines = append(lines, entryLines...)
+	}
+
+	content := strings.Join(lines, "\n")
+	m.viewport.SetContent(content)
+
+	// Auto-scroll to bottom if enabled
+	if m.autoScroll {
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m Model) agentByID(id string) AgentInfo {
@@ -326,6 +639,12 @@ func (m Model) agentByID(id string) AgentInfo {
 }
 
 type refreshAgentsMsg struct{}
+
+// sendMessageResult is returned when an async message send completes.
+type sendMessageResult struct {
+	agentID string
+	err     error
+}
 
 func (m Model) refreshAgents() tea.Cmd {
 	return func() tea.Msg {
@@ -360,6 +679,7 @@ var keys = struct {
 	Broadcast key.Binding
 	Message   key.Binding
 	Configure key.Binding
+	End       key.Binding
 }{
 	Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Help:      key.NewBinding(key.WithKeys("?")),
@@ -376,4 +696,5 @@ var keys = struct {
 	Broadcast: key.NewBinding(key.WithKeys("b")),
 	Message:   key.NewBinding(key.WithKeys("m")),
 	Configure: key.NewBinding(key.WithKeys("c")),
+	End:       key.NewBinding(key.WithKeys("end", "G")),
 }

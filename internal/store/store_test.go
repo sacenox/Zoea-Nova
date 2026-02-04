@@ -114,7 +114,7 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Add memories
-	m1, err := s.AddMemory(agent.ID, MemoryRoleSystem, "You are a helpful assistant.")
+	m1, err := s.AddMemory(agent.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -122,12 +122,12 @@ func TestMemoryCRUD(t *testing.T) {
 		t.Error("expected non-zero memory ID")
 	}
 
-	m2, err := s.AddMemory(agent.ID, MemoryRoleUser, "Hello!")
+	m2, err := s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "Hello!")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
-	m3, err := s.AddMemory(agent.ID, MemoryRoleAssistant, "Hi there!")
+	m3, err := s.AddMemory(agent.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestCascadeDelete(t *testing.T) {
 	defer s.Close()
 
 	agent, _ := s.CreateAgent("cascade-test", "ollama", "llama3")
-	s.AddMemory(agent.ID, MemoryRoleUser, "test message")
+	s.AddMemory(agent.ID, MemoryRoleUser, MemorySourceDirect, "test message")
 
 	// Delete agent should cascade to memories
 	if err := s.DeleteAgent(agent.ID); err != nil {

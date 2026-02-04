@@ -3,14 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/core"
-	"github.com/xonecas/zoea-nova/internal/provider"
-	"github.com/xonecas/zoea-nova/internal/store"
 )
 
 func TestNewRequest(t *testing.T) {
@@ -177,34 +173,56 @@ func TestClientWithMockServer(t *testing.T) {
 	}
 }
 
+// mockOrchestrator is a test implementation of the Orchestrator interface.
+type mockOrchestrator struct {
+	agents []AgentInfo
+}
+
+func (m *mockOrchestrator) ListAgents() []AgentInfo {
+	return m.agents
+}
+
+func (m *mockOrchestrator) GetAgent(id string) (AgentInfo, error) {
+	for _, a := range m.agents {
+		if a.ID == id {
+			return a, nil
+		}
+	}
+	return AgentInfo{}, errors.New("agent not found")
+}
+
+func (m *mockOrchestrator) AgentCount() int {
+	return len(m.agents)
+}
+
+func (m *mockOrchestrator) MaxAgents() int {
+	return 16
+}
+
+func (m *mockOrchestrator) SendMessage(agentID, message string) error {
+	for _, a := range m.agents {
+		if a.ID == agentID {
+			return nil
+		}
+	}
+	return errors.New("agent not found")
+}
+
+func (m *mockOrchestrator) Broadcast(message string) error {
+	return nil
+}
+
 func TestOrchestratorTools(t *testing.T) {
-	// Set up test infrastructure
-	s, err := store.OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
-
-	bus := core.NewEventBus(100)
-	defer bus.Close()
-
-	reg := provider.NewRegistry()
-	reg.Register(provider.NewMock("mock", "response"))
-
-	cfg := &config.Config{
-		Swarm: config.SwarmConfig{
-			MaxAgents: 16,
-		},
-		Providers: map[string]config.ProviderConfig{
-			"mock": {Endpoint: "http://mock", Model: "mock-model"},
+	// Create mock orchestrator
+	orchestrator := &mockOrchestrator{
+		agents: []AgentInfo{
+			{ID: "agent-1", Name: "test-agent", State: "running", Provider: "mock"},
 		},
 	}
-
-	commander := core.NewCommander(s, reg, bus, cfg)
 
 	// Create proxy and register tools
 	proxy := NewProxy("")
-	RegisterOrchestratorTools(proxy, commander)
+	RegisterOrchestratorTools(proxy, orchestrator)
 
 	// Should have 5 orchestrator tools registered
 	if proxy.LocalToolCount() != 5 {
@@ -222,10 +240,6 @@ func TestOrchestratorTools(t *testing.T) {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Create an agent for further tests
-	agent, _ := commander.CreateAgent("test-agent", "mock")
-	commander.StartAgent(agent.ID())
-
 	// Test zoea_list_agents
 	result, err = proxy.CallTool(ctx, "zoea_list_agents", nil)
 	if err != nil {
@@ -236,7 +250,7 @@ func TestOrchestratorTools(t *testing.T) {
 	}
 
 	// Test zoea_get_agent
-	args, _ := json.Marshal(map[string]string{"agent_id": agent.ID()})
+	args, _ := json.Marshal(map[string]string{"agent_id": "agent-1"})
 	result, err = proxy.CallTool(ctx, "zoea_get_agent", args)
 	if err != nil {
 		t.Fatalf("CallTool(zoea_get_agent) error: %v", err)
@@ -251,6 +265,4 @@ func TestOrchestratorTools(t *testing.T) {
 	if !result.IsError {
 		t.Error("expected error for nonexistent agent")
 	}
-
-	commander.StopAll()
 }

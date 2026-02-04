@@ -8,6 +8,15 @@ Zoea-Nova is a high-performance command center designed to orchestrate massive s
 
 > **It's actually just a fancy TUI App to control several mcp clients for the game: [SpaceMolt](https://www.spacemolt.com/)**
 
+## Features
+
+- **Swarm Control**: Create and manage multiple AI agents, each with independent memory and LLM provider
+- **Broadcast Messaging**: Send commands to all agents simultaneously with tracked history
+- **Direct Messaging**: Target individual agents for specific tasks
+- **Tool Calling**: Agents use MCP to interact with SpaceMolt (mine, trade, navigate, etc.)
+- **Focus Mode**: View detailed conversation logs for any agent
+- **Provider Flexibility**: Use local Ollama or remote OpenCode Zen models per-agent
+
 ## Try it
 
 ```sh
@@ -15,3 +24,19 @@ make run          # Build and start
 ./bin/zoea        # Run directly
 ./bin/zoea -debug # With debug logging
 ```
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `n` | Create new agent |
+| `b` | Broadcast message to all |
+| `m` | Message selected agent |
+| `r` | Relaunch agent |
+| `s` | Stop agent |
+| `d` | Delete agent |
+| `c` | Configure agent |
+| `Enter` | Focus on selected agent |
+| `Esc` | Return to dashboard |
+| `?` | Show help |
+| `q` | Quit |

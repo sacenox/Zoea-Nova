@@ -329,6 +329,54 @@ func TestCommanderBroadcast(t *testing.T) {
 	}
 }
 
+func TestCommanderBroadcastSource(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	agent, _ := cmd.CreateAgent("broadcast-source-test", "mock")
+	cmd.StartAgent(agent.ID())
+
+	// Wait for agent to be running with timeout
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if agent.State() == AgentStateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if agent.State() != AgentStateRunning {
+		t.Fatal("agent failed to start within timeout")
+	}
+
+	// Send broadcast
+	if err := cmd.Broadcast("Swarm command!"); err != nil {
+		t.Fatalf("Broadcast() error: %v", err)
+	}
+
+	// Poll for broadcast message with timeout
+	var found bool
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && !found {
+		broadcasts, err := cmd.Store().GetRecentBroadcasts(10)
+		if err != nil {
+			t.Fatalf("GetRecentBroadcasts() error: %v", err)
+		}
+		for _, b := range broadcasts {
+			if b.Content == "Swarm command!" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	if !found {
+		t.Error("broadcast message not found with source='broadcast' within timeout")
+	}
+}
+
 func TestCommanderStopAll(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
