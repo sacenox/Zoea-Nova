@@ -14,7 +14,7 @@ These are the currently known issues to investigate:
 
 ## Prompt & Behavior
 
-- [ ] Mysis prompt review: Encourage myses to collaborate together via zoea tooling and create a goal and collaborate towards it. Encourage to pick a Crustacean Cosmos + Zoea/Mysis themed username. Critical rules must be in every prompt, not only the first one.
+- [ ] Mysis prompt review: Encourage myses to collaborate together via zoea tooling to create a goal and collaborate towards it. Encourage to pick a Crustacean Cosmos + Zoea/Mysis themed username. Critical rules must be in every prompt, not only the first one.
 
 - [ ] Cognitive Looping and Prompt Inefficiency: Myses can get stuck in "cooldown" loops or redundant "waiting" states, consuming tokens every 30 seconds without operational progress. The system prompts Myses every tick regardless of their state. Myses may hallucinate non-existent cooldowns or fail to use non-traveling actions during long journeys.
 
@@ -24,16 +24,25 @@ These are the currently known issues to investigate:
 
 ## TUI Issues
 
-- [ ] Swarm messages list is not kept up to date. Sending a broadcast doesn't update the list of swarm messages. The TUI should be high performance and in sync with the data at all times. When a message is sent by the commander, we need a "sending message state" with animation until the commander can send a new message. Stay consistent with zoea theme. Check documentation for design rules.
-
 - [ ] Broadcast messages are labelled YOU in focus view. We don't differentiate between swarm broadcast senders. We need to start tracking it and reflecting it in the UI, in a consistent formatting and style according to our thematic and design rules (see the documentation before doing changes).
 
 - [ ] Reasoning messages are not displayed in the UI. They should appear in the focus mysis view, and be rendered with the purple color we use for text elsewhere. Note: Reasoning capture and storage was implemented in v1.5.2, but UI display is still pending.
 
+- [ ] username status for each mysis focus view and in commander view.
+
 ## Notes:
 
-I need to remmeber this to make a workflow command later:
+I need to remmeber this to make an opencode workflow command later:
 
 ```
 Follow the plan, create todo list first. Stop if the anything deviates from the plan.
 ```
+
+I need to make a new make command to:
+
+- extract username/passwords from current db to a file in the root of the repo.
+- wipe the current db
+- import username/passwords from file.
+- update docs to use this when wiping db
+
+The space molt gameserver and mcp have been updated. Need to check for inconsisyencies.

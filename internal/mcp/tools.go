@@ -37,6 +37,13 @@ type BroadcastResult struct {
 	CreatedAt string
 }
 
+// AccountInfo represents account credential information.
+type AccountInfo struct {
+	Username string
+	Password string
+	Empire   string
+}
+
 // Orchestrator defines the interface for swarm orchestration.
 // This interface breaks the import cycle between mcp and core packages.
 type Orchestrator interface {
@@ -49,6 +56,10 @@ type Orchestrator interface {
 	SearchMessages(mysisID, query string, limit int) ([]SearchResult, error)
 	SearchReasoning(mysisID, query string, limit int) ([]ReasoningResult, error)
 	SearchBroadcasts(query string, limit int) ([]BroadcastResult, error)
+	ListAvailableAccounts() ([]AccountInfo, error)
+	ClaimAccount(mysisID string) (AccountInfo, error)
+	RegisterAccount(mysisID, username, password, empire string) error
+	ReleaseAccount(mysisID string) error
 }
 
 // RegisterOrchestratorTools registers the internal orchestration tools with the proxy.
@@ -428,6 +439,178 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			data, _ := json.MarshalIndent(results, "", "  ")
 			return &ToolResult{
 				Content: []ContentBlock{{Type: "text", Text: string(data)}},
+			}, nil
+		},
+	)
+
+	// List available accounts tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_accounts_available",
+			Description: "List all available (unclaimed) swarm accounts",
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			accounts, err := orchestrator.ListAvailableAccounts()
+			if err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to list accounts: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if len(accounts) == 0 {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: "No accounts available"}},
+				}, nil
+			}
+
+			var result []map[string]interface{}
+			for _, acc := range accounts {
+				result = append(result, map[string]interface{}{
+					"username": acc.Username,
+					"empire":   acc.Empire,
+				})
+			}
+
+			data, _ := json.MarshalIndent(result, "", "  ")
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: string(data)}},
+			}, nil
+		},
+	)
+
+	// Claim account tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_claim_account",
+			Description: "Claim an available account for login. Use zoea_list_myses to find your mysis_id first.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"mysis_id": {"type": "string", "description": "Your mysis ID"}
+				},
+				"required": ["mysis_id"]
+			}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			var params struct {
+				MysisID string `json:"mysis_id"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			account, err := orchestrator.ClaimAccount(params.MysisID)
+			if err != nil {
+				// Check if no accounts available
+				if err.Error() == "no accounts available" {
+					return &ToolResult{
+						Content: []ContentBlock{{Type: "text", Text: "No accounts available. Register a new one."}},
+					}, nil
+				}
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to claim account: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			result := map[string]interface{}{
+				"username": account.Username,
+				"password": account.Password,
+				"empire":   account.Empire,
+			}
+
+			data, _ := json.MarshalIndent(result, "", "  ")
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: string(data)}},
+			}, nil
+		},
+	)
+
+	// Register account tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_register_account",
+			Description: "Store new account credentials for swarm reuse after registration",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"mysis_id": {"type": "string", "description": "Your mysis ID"},
+					"username": {"type": "string", "description": "Game username you registered"},
+					"password": {"type": "string", "description": "Game password you used"},
+					"empire": {"type": "string", "description": "Empire (default: solarian)"}
+				},
+				"required": ["mysis_id", "username", "password"]
+			}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			var params struct {
+				MysisID  string `json:"mysis_id"`
+				Username string `json:"username"`
+				Password string `json:"password"`
+				Empire   string `json:"empire"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if params.Empire == "" {
+				params.Empire = "solarian"
+			}
+
+			if err := orchestrator.RegisterAccount(params.MysisID, params.Username, params.Password, params.Empire); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to register account: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("Account %s registered and claimed for swarm use", params.Username)}},
+			}, nil
+		},
+	)
+
+	// Release account tool
+	proxy.RegisterTool(
+		Tool{
+			Name:        "zoea_release_account",
+			Description: "Release your claimed account back to the swarm pool",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"mysis_id": {"type": "string", "description": "Your mysis ID"}
+				},
+				"required": ["mysis_id"]
+			}`),
+		},
+		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+			var params struct {
+				MysisID string `json:"mysis_id"`
+			}
+			if err := json.Unmarshal(args, &params); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("invalid arguments: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			if err := orchestrator.ReleaseAccount(params.MysisID); err != nil {
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("failed to release account: %v", err)}},
+					IsError: true,
+				}, nil
+			}
+
+			return &ToolResult{
+				Content: []ContentBlock{{Type: "text", Text: "Account released"}},
 			}, nil
 		},
 	)

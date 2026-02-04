@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
@@ -138,6 +139,12 @@ func (c *Commander) DeleteMysis(id string, purgeMemories bool) error {
 		mysis.Stop()
 	}
 
+	// Release any claimed accounts before deleting
+	if err := c.store.ReleaseAccountsByMysis(id); err != nil {
+		// Log but don't fail the delete
+		log.Warn().Err(err).Str("mysis_id", id).Msg("failed to release accounts on delete")
+	}
+
 	// Delete from store (memories cascade)
 	if err := c.store.DeleteMysis(id); err != nil {
 		return fmt.Errorf("delete mysis from store: %w", err)
@@ -193,6 +200,13 @@ func (c *Commander) StopMysis(id string) error {
 	if err != nil {
 		return err
 	}
+
+	// Release any claimed accounts
+	if err := c.store.ReleaseAccountsByMysis(id); err != nil {
+		// Log but don't fail the stop
+		log.Warn().Err(err).Str("mysis_id", id).Msg("failed to release accounts on stop")
+	}
+
 	return mysis.Stop()
 }
 
