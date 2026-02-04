@@ -12,7 +12,7 @@ These are the currently know issues to investigate:
       **BUG**: Agents find each other's passwords and fail to login. Agents are do not have a reliable way to re-use usernames they created in the past.
 
 - [ ] Travel Duration: The travel to the asteroid belt is a long-duration task (30k+ ticks). The agents correctly entered a "waiting" mode, showing they can manage long-term state without wasting tokens on redundant actions.
-      **BUG**: Agent's should continue to act on his tick during travel. They can still use other actions when traveling. Like chatting, or other non traveling actions in the game. Currently the agent looses his ticks waiting when he could be using the turns to explore the game api and interacting with the swarm.
+      **BUG**: Agent's should continue to act on his tick during travel. They can still use other actions when traveling. Like chatting, or other non traveling actions in the game. Currently the agent looses his ticks waiting when he could be using the turns to explore the game api and interacting with the swarm. Add a `zoea_get_passwords()` tool call that lists password<>username pairs for the swarm. (searches swarm messags for the passwords), Agents should not see passwords for accounts actively being used by other swarm agents.
 
 - [ ] TUI usability issues: Swarm messages list isnot kept up to date. Sending a broadcast doesn't update the list of swarm messages.
       **BUG**: Breaking change from the spec, the TUI should be high performance and in sync with the data at all times.

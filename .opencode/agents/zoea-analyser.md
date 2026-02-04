@@ -1,6 +1,7 @@
 ---
 description: Agent with data access for a analysis.
 agent: general
+mode: subagent
 model: opencode/gemini-3-flash
 ---
 
