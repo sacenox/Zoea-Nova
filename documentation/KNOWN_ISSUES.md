@@ -53,7 +53,7 @@ These are the currently known issues to investigate:
 
 - [ ] Create an OpenCode workflow command to enforce: "Save the plan, make a todo list, then follow the plan. Stop if anything deviates from the plan."
 
-- [ ] Add a Make command that:
+- [x] Add a Make command that:
   - extracts username/passwords from the current DB to a root-level file
   - wipes the current DB
   - imports username/passwords from file

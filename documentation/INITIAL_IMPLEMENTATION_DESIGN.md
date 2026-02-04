@@ -121,10 +121,11 @@ CREATE TABLE accounts (
 ```
 
 **Schema v6 → v7 Migration:**
-Requires fresh database. Delete existing:
+Requires fresh database. Reset with:
 ```bash
-rm ~/.zoea-nova/zoea.db*
+make db-reset-accounts
 ```
+This exports usernames/passwords to `accounts-backup.sql` before recreating the DB.
 
 **Memory Sources:**
 - `direct` — Message sent directly to a specific Mysis

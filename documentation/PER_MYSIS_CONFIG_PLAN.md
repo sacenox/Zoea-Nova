@@ -484,11 +484,13 @@ func TestCommanderConfigureMysisWithModel(t *testing.T) {
 
 ## Database Migration Note
 
-This change requires schema v4 with a new `temperature` column. Per AGENTS.md, no data migrations are supported. Users must wipe their database:
+This change requires schema v4 with a new `temperature` column. Per AGENTS.md, no data migrations are supported. Reset with:
 
 ```bash
-rm ~/.zoea-nova/zoea.db*
+make db-reset-accounts
 ```
+
+This exports usernames/passwords to `accounts-backup.sql` before recreating the DB.
 
 ---
 

@@ -1,7 +1,9 @@
-.PHONY: fmt build run test clean
+.PHONY: fmt build run test clean db-reset-accounts
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
+DB_PATH ?= $(HOME)/.zoea-nova/zoea.db
+ACCOUNTS_EXPORT ?= accounts-backup.sql
 
 fmt:
 	go fmt ./...
@@ -18,3 +20,10 @@ test:
 
 clean:
 	rm -rf bin/ coverage.out
+
+db-reset-accounts:
+	mkdir -p $(HOME)/.zoea-nova
+	test -f $(DB_PATH) && sqlite3 $(DB_PATH) "SELECT 'INSERT INTO accounts (username, password) VALUES (' || quote(username) || ',' || quote(password) || ');' FROM accounts;" > $(ACCOUNTS_EXPORT) || true
+	rm -f $(DB_PATH) $(DB_PATH)-shm $(DB_PATH)-wal
+	sqlite3 $(DB_PATH) < internal/store/schema.sql
+	test -s $(ACCOUNTS_EXPORT) && sqlite3 $(DB_PATH) < $(ACCOUNTS_EXPORT) || true
