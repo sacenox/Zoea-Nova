@@ -41,6 +41,8 @@ type Model struct {
 	logs    []LogEntry
 	focusID string
 
+	pendingProvider string
+
 	// Swarm broadcast history
 	swarmMessages []SwarmMessage
 
@@ -435,6 +437,8 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Escape):
 		m.input.Reset()
+		m.pendingProvider = ""
+		m.err = nil
 		return m, nil
 
 	case key.Matches(msg, keys.Enter):
@@ -483,7 +487,20 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refreshMysisList()
 
 		case InputModeConfigProvider:
-			m.err = m.commander.ConfigureMysis(m.input.TargetID(), value)
+			switch value {
+			case "ollama", "opencode_zen":
+				m.pendingProvider = value
+				m.input.SetMode(InputModeConfigModel, m.input.TargetID())
+				return m, m.input.Focus()
+			default:
+				m.err = fmt.Errorf("unknown provider: %s", value)
+				m.input.Reset()
+				return m, nil
+			}
+
+		case InputModeConfigModel:
+			m.err = m.commander.ConfigureMysis(m.input.TargetID(), m.pendingProvider, value)
+			m.pendingProvider = ""
 		}
 
 		m.input.Reset()

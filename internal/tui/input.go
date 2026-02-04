@@ -15,6 +15,7 @@ const (
 	InputModeMessage
 	InputModeNewMysis
 	InputModeConfigProvider
+	InputModeConfigModel
 )
 
 const maxHistorySize = 100
@@ -53,16 +54,19 @@ func (m *InputModel) SetMode(mode InputMode, targetID string) {
 	switch mode {
 	case InputModeBroadcast:
 		m.textInput.Placeholder = "Broadcast message to all myses..."
-		m.textInput.Prompt = inputPromptStyle.Render("📢 ") + " "
+		m.textInput.Prompt = inputPromptStyle.Render("◈ ") + " "
 	case InputModeMessage:
 		m.textInput.Placeholder = "Message to mysis..."
-		m.textInput.Prompt = inputPromptStyle.Render("💬 ") + " "
+		m.textInput.Prompt = inputPromptStyle.Render("◆ ") + " "
 	case InputModeNewMysis:
 		m.textInput.Placeholder = "Enter mysis name..."
-		m.textInput.Prompt = inputPromptStyle.Render("🤖 ") + " "
+		m.textInput.Prompt = inputPromptStyle.Render("⬡ ") + " "
 	case InputModeConfigProvider:
 		m.textInput.Placeholder = "Enter provider (ollama/opencode_zen)..."
-		m.textInput.Prompt = inputPromptStyle.Render("⚙️ ") + " "
+		m.textInput.Prompt = inputPromptStyle.Render("⚙ ") + " "
+	case InputModeConfigModel:
+		m.textInput.Placeholder = "Enter model name..."
+		m.textInput.Prompt = inputPromptStyle.Render("cfg ") + " "
 	default:
 		m.textInput.Placeholder = ""
 		m.textInput.Prompt = ""
