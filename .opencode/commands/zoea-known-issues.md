@@ -1,6 +1,6 @@
 ---
 description: Investigate the first item in the known issues document.
-agent: analyser
+agent: zoea-analyser
 model: opencode/gpt-5.2-codex
 ---
 
