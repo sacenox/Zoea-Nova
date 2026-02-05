@@ -50,6 +50,7 @@ type Orchestrator interface {
 	GetStateCounts() map[string]int
 	SendMessageAsync(mysisID, message string) error
 	BroadcastAsync(message string) error
+	BroadcastFrom(senderID, message string) error
 	SearchMessages(mysisID, query string, limit int) ([]SearchResult, error)
 	SearchReasoning(mysisID, query string, limit int) ([]ReasoningResult, error)
 	SearchBroadcasts(query string, limit int) ([]BroadcastResult, error)
@@ -145,10 +146,10 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 	)
 
 	// Broadcast message tool
-	proxy.RegisterTool(
+	proxy.RegisterToolWithContext(
 		Tool{
 			Name:        "zoea_broadcast",
-			Description: "Send a message to all running myses",
+			Description: "Send a message to all running myses (you will not receive your own broadcast)",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -157,7 +158,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				"required": ["message"]
 			}`),
 		},
-		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+		func(ctx context.Context, caller CallerContext, args json.RawMessage) (*ToolResult, error) {
 			var params struct {
 				Message string `json:"message"`
 			}
@@ -168,7 +169,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			if err := orchestrator.BroadcastAsync(params.Message); err != nil {
+			if err := orchestrator.BroadcastFrom(caller.MysisID, params.Message); err != nil {
 				return &ToolResult{
 					Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("broadcast failed: %v", err)}},
 					IsError: true,
@@ -176,7 +177,7 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			}
 
 			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: "broadcast queued for delivery to all running myses"}},
+				Content: []ContentBlock{{Type: "text", Text: "broadcast sent to all running myses (excluding you)"}},
 			}, nil
 		},
 	)

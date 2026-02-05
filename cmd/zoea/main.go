@@ -275,6 +275,10 @@ func (a *commanderAdapter) BroadcastAsync(message string) error {
 	return a.commander.BroadcastAsync(message)
 }
 
+func (a *commanderAdapter) BroadcastFrom(senderID, message string) error {
+	return a.commander.BroadcastFrom(senderID, message)
+}
+
 func (a *commanderAdapter) SearchMessages(mysisID, query string, limit int) ([]mcp.SearchResult, error) {
 	memories, err := a.commander.Store().SearchMemories(mysisID, query, limit)
 	if err != nil {
@@ -406,7 +410,7 @@ func runMCPTest(configPath string) {
 	// Test calling a local tool
 	fmt.Println("\n--- Testing Local Tool Call ---")
 	fmt.Println("Calling: zoea_swarm_status")
-	result, err := mcpProxy.CallTool(ctx, "zoea_swarm_status", nil)
+	result, err := mcpProxy.CallTool(ctx, mcp.CallerContext{}, "zoea_swarm_status", nil)
 	if err != nil {
 		fmt.Printf("ERROR: %v\n", err)
 	} else if result.IsError {
@@ -428,7 +432,7 @@ func runMCPTest(configPath string) {
 		}
 		if upstreamTool != nil {
 			fmt.Printf("Calling: %s\n", upstreamTool.Name)
-			result, err := mcpProxy.CallTool(ctx, upstreamTool.Name, nil)
+			result, err := mcpProxy.CallTool(ctx, mcp.CallerContext{}, upstreamTool.Name, nil)
 			if err != nil {
 				fmt.Printf("ERROR: %v\n", err)
 			} else if result.IsError {
@@ -477,6 +481,10 @@ func (m *mockOrchestrator) SendMessageAsync(mysisID, message string) error {
 }
 
 func (m *mockOrchestrator) BroadcastAsync(message string) error {
+	return fmt.Errorf("not available in test mode")
+}
+
+func (m *mockOrchestrator) BroadcastFrom(senderID, message string) error {
 	return fmt.Errorf("not available in test mode")
 }
 

@@ -82,7 +82,7 @@ func TestProxyLocalTools(t *testing.T) {
 	}
 
 	// Call tool
-	result, err := proxy.CallTool(ctx, "test_tool", nil)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "test_tool", nil)
 	if err != nil {
 		t.Fatalf("CallTool() error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestProxyToolNotFound(t *testing.T) {
 	proxy := NewProxy("") // No upstream
 
 	ctx := context.Background()
-	result, err := proxy.CallTool(ctx, "nonexistent", nil)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "nonexistent", nil)
 	if err != nil {
 		t.Fatalf("CallTool() error: %v", err)
 	}
@@ -221,6 +221,10 @@ func (m *mockOrchestrator) BroadcastAsync(message string) error {
 	return nil
 }
 
+func (m *mockOrchestrator) BroadcastFrom(senderID, message string) error {
+	return nil
+}
+
 func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]SearchResult, error) {
 	return []SearchResult{}, nil
 }
@@ -256,7 +260,7 @@ func TestOrchestratorTools(t *testing.T) {
 	ctx := context.Background()
 
 	// Test zoea_swarm_status
-	result, err := proxy.CallTool(ctx, "zoea_swarm_status", nil)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_swarm_status", nil)
 	if err != nil {
 		t.Fatalf("CallTool(zoea_swarm_status) error: %v", err)
 	}
@@ -265,7 +269,7 @@ func TestOrchestratorTools(t *testing.T) {
 	}
 
 	// Test zoea_list_myses
-	result, err = proxy.CallTool(ctx, "zoea_list_myses", nil)
+	result, err = proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
 	if err != nil {
 		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
 	}
@@ -291,7 +295,7 @@ func TestZoeaListMysesPayloadMinimal(t *testing.T) {
 	ctx := context.Background()
 
 	// Call zoea_list_myses
-	result, err := proxy.CallTool(ctx, "zoea_list_myses", nil)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
 	if err != nil {
 		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
 	}

@@ -10,6 +10,15 @@ import (
 // ToolHandler is a function that handles a tool call.
 type ToolHandler func(ctx context.Context, arguments json.RawMessage) (*ToolResult, error)
 
+// CallerContext provides information about who is calling a tool.
+type CallerContext struct {
+	MysisID   string
+	MysisName string
+}
+
+// ToolHandlerWithContext is a function that handles a tool call with caller context.
+type ToolHandlerWithContext func(ctx context.Context, caller CallerContext, arguments json.RawMessage) (*ToolResult, error)
+
 type AccountStore interface {
 	CreateAccount(username, password string) (*Account, error)
 	MarkAccountInUse(username string) error
@@ -24,11 +33,12 @@ type Account struct {
 
 // Proxy combines an upstream MCP client with local tool handlers.
 type Proxy struct {
-	mu            sync.RWMutex
-	upstream      *Client
-	localTools    map[string]Tool
-	localHandlers map[string]ToolHandler
-	accountStore  AccountStore
+	mu              sync.RWMutex
+	upstream        *Client
+	localTools      map[string]Tool
+	localHandlers   map[string]ToolHandler
+	contextHandlers map[string]ToolHandlerWithContext
+	accountStore    AccountStore
 }
 
 // NewProxy creates a new MCP proxy.
@@ -39,9 +49,10 @@ func NewProxy(upstreamEndpoint string) *Proxy {
 	}
 
 	return &Proxy{
-		upstream:      upstream,
-		localTools:    make(map[string]Tool),
-		localHandlers: make(map[string]ToolHandler),
+		upstream:        upstream,
+		localTools:      make(map[string]Tool),
+		localHandlers:   make(map[string]ToolHandler),
+		contextHandlers: make(map[string]ToolHandlerWithContext),
 	}
 }
 
@@ -58,6 +69,15 @@ func (p *Proxy) RegisterTool(tool Tool, handler ToolHandler) {
 
 	p.localTools[tool.Name] = tool
 	p.localHandlers[tool.Name] = handler
+}
+
+// RegisterToolWithContext registers a tool handler that receives caller context.
+func (p *Proxy) RegisterToolWithContext(tool Tool, handler ToolHandlerWithContext) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.localTools[tool.Name] = tool
+	p.contextHandlers[tool.Name] = handler
 }
 
 // ListTools returns all available tools (local + upstream).
@@ -87,11 +107,16 @@ func (p *Proxy) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 // CallTool invokes a tool, checking local handlers first then upstream.
-func (p *Proxy) CallTool(ctx context.Context, name string, arguments json.RawMessage) (*ToolResult, error) {
+func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string, arguments json.RawMessage) (*ToolResult, error) {
 	p.mu.RLock()
 	handler, isLocal := p.localHandlers[name]
+	contextHandler, hasContext := p.contextHandlers[name]
 	accountStore := p.accountStore
 	p.mu.RUnlock()
+
+	if hasContext {
+		return contextHandler(ctx, caller, arguments)
+	}
 
 	// Try local handler first
 	if isLocal {
