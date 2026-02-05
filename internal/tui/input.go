@@ -181,6 +181,11 @@ func (m InputModel) View() string {
 
 // ViewAlways renders the input bar, showing placeholder when not active.
 func (m InputModel) ViewAlways(width int) string {
+	// Ensure minimum width to prevent negative or zero width
+	if width < 10 {
+		width = 10
+	}
+
 	if m.mode != InputModeNone {
 		// Active - show the actual input
 		return inputStyle.Width(width - 2).Render(m.textInput.View())
