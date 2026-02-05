@@ -249,6 +249,13 @@ func (a *Mysis) LastError() error {
 	return a.lastError
 }
 
+// CurrentAccountUsername returns the username of the account this mysis is using.
+func (a *Mysis) CurrentAccountUsername() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.currentAccountUsername
+}
+
 // SetProvider updates the mysis provider.
 func (a *Mysis) SetProvider(p provider.Provider) {
 	a.mu.Lock()

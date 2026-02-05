@@ -11,12 +11,13 @@ import (
 
 // MysisInfo holds display info for a mysis.
 type MysisInfo struct {
-	ID          string
-	Name        string
-	State       string
-	Provider    string
-	LastMessage string    // Most recent message (user or assistant)
-	CreatedAt   time.Time // When mysis was created
+	ID              string
+	Name            string
+	State           string
+	Provider        string
+	AccountUsername string    // NEW: game account username
+	LastMessage     string    // Most recent message (user or assistant)
+	CreatedAt       time.Time // When mysis was created
 }
 
 // SwarmMessageInfo holds display info for a broadcast message.
@@ -187,14 +188,23 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 	stateText := StateStyle(m.State).Render(fmt.Sprintf("%-8s", m.State))
 	provider := dimmedStyle.Render(fmt.Sprintf("[%s]", m.Provider))
 
-	// First part: indicator + name + state + provider
-	firstPart := fmt.Sprintf("%s %-16s %s %s", stateIndicator, name, stateText, provider)
+	// Account username display
+	var accountText string
+	if m.AccountUsername != "" {
+		accountText = dimmedStyle.Render(fmt.Sprintf("@%s", m.AccountUsername))
+	} else {
+		accountText = dimmedStyle.Render("(no account)")
+	}
+
+	// First part: indicator + name + state + provider + account
+	firstPart := fmt.Sprintf("%s %-16s %s %s %s", stateIndicator, name, stateText, provider, accountText)
 
 	// Calculate remaining width for last message
 	// Account for the prefix "│ " for the message
 	// Use lipgloss.Width() for proper Unicode width calculation
 	providerWidth := lipgloss.Width(m.Provider)
-	usedWidth := 2 + 16 + 1 + 8 + 1 + providerWidth + 2 + 4 // rough estimate
+	accountTextWidth := lipgloss.Width(accountText)
+	usedWidth := 2 + 16 + 1 + 8 + 1 + providerWidth + 2 + 1 + accountTextWidth + 4
 	msgWidth := width - usedWidth - 8
 	if msgWidth < 10 {
 		msgWidth = 10
@@ -222,10 +232,11 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 // MysisInfoFromCore converts a core.Mysis to MysisInfo.
 func MysisInfoFromCore(m *core.Mysis) MysisInfo {
 	return MysisInfo{
-		ID:        m.ID(),
-		Name:      m.Name(),
-		State:     string(m.State()),
-		Provider:  m.ProviderName(),
-		CreatedAt: m.CreatedAt(),
+		ID:              m.ID(),
+		Name:            m.Name(),
+		State:           string(m.State()),
+		Provider:        m.ProviderName(),
+		AccountUsername: m.CurrentAccountUsername(), // NEW: copy account username
+		CreatedAt:       m.CreatedAt(),
 	}
 }

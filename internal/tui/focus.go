@@ -79,6 +79,14 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
+
+	// Add account info if available
+	if mysis.AccountUsername != "" {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), valueStyle.Render(mysis.AccountUsername)))
+	} else {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
+	}
+
 	infoContent := strings.Join(infoLines, "  ")
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
@@ -143,6 +151,14 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
+
+	// Add account info if available
+	if mysis.AccountUsername != "" {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), valueStyle.Render(mysis.AccountUsername)))
+	} else {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
+	}
+
 	infoContent := strings.Join(infoLines, "  ")
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
