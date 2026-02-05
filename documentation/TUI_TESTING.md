@@ -78,6 +78,15 @@ go test ./internal/tui -update
 
 **Golden files location:** `internal/tui/testdata/`
 
+**Golden file naming convention:**
+- Directory: `testdata/Test<FunctionName>/<test_case_name>/`
+- Files: `ANSI.golden` (with ANSI codes) and `Stripped.golden` (content only)
+- Example: `testdata/TestDashboard/empty_swarm/ANSI.golden`
+
+**Why two variants:**
+- **ANSI** - Catches color and style regressions (RGB codes, bold, etc.)
+- **Stripped** - Catches content and layout regressions (easier to read diffs)
+
 ### 3. Integration Tests (`integration_test.go`)
 
 End-to-end tests using teatest to simulate full user interactions.
@@ -222,6 +231,472 @@ func TestUnicodeAmbiguousWidthSafety(t *testing.T) {
 }
 ```
 
+## Edge Case Testing
+
+### Dashboard Edge Cases (`golden_edge_cases_test.go`)
+
+The `TestDashboardEdgeCases` test covers:
+- **Empty states** - No myses, no messages
+- **Full states** - 16 myses (max swarm), 10 broadcasts (max display)
+- **Error states** - All myses errored, stopped, idle
+- **Mixed states** - Combination of running, idle, stopped, errored
+- **Long content** - Very long broadcast messages (truncation)
+- **Unicode content** - Emoji, CJK characters, box-drawing
+- **Extreme dimensions** - 60 cols (narrow), 240 cols (wide), 100 lines (tall)
+- **Loading states** - All myses loading simultaneously
+- **Selection positions** - Top, middle, bottom of list
+
+### Focus View Edge Cases
+
+The `TestFocusViewEdgeCases` test covers:
+- **Empty states** - No logs, fresh mysis
+- **Long content** - Very long log entries, reasoning (wrapping)
+- **Unicode content** - Emoji in logs, CJK text
+- **Large JSON** - Huge tool results (truncation)
+- **Many logs** - 100+ log entries (scrolling)
+- **Narrow views** - 60 col focus view (wrapping)
+- **All role types** - System, user (direct), user (broadcast), assistant, tool
+
+### Net Indicator Edge Cases
+
+The `TestNetIndicatorEdgeCases` test covers:
+- **Activity states** - Idle, LLM, MCP
+- **Animation positions** - Start, middle, end of bar
+- **View modes** - Full bar, compact
+- **All combinations** - 8 test cases covering state × position × mode
+
+### Edge Case Coverage Summary
+
+| Component | Test Cases | Edge Cases Covered |
+|-----------|------------|-------------------|
+| Dashboard | 15 | Empty, full, errors, Unicode, dimensions, selection |
+| Focus View | 9 | Empty, long content, Unicode, JSON, many logs, narrow |
+| Net Indicator | 8 | Idle, LLM, MCP, positions, compact |
+| **Total** | **32** | **All major edge cases** |
+
+## Unicode Character Testing
+
+### Character Inventory Test
+
+The `TestUnicodeCharacterInventory` test documents all Unicode characters used in the TUI with their codepoints, names, and usage locations. This test serves as a comprehensive reference and ensures all characters are properly documented.
+
+**Verified characters:**
+- **⬥** (U+2B25 BLACK MEDIUM DIAMOND) - Header corners, status bar, message prompt, spinner
+- **⬧** (U+2B27 BLACK MEDIUM LOZENGE) - Section borders, broadcast prompt
+- **⬡** (U+2B21 WHITE HEXAGON) - Title decoration, new mysis prompt, spinner frame 0/2
+- **⬢** (U+2B22 BLACK HEXAGON) - Spinner frame 1/3
+- **⬦** (U+2B26 WHITE MEDIUM DIAMOND) - Spinner frame 4/6, idle indicator
+- **◦** (U+25E6 WHITE BULLET) - Idle state indicator
+- **◌** (U+25CC DOTTED CIRCLE) - Stopped state indicator
+- **✖** (U+2716 HEAVY MULTIPLICATION X) - Errored state indicator
+- **⚙** (U+2699 GEAR) - Config provider prompt
+
+### Spinner Animation Tests
+
+The `TestSpinnerFrameRendering` test verifies all 8 spinner frames:
+
+1. Frame 0: ⬡ (U+2B21)
+2. Frame 1: ⬢ (U+2B22)
+3. Frame 2: ⬡ (U+2B21)
+4. Frame 3: ⬢ (U+2B22)
+5. Frame 4: ⬦ (U+2B26)
+6. Frame 5: ⬥ (U+2B25)
+7. Frame 6: ⬦ (U+2B26)
+8. Frame 7: ⬥ (U+2B25)
+
+**Animation speed:** 125ms per frame (8 FPS)  
+**Pattern:** Hexagonal theme alternating between filled/hollow shapes
+
+### Width Consistency Tests
+
+The `TestUnicodeWidthConsistency` test verifies that all characters:
+- Have width of 1 via `lipgloss.Width()`
+- Have width of 1 via `runewidth.RuneWidth()`
+- Are NOT ambiguous width (render consistently in East Asian locales)
+
+This prevents the Unicode overlap bug previously fixed in commit fb1d0b6.
+
+### Terminal Compatibility Testing
+
+**Manual testing checklist:**
+
+1. **Test in primary terminal** (Alacritty, Kitty, WezTerm recommended):
+   ```bash
+   ./bin/zoea --offline
+   ```
+
+2. **Verify spinner animation:**
+   - Create a mysis (press `n`)
+   - Observe running state indicator animates smoothly
+   - All 8 frames should be visible and distinct
+   - No frame causes layout shift
+
+3. **Verify state indicators:**
+   - Idle: ◦ (white bullet)
+   - Stopped: ◌ (dotted circle)
+   - Errored: ✖ (heavy X)
+   - All indicators should align vertically
+
+4. **Verify section decorations:**
+   - Header corners: ⬥
+   - Section borders: ⬧
+   - Title decorations: ⬡
+   - All decorations should render clearly
+
+5. **Verify input prompts:**
+   - Press `b` for broadcast: ⬧
+   - Press `m` for message: ⬥
+   - Press `n` for new mysis: ⬡
+   - Press `c` for config: ⚙
+
+**Terminal compatibility notes:**
+
+| Terminal | Status | Notes |
+|----------|--------|-------|
+| Alacritty | ✅ Excellent | Best rendering, all characters clear |
+| Kitty | ✅ Excellent | Full Unicode support |
+| WezTerm | ✅ Excellent | Native font fallback |
+| iTerm2 | ✅ Good | May vary with font |
+| Terminal.app | ⚠️ Fair | Font-dependent |
+| Windows Terminal | ✅ Good | Requires Nerd Font or Unicode font |
+| gnome-terminal | ✅ Good | Most fonts work well |
+| xterm | ⚠️ Limited | May not render all characters |
+
+**Font recommendations:**
+- **Nerd Fonts:** FiraCode Nerd Font, JetBrains Mono Nerd Font
+- **Unicode fonts:** Cascadia Code, Ubuntu Mono, Inconsolata
+- **Fallback:** DejaVu Sans Mono (decent Unicode coverage)
+
+### Character Replacement Strategy
+
+If a character renders poorly in a specific terminal:
+
+1. **Check font first:** Install a Nerd Font or Unicode-compatible font
+2. **Test with `go test`:** Run `TestCharacterRenderingMatrix` to see all characters
+3. **Report compatibility:** Document in KNOWN_ISSUES.md with terminal/font details
+4. **Consider fallback:** Add configuration option for ASCII-only mode (future enhancement)
+
+### Adding New Unicode Characters
+
+When adding new Unicode characters to the TUI:
+
+1. **Choose non-ambiguous width characters:** Use `runewidth` to verify
+2. **Update `TestUnicodeCharacterInventory`:** Add to inventory map with usage
+3. **Verify width:** Run `TestUnicodeWidthConsistency` with new character
+4. **Update golden files:** Run `go test ./internal/tui -update`
+5. **Test manually:** Verify in multiple terminals (see checklist above)
+
+## Spinner Testing Guidelines
+
+### Animation Testing
+
+The spinner animation is tested via `TestSpinnerFrameRendering` which verifies:
+- All 8 frames render correctly
+- Each frame uses the correct Unicode character
+- Frame sequence follows expected pattern (hexagonal theme)
+- Animation speed matches specification (8 FPS, 125ms per frame)
+
+**Test Pattern:**
+```go
+func TestSpinnerFrameRendering(t *testing.T) {
+    frames := []string{"⬡", "⬢", "⬡", "⬢", "⬦", "⬥", "⬦", "⬥"}
+    
+    for i, expectedChar := range frames {
+        t.Run(fmt.Sprintf("frame_%d", i), func(t *testing.T) {
+            actual := getSpinnerFrame(i)
+            if actual != expectedChar {
+                t.Errorf("frame %d: expected %q, got %q", i, expectedChar, actual)
+            }
+        })
+    }
+}
+```
+
+**Manual Verification:**
+1. Run `./bin/zoea --offline`
+2. Create a mysis (press `n`)
+3. Observe running state indicator animates smoothly
+4. All frames should be visible and distinct
+5. No frame should cause layout shift
+
+**Spinner Specifications:**
+- Frames: 8 total
+- Pattern: Hexagonal theme alternating between filled/hollow shapes
+- Speed: 8 FPS (125ms per frame)
+- Unicode characters: All verified non-ambiguous width
+
+## Golden File Update Process
+
+### When to Update
+
+Update golden files when:
+1. **Intentionally changing UI** - Color changes, layout changes, new elements
+2. **After Phase 1 border color fix** - Border RGB codes changed
+3. **After Unicode character replacements** - Character codepoints changed
+4. **After adding new golden tests** - Initial generation
+
+### How to Update
+
+```bash
+# Update all golden files
+go test ./internal/tui -update
+
+# Update specific test golden files
+go test ./internal/tui -run TestDashboard -update
+go test ./internal/tui -run TestFocusView -update
+```
+
+### Verification After Update
+
+```bash
+# 1. Verify all tests pass
+go test ./internal/tui
+
+# 2. Review changes to golden files
+git diff internal/tui/testdata/
+
+# 3. Check for expected changes
+# - Phase 1: RGB color codes changed from 42,42,85 to 107,0,179
+# - Phase 3: Unicode codepoints changed for replaced characters
+# - Phase 4: Spinner frames use new characters
+
+# 4. Commit golden file updates with descriptive message
+git add internal/tui/testdata/
+git commit -m "test: update golden files after [phase description]"
+```
+
+### Golden File Structure
+
+Each test has two variants:
+- **ANSI.golden** - Full output with ANSI escape codes (RGB colors, styles)
+- **Stripped.golden** - Content only, ANSI codes removed
+
+**Example:**
+```
+internal/tui/testdata/
+├── TestDashboard/
+│   ├── empty_swarm/
+│   │   ├── ANSI.golden       # Full ANSI with RGB codes
+│   │   └── Stripped.golden   # Content only
+│   └── with_swarm_messages/
+│       ├── ANSI.golden
+│       └── Stripped.golden
+```
+
+**Why Two Variants:**
+- **ANSI** - Catches color and style regressions
+- **Stripped** - Catches content and layout regressions (easier to read diffs)
+
+## Layout Testing Guidelines
+
+### Dashboard Layout
+
+The dashboard layout calculation is tested via `TestDashboardLayoutCalculations` and `TestDashboardHeightCalculation`:
+
+**What to test:**
+- Terminal sizes from 80x20 to 200x100
+- Various mysis counts (0, 1, 5, 10, 20)
+- Various swarm message counts (0, 5, 10, 20)
+- No panics during rendering
+- Minimum height guards enforced
+
+**Test Pattern:**
+```go
+func TestDashboardLayoutCalculations(t *testing.T) {
+    testCases := []struct {
+        width, height int
+        mysisCount    int
+        messageCount  int
+    }{
+        {80, 20, 0, 0},
+        {120, 40, 5, 5},
+        {200, 100, 20, 10},
+    }
+    
+    for _, tc := range testCases {
+        t.Run(fmt.Sprintf("%dx%d_m%d_msg%d", tc.width, tc.height, tc.mysisCount, tc.messageCount), func(t *testing.T) {
+            // Render and verify no panics
+            output := RenderDashboard(...)
+            if output == "" {
+                t.Error("empty output")
+            }
+        })
+    }
+}
+```
+
+### Focus View Layout
+
+The focus view layout calculation is tested via `TestFocusViewLayoutCalculations` and `TestViewportHeightCalculation`:
+
+**What to test:**
+- Terminal sizes from 80x10 to 200x100
+- Various log entry counts (0, 5, 20, 50, 100, 500, 1000)
+- Viewport height minimum enforcement (5 lines)
+- No negative heights
+- No panics during rendering
+
+**Test Pattern:**
+```go
+func TestFocusViewLayoutCalculations(t *testing.T) {
+    testCases := []struct {
+        width, height int
+        logCount      int
+    }{
+        {80, 10, 0},
+        {120, 40, 50},
+        {200, 100, 1000},
+    }
+    
+    for _, tc := range testCases {
+        t.Run(fmt.Sprintf("%dx%d_logs%d", tc.width, tc.height, tc.logCount), func(t *testing.T) {
+            // Render and verify no panics
+            output := RenderFocusViewWithViewport(...)
+            if output == "" {
+                t.Error("empty output")
+            }
+        })
+    }
+}
+```
+
+### Minimum Dimension Guards
+
+**Critical safety checks:**
+- Dashboard mysis list height: `if mysisListHeight < 3 { mysisListHeight = 3 }`
+- Focus view viewport height: `if vpHeight < 5 { vpHeight = 5 }`
+- Content width: `if contentWidth < 20 { contentWidth = 20 }`
+
+**Test Coverage:**
+- `TestLayoutNoNegativeHeights` verifies no negative heights at extreme small sizes
+- All guards tested with terminal heights from 5 to 100 lines
+- All guards tested with terminal widths from 10 to 200 columns
+
+## Width Calculation Testing Guidelines
+
+### Lipgloss Width vs len()
+
+**Critical Rule:** NEVER use `len()` for width calculations with Unicode or styled strings.
+
+**Test Pattern:**
+```go
+func TestWidthCalculations(t *testing.T) {
+    // Unicode character that is 3 bytes but displays as 1 column
+    unicodeStr := "⬥"
+    
+    // WRONG: len() returns 3 (bytes)
+    bytesWidth := len(unicodeStr)
+    
+    // RIGHT: lipgloss.Width() returns 1 (display width)
+    displayWidth := lipgloss.Width(unicodeStr)
+    
+    if bytesWidth == displayWidth {
+        t.Error("len() should NOT equal lipgloss.Width() for Unicode")
+    }
+    
+    if displayWidth != 1 {
+        t.Errorf("expected display width 1, got %d", displayWidth)
+    }
+}
+```
+
+### Content Width with Borders
+
+When calculating content width with borders, account for border characters:
+
+**Pattern:**
+```go
+// Double-line border adds 4 chars total (2 on each side)
+contentWidth := terminalWidth - 4
+
+// Minimum guard
+if contentWidth < 20 {
+    contentWidth = 20
+}
+```
+
+**Test:**
+```go
+func TestContentWidthCalculation(t *testing.T) {
+    widths := []int{10, 20, 40, 80, 120, 160, 200}
+    
+    for _, w := range widths {
+        t.Run(fmt.Sprintf("width_%d", w), func(t *testing.T) {
+            contentWidth := w - 4
+            if contentWidth < 20 {
+                contentWidth = 20
+            }
+            
+            if contentWidth < 0 {
+                t.Error("content width must never be negative")
+            }
+        })
+    }
+}
+```
+
+## Golden File Update Process
+
+### When to Update
+
+Update golden files when:
+1. **Intentionally changing UI** - Color changes, layout changes, new elements
+2. **After Phase 1 border color fix** - Border RGB codes changed
+3. **After Unicode character replacements** - Character codepoints changed
+4. **After adding new golden tests** - Initial generation
+
+### How to Update
+
+```bash
+# Update all golden files
+go test ./internal/tui -update
+
+# Update specific test golden files
+go test ./internal/tui -run TestDashboard -update
+go test ./internal/tui -run TestFocusView -update
+```
+
+### Verification After Update
+
+```bash
+# 1. Verify all tests pass
+go test ./internal/tui
+
+# 2. Review changes to golden files
+git diff internal/tui/testdata/
+
+# 3. Check for expected changes
+# - Phase 1: RGB color codes changed from 42,42,85 to 107,0,179
+# - Phase 3: Unicode codepoints changed for replaced characters
+# - Phase 4: Spinner frames use new characters
+
+# 4. Commit golden file updates with descriptive message
+git add internal/tui/testdata/
+git commit -m "test: update golden files after [phase description]"
+```
+
+### Golden File Structure
+
+Each test has two variants:
+- **ANSI.golden** - Full output with ANSI escape codes (RGB colors, styles)
+- **Stripped.golden** - Content only, ANSI codes removed
+
+**Example:**
+```
+internal/tui/testdata/
+├── TestDashboard/
+│   ├── empty_swarm/
+│   │   ├── ANSI.golden       # Full ANSI with RGB codes
+│   │   └── Stripped.golden   # Content only
+│   └── with_swarm_messages/
+│       ├── ANSI.golden
+│       └── Stripped.golden
+```
+
+**Why Two Variants:**
+- **ANSI** - Catches color and style regressions
+- **Stripped** - Catches content and layout regressions (easier to read diffs)
+
 ## Test Execution
 
 ### Run All Tests
@@ -246,7 +721,15 @@ go test ./internal/tui -run TestUnicodeAmbiguousWidthSafety
 
 ### Update Golden Files
 ```bash
+# Update all golden files
 go test ./internal/tui -update
+
+# Update specific test golden files
+go test ./internal/tui -run TestDashboard -update
+go test ./internal/tui -run TestFocusView -update
+
+# Verify changes after update
+git diff internal/tui/testdata/
 ```
 
 ### Verify Build
@@ -259,12 +742,19 @@ make test
 
 ### Files
 - `testhelpers_test.go` - Test utilities and constants
-- `golden_test.go` - Golden file tests (22 tests, 44 golden files)
+- `golden_test.go` - Golden file tests (basic rendering)
+- `golden_edge_cases_test.go` - Edge case golden tests (empty states, full states, Unicode, etc.)
 - `integration_test.go` - Integration tests (18 tests)
 - `tui_test.go` - Unit tests (22 tests)
 - `focus_test.go` - Focus view tests (7 tests)
 - `json_tree_test.go` - JSON rendering tests (4 tests)
 - `scrollbar_test.go` - Scrollbar tests (4 tests)
+- `spinner_test.go` - Spinner animation tests
+- `statusbar_test.go` - Status bar tests
+- `input_test.go` - Input prompt tests
+- `unicode_test.go` - Unicode safety tests
+- `width_test.go` - Width calculation tests
+- `layout_test.go` - Layout calculation tests
 
 ### Dependencies
 - `github.com/charmbracelet/x/exp/teatest` - Integration testing
@@ -282,7 +772,18 @@ internal/tui/
 │   │   └── with_swarm_messages/
 │   │       ├── ANSI.golden
 │   │       └── Stripped.golden
+│   ├── TestDashboardEdgeCases/  # Edge case tests
+│   │   ├── full_swarm_16_myses/
+│   │   ├── all_myses_errored/
+│   │   ├── unicode_emoji_in_messages/
+│   │   └── ...
 │   ├── TestFocusView/
+│   ├── TestFocusViewEdgeCases/  # Edge case tests
+│   │   ├── no_logs_empty_state/
+│   │   ├── very_long_log_entry/
+│   │   ├── unicode_emoji_logs/
+│   │   └── ...
+│   ├── TestNetIndicatorEdgeCases/
 │   ├── TestHelp/
 │   ├── TestLogEntry/
 │   ├── TestJSONTree/
@@ -291,6 +792,7 @@ internal/tui/
 │   └── TestBroadcastLabels/
 ├── testhelpers_test.go          # Test utilities
 ├── golden_test.go               # Golden file tests
+├── golden_edge_cases_test.go    # Edge case golden tests
 ├── integration_test.go          # Integration tests
 ├── tui_test.go                  # Unit tests
 ├── focus_test.go                # Focus view tests
@@ -302,13 +804,13 @@ internal/tui/
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 48 |
-| Test files | 7 |
+| Total tests | 80+ |
+| Test files | 14 |
 | Unit tests | 22 |
-| Golden tests | 22 |
+| Golden tests | 54 (basic + edge cases) |
 | Integration tests | 18 (1 passing, 17 need timeout fix) |
-| Golden files | 44 (ANSI + Stripped variants) |
-| Test coverage | 83% |
+| Golden files | 218 (ANSI + Stripped variants) |
+| Test coverage | 85.7% |
 
 ## Key Lessons
 

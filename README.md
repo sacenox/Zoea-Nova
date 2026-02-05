@@ -30,6 +30,19 @@ Zoea-Nova is a high-performance command center designed to orchestrate massive s
 
 Zoea Nova uses a small set of in-app terms (Mysis, Commander, Swarm, Provider, MCP). The canonical glossary lives in `AGENTS.md` under the Terminology section.
 
+## Requirements
+
+**Terminal:**
+- Minimum size: 80 columns × 20 lines
+- TrueColor support recommended (24-bit RGB)
+- Unicode font (Nerd Font or Unicode-compatible font)
+
+**Recommended Terminals:**
+- Alacritty, Kitty, WezTerm, Ghostty (best compatibility)
+- iTerm2 (macOS), Windows Terminal (with Nerd Font)
+
+See `documentation/TERMINAL_COMPATIBILITY.md` for detailed compatibility information.
+
 ## Try it
 
 ```sh

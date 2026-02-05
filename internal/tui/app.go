@@ -239,6 +239,18 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// Check for minimum terminal dimensions
+	const minWidth = 80
+	const minHeight = 20
+	if m.width < minWidth || m.height < minHeight {
+		warning := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF5555")).
+			Bold(true).
+			Render(fmt.Sprintf("Terminal too small!\n\nMinimum size: %dx%d\nCurrent size: %dx%d\n\nPlease resize your terminal.",
+				minWidth, minHeight, m.width, m.height))
+		return warning
+	}
+
 	var content string
 
 	// Check if currently focused mysis is loading

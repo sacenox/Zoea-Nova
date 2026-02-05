@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 )
@@ -30,4 +32,21 @@ var ansiStripRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 // stripANSIForGolden removes all ANSI escape codes from a string for stripped golden files.
 func stripANSIForGolden(s string) string {
 	return ansiStripRegex.ReplaceAllString(s, "")
+}
+
+// newTestViewport creates a viewport for testing.
+func newTestViewport(width, height int) viewport.Model {
+	vp := viewport.New(width, height)
+	vp.Style = logStyle
+	return vp
+}
+
+// testMysisID returns a consistent test mysis ID.
+func testMysisID(id int) string {
+	return fmt.Sprintf("mysis-test-%d", id)
+}
+
+// testMysisName returns a consistent test mysis name.
+func testMysisName(id int) string {
+	return fmt.Sprintf("test-mysis-%d", id)
 }

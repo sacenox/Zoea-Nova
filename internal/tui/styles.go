@@ -60,7 +60,8 @@ var (
 	// Mysis list - double border for that 80s terminal aesthetic
 	mysisListStyle = lipgloss.NewStyle().
 			Border(lipgloss.DoubleBorder()).
-			BorderForeground(colorBorder)
+			BorderForeground(colorBrandDim) // Was: colorBorder (#2A2A55, contrast 1.48:1)
+		// Now: colorBrandDim (#6B00B3, contrast ~3.0:1)
 
 	mysisItemStyle = lipgloss.NewStyle().
 			Foreground(colorTeal).
@@ -91,7 +92,8 @@ var (
 	// No padding here - padding is added to content lines directly
 	logStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorder)
+			BorderForeground(colorBrandDim) // Was: colorBorder (#2A2A55, contrast 1.48:1)
+		// Now: colorBrandDim (#6B00B3, contrast ~3.0:1)
 
 	// Role colors per design doc: user=green, assistant=magenta, system=cyan, tool=yellow
 	logUserStyle = lipgloss.NewStyle().

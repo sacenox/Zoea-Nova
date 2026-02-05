@@ -395,7 +395,7 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 			Foreground(lipgloss.Color("240")) // Dim gray for truncation indicator
 
 		reasoningHeader := "REASONING:"
-		reasoningHeaderWidth := len(reasoningHeader) + 1 // +1 for space after
+		reasoningHeaderWidth := lipgloss.Width(reasoningHeader) + 1 // +1 for space after
 		reasoningContentWidth := maxWidth - reasoningHeaderWidth - padLeft - padRight
 		if reasoningContentWidth < 20 {
 			reasoningContentWidth = 20

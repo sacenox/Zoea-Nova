@@ -46,6 +46,29 @@ This uses a stub MCP client that returns mock data for essential tools (`get_sta
 
 See `documentation/OFFLINE_MODE.md` for supported tools and limitations.
 
+## Terminal Requirements:
+
+**Minimum Dimensions:**
+- Width: 80 columns
+- Height: 20 lines
+
+Zoea Nova enforces minimum terminal dimensions at startup. If the terminal is too small, it displays a warning message and prompts the user to resize. This prevents layout calculation issues and ensures a consistent user experience.
+
+**Recommended Terminals:**
+- Alacritty (excellent Unicode support)
+- Kitty (full Unicode support)
+- WezTerm (native font fallback)
+- Ghostty (TrueColor support verified)
+- iTerm2 (good with proper font)
+- Windows Terminal (requires Nerd Font or Unicode font)
+
+**Font Recommendations:**
+- Nerd Fonts: FiraCode Nerd Font, JetBrains Mono Nerd Font
+- Unicode fonts: Cascadia Code, Ubuntu Mono, Inconsolata
+- Fallback: DejaVu Sans Mono (decent Unicode coverage)
+
+See `documentation/TERMINAL_COMPATIBILITY.md` for detailed terminal testing results and `documentation/TUI_TESTING.md` for testing guidelines.
+
 ## TUI Testing:
 
 Zoea Nova uses three types of TUI tests:

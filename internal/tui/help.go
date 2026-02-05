@@ -37,8 +37,9 @@ func RenderHelp(width, height int) string {
 
 	maxKeyLen := 0
 	for _, item := range helpItems {
-		if len(item.key) > maxKeyLen {
-			maxKeyLen = len(item.key)
+		keyWidth := lipgloss.Width(item.key)
+		if keyWidth > maxKeyLen {
+			maxKeyLen = keyWidth
 		}
 	}
 
@@ -81,8 +82,9 @@ func RenderHelp(width, height int) string {
 }
 
 func padRight(s string, length int) string {
-	if len(s) >= length {
+	width := lipgloss.Width(s)
+	if width >= length {
 		return s
 	}
-	return s + strings.Repeat(" ", length-len(s))
+	return s + strings.Repeat(" ", length-width)
 }
