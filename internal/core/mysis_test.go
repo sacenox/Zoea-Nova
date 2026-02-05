@@ -170,14 +170,12 @@ eventLoop:
 		select {
 		case e := <-events:
 			if e.Type == EventMysisMessage {
-				data, ok := e.Data.(MessageData)
-				if ok && data.Content == "Hello, mysis!" {
+				if e.Message != nil && e.Message.Content == "Hello, mysis!" {
 					messageEvent = true
 				}
 			}
 			if e.Type == EventMysisResponse {
-				data := e.Data.(MessageData)
-				if data.Content == "I received your message!" {
+				if e.Message != nil && e.Message.Content == "I received your message!" {
 					responseEvent = true
 				}
 			}
@@ -330,12 +328,14 @@ func TestMysisStateEvents(t *testing.T) {
 		if e.Type != EventMysisStateChanged {
 			t.Errorf("expected state change event, got %s", e.Type)
 		}
-		data := e.Data.(StateChangeData)
-		if data.OldState != MysisStateIdle {
-			t.Errorf("expected old state=idle, got %s", data.OldState)
+		if e.State == nil {
+			t.Fatal("expected state change data")
 		}
-		if data.NewState != MysisStateRunning {
-			t.Errorf("expected new state=running, got %s", data.NewState)
+		if e.State.OldState != MysisStateIdle {
+			t.Errorf("expected old state=idle, got %s", e.State.OldState)
+		}
+		if e.State.NewState != MysisStateRunning {
+			t.Errorf("expected new state=running, got %s", e.State.NewState)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for state change event")

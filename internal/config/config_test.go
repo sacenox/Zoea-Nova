@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,6 +107,54 @@ rate_burst = 4
 	}
 }
 
+func TestLoadInvalidTemperature(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+temperature = 3.5
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected validation error for invalid temperature")
+	}
+	if !strings.Contains(err.Error(), "temperature") {
+		t.Fatalf("expected temperature validation error, got %v", err)
+	}
+}
+
+func TestLoadMissingProviderFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[providers.ollama]
+endpoint = ""
+model = ""
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected validation error for missing provider fields")
+	}
+	if !strings.Contains(err.Error(), "providers.ollama.endpoint") {
+		t.Fatalf("expected endpoint validation error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "providers.ollama.model") {
+		t.Fatalf("expected model validation error, got %v", err)
+	}
+}
+
 func TestLoadWithEnvOverrides(t *testing.T) {
 	// Set env vars
 	os.Setenv("ZOEA_MAX_MYSES", "10")
@@ -203,5 +253,247 @@ func TestLoadCredentialsNonExistent(t *testing.T) {
 	}
 	if creds == nil {
 		t.Fatal("expected non-nil credentials")
+	}
+}
+
+func TestLoadEnvOverridePrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[providers.ollama]
+endpoint = "http://file-endpoint"
+model = "file-model"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	os.Setenv("ZOEA_OLLAMA_MODEL", "env-model")
+	os.Setenv("ZOEA_OLLAMA_ENDPOINT", "http://env-endpoint")
+	defer func() {
+		os.Unsetenv("ZOEA_OLLAMA_MODEL")
+		os.Unsetenv("ZOEA_OLLAMA_ENDPOINT")
+	}()
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Providers["ollama"].Model != "env-model" {
+		t.Errorf("expected env model override, got %s", cfg.Providers["ollama"].Model)
+	}
+	if cfg.Providers["ollama"].Endpoint != "http://env-endpoint" {
+		t.Errorf("expected env endpoint override, got %s", cfg.Providers["ollama"].Endpoint)
+	}
+}
+
+func TestLoadIgnoresInvalidEnvOverrides(t *testing.T) {
+	defaults := DefaultConfig()
+
+	os.Setenv("ZOEA_MAX_MYSES", "not-a-number")
+	os.Setenv("ZOEA_OLLAMA_TEMPERATURE", "bad")
+	os.Setenv("ZOEA_OLLAMA_RATE_LIMIT", "bad")
+	os.Setenv("ZOEA_OLLAMA_RATE_BURST", "bad")
+	defer func() {
+		os.Unsetenv("ZOEA_MAX_MYSES")
+		os.Unsetenv("ZOEA_OLLAMA_TEMPERATURE")
+		os.Unsetenv("ZOEA_OLLAMA_RATE_LIMIT")
+		os.Unsetenv("ZOEA_OLLAMA_RATE_BURST")
+	}()
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Swarm.MaxMyses != defaults.Swarm.MaxMyses {
+		t.Errorf("expected max_myses=%d, got %d", defaults.Swarm.MaxMyses, cfg.Swarm.MaxMyses)
+	}
+	if cfg.Providers["ollama"].Temperature != defaults.Providers["ollama"].Temperature {
+		t.Errorf("expected temperature=%v, got %v", defaults.Providers["ollama"].Temperature, cfg.Providers["ollama"].Temperature)
+	}
+	if cfg.Providers["ollama"].RateLimit != defaults.Providers["ollama"].RateLimit {
+		t.Errorf("expected rate_limit=%v, got %v", defaults.Providers["ollama"].RateLimit, cfg.Providers["ollama"].RateLimit)
+	}
+	if cfg.Providers["ollama"].RateBurst != defaults.Providers["ollama"].RateBurst {
+		t.Errorf("expected rate_burst=%d, got %d", defaults.Providers["ollama"].RateBurst, cfg.Providers["ollama"].RateBurst)
+	}
+}
+
+func TestLoadInvalidURLFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	tests := []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{
+			name: "missing_scheme",
+			content: `
+[providers.ollama]
+endpoint = "localhost:11434"
+model = "qwen3:4b"
+`,
+			expected: "missing scheme or host",
+		},
+		{
+			name: "missing_host",
+			content: `
+[providers.ollama]
+endpoint = "http://"
+model = "qwen3:4b"
+`,
+			expected: "missing scheme or host",
+		},
+		{
+			name: "invalid_url",
+			content: `
+[providers.ollama]
+endpoint = "ht!tp://localhost:11434"
+model = "qwen3:4b"
+`,
+			expected: "invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			_, err := Load(configPath)
+			if err == nil {
+				t.Fatal("expected validation error for invalid URL format")
+			}
+			if !strings.Contains(err.Error(), tt.expected) {
+				t.Fatalf("expected error containing %q, got %v", tt.expected, err)
+			}
+		})
+	}
+}
+
+func TestLoadMaxMysesBounds(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	tests := []struct {
+		name     string
+		maxMyses int
+	}{
+		{"below_minimum", 0},
+		{"negative", -1},
+		{"above_maximum", 101},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := fmt.Sprintf(`
+[swarm]
+max_myses = %d
+
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+`, tt.maxMyses)
+
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			_, err := Load(configPath)
+			if err == nil {
+				t.Fatal("expected validation error for max_myses out of bounds")
+			}
+			if !strings.Contains(err.Error(), "max_myses") {
+				t.Fatalf("expected max_myses validation error, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "between 1 and 100") {
+				t.Fatalf("expected bounds message, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRateLimitBounds(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	tests := []struct {
+		name      string
+		rateLimit float64
+	}{
+		{"zero", 0.0},
+		{"negative", -1.0},
+		{"negative_fraction", -0.5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := fmt.Sprintf(`
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+rate_limit = %v
+`, tt.rateLimit)
+
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			_, err := Load(configPath)
+			if err == nil {
+				t.Fatal("expected validation error for rate_limit <= 0")
+			}
+			if !strings.Contains(err.Error(), "rate_limit") {
+				t.Fatalf("expected rate_limit validation error, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "must be greater than 0") {
+				t.Fatalf("expected bounds message, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRateBurstBounds(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	tests := []struct {
+		name      string
+		rateBurst int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := fmt.Sprintf(`
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+rate_burst = %d
+`, tt.rateBurst)
+
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatalf("failed to write test config: %v", err)
+			}
+
+			_, err := Load(configPath)
+			if err == nil {
+				t.Fatal("expected validation error for rate_burst < 1")
+			}
+			if !strings.Contains(err.Error(), "rate_burst") {
+				t.Fatalf("expected rate_burst validation error, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "must be at least 1") {
+				t.Fatalf("expected bounds message, got %v", err)
+			}
+		})
 	}
 }

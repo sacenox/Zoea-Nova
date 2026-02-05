@@ -28,6 +28,7 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 - [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
   - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
   - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
+  - **Recent evidence (2026-02-05):** Ollama logs show prompt truncation (`limit=32768`, `prompt=41611`) followed by bursts of `400` responses on `/v1/chat/completions` and one `500` response. No corresponding errors in `~/.zoea-nova/zoea.log`.
 
 
 ### Documentation & Tooling

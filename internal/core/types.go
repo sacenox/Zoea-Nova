@@ -49,7 +49,11 @@ type Event struct {
 	Type      EventType
 	MysisID   string
 	MysisName string
-	Data      interface{}
+	Message   *MessageData
+	Error     *ErrorData
+	State     *StateChangeData
+	Config    *ConfigChangeData
+	RateLimit *RateLimitData
 	Timestamp time.Time
 }
 

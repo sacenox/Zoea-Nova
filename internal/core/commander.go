@@ -234,7 +234,7 @@ func (c *Commander) ConfigureMysis(id, providerName, model string) error {
 		Type:      EventMysisConfigChanged,
 		MysisID:   id,
 		MysisName: mysis.Name(),
-		Data: ConfigChangeData{
+		Config: &ConfigChangeData{
 			Provider: providerName,
 			Model:    model,
 		},
@@ -290,7 +290,7 @@ func (c *Commander) Broadcast(content string) error {
 	// Emit broadcast event
 	c.bus.Publish(Event{
 		Type:      EventBroadcast,
-		Data:      MessageData{Role: "user", Content: content},
+		Message:   &MessageData{Role: "user", Content: content},
 		Timestamp: time.Now(),
 	})
 
@@ -325,7 +325,7 @@ func (c *Commander) BroadcastFrom(senderID, content string) error {
 	// Emit broadcast event
 	c.bus.Publish(Event{
 		Type:      EventBroadcast,
-		Data:      MessageData{Role: "user", Content: content},
+		Message:   &MessageData{Role: "user", Content: content},
 		Timestamp: time.Now(),
 	})
 

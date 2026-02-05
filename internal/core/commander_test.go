@@ -228,12 +228,14 @@ func TestCommanderConfigureMysis(t *testing.T) {
 		if e.Type != EventMysisConfigChanged {
 			t.Errorf("expected EventMysisConfigChanged, got %s", e.Type)
 		}
-		data := e.Data.(ConfigChangeData)
-		if data.Provider != "ollama" {
-			t.Errorf("expected provider=ollama, got %s", data.Provider)
+		if e.Config == nil {
+			t.Fatal("expected config change data")
 		}
-		if data.Model != "llama3" {
-			t.Errorf("expected model=llama3, got %s", data.Model)
+		if e.Config.Provider != "ollama" {
+			t.Errorf("expected provider=ollama, got %s", e.Config.Provider)
+		}
+		if e.Config.Model != "llama3" {
+			t.Errorf("expected model=llama3, got %s", e.Config.Model)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("timeout waiting for config changed event")

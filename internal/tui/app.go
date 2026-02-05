@@ -608,8 +608,8 @@ func (m *Model) handleEvent(event core.Event) {
 		}
 
 	case core.EventMysisError:
-		if data, ok := event.Data.(core.ErrorData); ok {
-			if strings.Contains(strings.ToLower(data.Error), "provider chat") {
+		if event.Error != nil {
+			if strings.Contains(strings.ToLower(event.Error.Error), "provider chat") {
 				m.recordProviderError(event.Timestamp)
 			}
 		}

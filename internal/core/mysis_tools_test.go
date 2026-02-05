@@ -47,8 +47,7 @@ func TestMysisToolExecution(t *testing.T) {
 		select {
 		case e := <-events:
 			if e.Type == EventMysisResponse {
-				data := e.Data.(MessageData)
-				if data.Content == "Initial response" {
+				if e.Message != nil && e.Message.Content == "Initial response" {
 					initialFinished = true
 				}
 			}
@@ -76,8 +75,7 @@ func TestMysisToolExecution(t *testing.T) {
 		select {
 		case e := <-events:
 			if e.Type == EventMysisMessage {
-				data := e.Data.(MessageData)
-				if data.Role == "assistant" && data.Content == "Calling tools: test_tool" {
+				if e.Message != nil && e.Message.Role == "assistant" && e.Message.Content == "Calling tools: test_tool" {
 					toolCalled = true
 					// Now update mock to return NO tool calls for the next iteration
 					mock.WithToolCalls(nil)

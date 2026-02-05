@@ -72,7 +72,7 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 	}
 }
 
-func (a *Mysis) computeMemoryStats(memories []*store.Memory) contextStats {
+func (m *Mysis) computeMemoryStats(memories []*store.Memory) contextStats {
 	stats := contextStats{
 		MemoryCount:  len(memories),
 		RoleCounts:   make(map[string]int),
@@ -89,7 +89,7 @@ func (a *Mysis) computeMemoryStats(memories []*store.Memory) contextStats {
 	return stats
 }
 
-func (a *Mysis) computeMessageStats(messages []provider.Message) contextStats {
+func (m *Mysis) computeMessageStats(messages []provider.Message) contextStats {
 	stats := contextStats{
 		MessageCount: len(messages),
 	}
@@ -103,38 +103,44 @@ func (a *Mysis) computeMessageStats(messages []provider.Message) contextStats {
 }
 
 // SetMCP sets the MCP proxy for tool calling.
-func (a *Mysis) SetMCP(proxy *mcp.Proxy) {
+func (m *Mysis) SetMCP(proxy *mcp.Proxy) {
+	a := m
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.mcp = proxy
 }
 
 // ID returns the mysis unique identifier.
-func (a *Mysis) ID() string {
+func (m *Mysis) ID() string {
+	a := m
 	return a.id
 }
 
 // Name returns the mysis display name.
-func (a *Mysis) Name() string {
+func (m *Mysis) Name() string {
+	a := m
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.name
 }
 
 // CreatedAt returns when the mysis was created.
-func (a *Mysis) CreatedAt() time.Time {
+func (m *Mysis) CreatedAt() time.Time {
+	a := m
 	return a.createdAt
 }
 
 // State returns the mysis current state.
-func (a *Mysis) State() MysisState {
+func (m *Mysis) State() MysisState {
+	a := m
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.state
 }
 
 // ProviderName returns the name of the mysis provider.
-func (a *Mysis) ProviderName() string {
+func (m *Mysis) ProviderName() string {
+	a := m
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.provider == nil {
@@ -144,28 +150,32 @@ func (a *Mysis) ProviderName() string {
 }
 
 // LastError returns the last error encountered by the mysis.
-func (a *Mysis) LastError() error {
+func (m *Mysis) LastError() error {
+	a := m
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.lastError
 }
 
 // CurrentAccountUsername returns the username of the account this mysis is using.
-func (a *Mysis) CurrentAccountUsername() string {
+func (m *Mysis) CurrentAccountUsername() string {
+	a := m
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.currentAccountUsername
 }
 
 // SetProvider updates the mysis provider.
-func (a *Mysis) SetProvider(p provider.Provider) {
+func (m *Mysis) SetProvider(p provider.Provider) {
+	a := m
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.provider = p
 }
 
 // Start begins the mysis processing loop.
-func (a *Mysis) Start() error {
+func (m *Mysis) Start() error {
+	a := m
 	a.mu.Lock()
 	if a.state == MysisStateRunning {
 		a.mu.Unlock()
@@ -211,7 +221,8 @@ func (a *Mysis) Start() error {
 }
 
 // Stop halts the mysis processing loop.
-func (a *Mysis) Stop() error {
+func (m *Mysis) Stop() error {
+	a := m
 	a.mu.Lock()
 	if a.state != MysisStateRunning {
 		a.mu.Unlock()
@@ -253,7 +264,8 @@ func (a *Mysis) Stop() error {
 
 // SendMessageFrom sends a message to the mysis for processing with sender tracking.
 // The source parameter indicates whether this is a direct or broadcast message.
-func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, senderID string) error {
+func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, senderID string) error {
+	a := m
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 
@@ -283,7 +295,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		Type:      EventMysisMessage,
 		MysisID:   a.id,
 		MysisName: a.name,
-		Data:      MessageData{Role: string(role), Content: content},
+		Message:   &MessageData{Role: string(role), Content: content},
 		Timestamp: time.Now(),
 	})
 
@@ -309,7 +321,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				Type:      EventMysisError,
 				MysisID:   a.id,
 				MysisName: a.name,
-				Data:      ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
+				Error:     &ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
 				Timestamp: time.Now(),
 			})
 		} else {
@@ -329,7 +341,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 					Type:      EventMysisMessage,
 					MysisID:   a.id,
 					MysisName: a.name,
-					Data:      MessageData{Role: "system", Content: fmt.Sprintf("Tools available: %s", strings.Join(toolNames, ", "))},
+					Message:   &MessageData{Role: "system", Content: fmt.Sprintf("Tools available: %s", strings.Join(toolNames, ", "))},
 					Timestamp: time.Now(),
 				})
 			}
@@ -339,7 +351,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			Type:      EventMysisError,
 			MysisID:   a.id,
 			MysisName: a.name,
-			Data:      ErrorData{Error: "MCP proxy not configured - no tools available"},
+			Error:     &ErrorData{Error: "MCP proxy not configured - no tools available"},
 			Timestamp: time.Now(),
 		})
 	}
@@ -445,7 +457,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				Type:      EventMysisMessage,
 				MysisID:   a.id,
 				MysisName: a.name,
-				Data:      MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
+				Message:   &MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
 				Timestamp: time.Now(),
 			})
 
@@ -474,7 +486,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 					Type:      EventMysisMessage,
 					MysisID:   a.id,
 					MysisName: a.name,
-					Data:      MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
+					Message:   &MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
 					Timestamp: time.Now(),
 				})
 			}
@@ -503,7 +515,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			Type:      EventMysisResponse,
 			MysisID:   a.id,
 			MysisName: a.name,
-			Data:      MessageData{Role: "assistant", Content: finalResponse},
+			Message:   &MessageData{Role: "assistant", Content: finalResponse},
 			Timestamp: time.Now(),
 		})
 
@@ -517,12 +529,14 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 }
 
 // SendMessage sends a message to the mysis for processing.
-func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
+func (m *Mysis) SendMessage(content string, source store.MemorySource) error {
+	a := m
 	return a.SendMessageFrom(content, source, "")
 }
 
 // memoriesToMessages converts stored memories to provider messages.
-func (a *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message {
+func (m *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message {
+	a := m
 	messages := make([]provider.Message, 0, len(memories))
 
 	for _, m := range memories {
@@ -554,7 +568,8 @@ func (a *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message 
 }
 
 // executeToolCall executes a single tool call via MCP proxy.
-func (a *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc provider.ToolCall) (*mcp.ToolResult, error) {
+func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc provider.ToolCall) (*mcp.ToolResult, error) {
+	a := m
 	if mcpProxy == nil {
 		return &mcp.ToolResult{
 			Content: []mcp.ContentBlock{{Type: "text", Text: "MCP not configured"}},
@@ -585,7 +600,8 @@ func (a *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 	return result, err
 }
 
-func (a *Mysis) setCurrentAccount(username string) {
+func (m *Mysis) setCurrentAccount(username string) {
+	a := m
 	if username == "" {
 		return
 	}
@@ -600,7 +616,8 @@ func (a *Mysis) setCurrentAccount(username string) {
 	}
 }
 
-func (a *Mysis) releaseCurrentAccount() {
+func (m *Mysis) releaseCurrentAccount() {
+	a := m
 	a.mu.Lock()
 	username := a.currentAccountUsername
 	a.currentAccountUsername = ""
@@ -612,7 +629,7 @@ func (a *Mysis) releaseCurrentAccount() {
 }
 
 // formatToolCallsForStorage formats tool calls for storage in memory.
-func (a *Mysis) formatToolCallsForStorage(calls []provider.ToolCall) string {
+func (m *Mysis) formatToolCallsForStorage(calls []provider.ToolCall) string {
 	var parts []string
 	for _, tc := range calls {
 		parts = append(parts, fmt.Sprintf("%s%s%s%s%s", tc.ID, constants.ToolCallStorageFieldDelimiter, tc.Name, constants.ToolCallStorageFieldDelimiter, string(tc.Arguments)))
@@ -621,7 +638,7 @@ func (a *Mysis) formatToolCallsForStorage(calls []provider.ToolCall) string {
 }
 
 // parseStoredToolCalls parses tool calls from stored format.
-func (a *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
+func (m *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 	stored = strings.TrimPrefix(stored, constants.ToolCallStoragePrefix)
 	if stored == "" {
 		return nil
@@ -643,7 +660,7 @@ func (a *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 }
 
 // formatToolResult formats a tool result for storage (includes ID for LLM context).
-func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
+func (m *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
 	if err != nil {
 		return fmt.Sprintf("%s:Error calling %s: %v. Check the tool's required parameters and try again.", toolCallID, toolName, err)
 	}
@@ -668,7 +685,7 @@ func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolRe
 }
 
 // formatToolResultDisplay formats a tool result for UI display (human-readable).
-func (a *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) string {
+func (m *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
@@ -694,7 +711,8 @@ func (a *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) strin
 }
 
 // setError sets the mysis last error and emits an error event.
-func (a *Mysis) setError(err error) {
+func (m *Mysis) setError(err error) {
+	a := m
 	a.mu.Lock()
 	a.lastError = err
 	a.mu.Unlock()
@@ -703,7 +721,7 @@ func (a *Mysis) setError(err error) {
 		Type:      EventMysisError,
 		MysisID:   a.id,
 		MysisName: a.name,
-		Data:      ErrorData{Error: err.Error()},
+		Error:     &ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
 }
@@ -711,7 +729,8 @@ func (a *Mysis) setError(err error) {
 // getContextMemories returns memories for LLM context: system prompt + recent messages.
 // This keeps context small for faster inference while preserving essential information.
 // Compacts repeated snapshot tool results to prefer recent state.
-func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
+func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
+	a := m
 	// Get recent memories (limited for performance)
 	recent, err := a.store.GetRecentMemories(a.id, constants.MaxContextMessages)
 	if err != nil {
@@ -743,7 +762,8 @@ func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
 // compactSnapshots removes redundant snapshot tool results, keeping only the most recent
 // result for each snapshot tool. This prevents state-heavy tools from crowding out
 // conversation history while ensuring the latest state is available.
-func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
+func (m *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
+	a := m
 	if len(memories) == 0 {
 		return memories
 	}
@@ -803,7 +823,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 	return result
 }
 
-func (a *Mysis) extractToolNameFromResult(content string, toolCallNames map[string]string) string {
+func (m *Mysis) extractToolNameFromResult(content string, toolCallNames map[string]string) string {
 	idx := strings.Index(content, constants.ToolCallStorageFieldDelimiter)
 	if idx <= 0 {
 		return ""
@@ -813,16 +833,16 @@ func (a *Mysis) extractToolNameFromResult(content string, toolCallNames map[stri
 	return toolCallNames[callID]
 }
 
-func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
+func (m *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
 	index := make(map[string]string)
-	for _, m := range memories {
-		if m.Role != store.MemoryRoleAssistant {
+	for _, mem := range memories {
+		if mem.Role != store.MemoryRoleAssistant {
 			continue
 		}
-		if !strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
+		if !strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
 			continue
 		}
-		calls := a.parseStoredToolCalls(m.Content)
+		calls := m.parseStoredToolCalls(mem.Content)
 		for _, call := range calls {
 			if call.ID == "" || call.Name == "" {
 				continue
@@ -834,7 +854,7 @@ func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
 	return index
 }
 
-func (a *Mysis) isSnapshotTool(toolName string) bool {
+func (m *Mysis) isSnapshotTool(toolName string) bool {
 	if toolName == "" {
 		return false
 	}
@@ -850,7 +870,8 @@ func (a *Mysis) isSnapshotTool(toolName string) bool {
 }
 
 // run is the mysis main processing loop.
-func (a *Mysis) run(ctx context.Context) {
+func (m *Mysis) run(ctx context.Context) {
+	a := m
 	// Ticker to nudge the mysis if it's idle
 	ticker := time.NewTicker(constants.IdleNudgeInterval)
 	defer ticker.Stop()
@@ -881,7 +902,8 @@ func (a *Mysis) run(ctx context.Context) {
 	}
 }
 
-func (a *Mysis) buildContinuePrompt() string {
+func (m *Mysis) buildContinuePrompt() string {
+	a := m
 	base := constants.ContinuePrompt
 	reminders := a.detectDriftReminders()
 	if len(reminders) == 0 {
@@ -899,7 +921,8 @@ func (a *Mysis) buildContinuePrompt() string {
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func (a *Mysis) detectDriftReminders() []string {
+func (m *Mysis) detectDriftReminders() []string {
+	a := m
 	if a.store == nil {
 		return nil
 	}
@@ -947,7 +970,8 @@ func hasRealTimeReference(memories []*store.Memory) bool {
 	return false
 }
 
-func (a *Mysis) shouldNudge(now time.Time) bool {
+func (m *Mysis) shouldNudge(now time.Time) bool {
+	a := m
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -964,7 +988,8 @@ func (a *Mysis) shouldNudge(now time.Time) bool {
 	return true
 }
 
-func (a *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) {
+func (m *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) {
+	a := m
 	if err != nil || result == nil || result.IsError {
 		return
 	}
@@ -1010,14 +1035,16 @@ func (a *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) 
 
 }
 
-func (a *Mysis) setActivity(state ActivityState, until time.Time) {
+func (m *Mysis) setActivity(state ActivityState, until time.Time) {
+	a := m
 	a.mu.Lock()
 	a.activityState = state
 	a.activityUntil = until
 	a.mu.Unlock()
 }
 
-func (a *Mysis) clearActivityIf(state ActivityState) {
+func (m *Mysis) clearActivityIf(state ActivityState) {
+	a := m
 	a.mu.Lock()
 	if a.activityState == state {
 		a.activityState = ActivityStateIdle
@@ -1026,7 +1053,8 @@ func (a *Mysis) clearActivityIf(state ActivityState) {
 	a.mu.Unlock()
 }
 
-func (a *Mysis) updateServerTick(now time.Time, tick int64) {
+func (m *Mysis) updateServerTick(now time.Time, tick int64) {
+	a := m
 	if tick <= 0 {
 		return
 	}
@@ -1046,7 +1074,8 @@ func (a *Mysis) updateServerTick(now time.Time, tick int64) {
 	a.lastServerTickAt = now
 }
 
-func (a *Mysis) estimateTravelUntil(now time.Time, arrivalTick, currentTick int64, currentTickOK bool) time.Time {
+func (m *Mysis) estimateTravelUntil(now time.Time, arrivalTick, currentTick int64, currentTickOK bool) time.Time {
+	a := m
 	if currentTickOK {
 		a.mu.RLock()
 		tickDuration := a.tickDuration
@@ -1059,7 +1088,8 @@ func (a *Mysis) estimateTravelUntil(now time.Time, arrivalTick, currentTick int6
 	return now.Add(constants.WaitStateNudgeInterval)
 }
 
-func (a *Mysis) estimateCooldownUntil(now time.Time, cooldownTicks int64) time.Time {
+func (m *Mysis) estimateCooldownUntil(now time.Time, cooldownTicks int64) time.Time {
+	a := m
 	a.mu.RLock()
 	tickDuration := a.tickDuration
 	a.mu.RUnlock()
@@ -1276,12 +1306,13 @@ func normalizeFloat(value interface{}) (float64, bool) {
 	}
 }
 
-func (a *Mysis) emitStateChange(oldState, newState MysisState) {
+func (m *Mysis) emitStateChange(oldState, newState MysisState) {
+	a := m
 	a.publishCriticalEvent(Event{
 		Type:      EventMysisStateChanged,
 		MysisID:   a.id,
 		MysisName: a.name,
-		Data: StateChangeData{
+		State: &StateChangeData{
 			OldState: oldState,
 			NewState: newState,
 		},
@@ -1289,7 +1320,8 @@ func (a *Mysis) emitStateChange(oldState, newState MysisState) {
 	})
 }
 
-func (a *Mysis) setErrorState(err error) {
+func (m *Mysis) setErrorState(err error) {
+	a := m
 	a.mu.Lock()
 	oldState := a.state
 	a.state = MysisStateErrored
@@ -1309,12 +1341,13 @@ func (a *Mysis) setErrorState(err error) {
 		Type:      EventMysisError,
 		MysisID:   a.id,
 		MysisName: a.name,
-		Data:      ErrorData{Error: err.Error()},
+		Error:     &ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
 }
 
-func (a *Mysis) publishCriticalEvent(event Event) {
+func (m *Mysis) publishCriticalEvent(event Event) {
+	a := m
 	if a.bus.PublishBlocking(event, constants.EventBusPublishTimeout) {
 		return
 	}
