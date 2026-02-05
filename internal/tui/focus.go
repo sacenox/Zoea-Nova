@@ -61,7 +61,7 @@ func wrapText(text string, maxWidth int) []string {
 }
 
 // RenderFocusView renders the detailed mysis view (legacy, without viewport).
-func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string) string {
+func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -111,7 +111,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 	} else {
 		// Render all log entries to fill panel content area
 		for _, entry := range logs {
-			entryLines := renderLogEntry(entry, panelContentWidth)
+			entryLines := renderLogEntryImpl(entry, panelContentWidth, verbose)
 			logLines = append(logLines, entryLines...)
 		}
 
@@ -133,7 +133,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -176,8 +176,14 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	vpView := logStyle.Width(width-2).Padding(0, 2).Render(vp.View())
 	sections = append(sections, vpView)
 
-	// Footer with scroll hints
-	hint := dimmedStyle.Render("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM")
+	// Footer with scroll hints and verbose toggle
+	verboseHint := ""
+	if verbose {
+		verboseHint = "  ·  [ v ] VERBOSE: ON"
+	} else {
+		verboseHint = "  ·  [ v ] VERBOSE: OFF"
+	}
+	hint := dimmedStyle.Render(fmt.Sprintf("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM%s", verboseHint))
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -186,7 +192,7 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 // logBgColor is the background color for log entries (same as colorBgPanel)
 var logBgColor = colorBgPanel
 
-func renderLogEntry(entry LogEntry, maxWidth int) []string {
+func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 	// Get the role's foreground color and create a style with background
 	roleColor := RoleColor(entry.Role)
 	prefixStyle := lipgloss.NewStyle().
@@ -229,8 +235,22 @@ func renderLogEntry(entry LogEntry, maxWidth int) []string {
 		contentWidth = 20
 	}
 
-	// Wrap the content
-	wrappedLines := wrapText(entry.Content, contentWidth)
+	// Detect JSON content in tool messages and render as tree
+	var wrappedLines []string
+	if entry.Role == "tool" && isJSON(entry.Content) {
+		// Render JSON as tree structure
+		treeStr, err := renderJSONTree(entry.Content, verbose)
+		if err == nil {
+			// Tree rendering succeeded
+			wrappedLines = strings.Split(treeStr, "\n")
+		} else {
+			// Fall back to normal wrapping if JSON parsing fails
+			wrappedLines = wrapText(entry.Content, contentWidth)
+		}
+	} else {
+		// Normal text wrapping
+		wrappedLines = wrapText(entry.Content, contentWidth)
+	}
 
 	var result []string
 	indent := strings.Repeat(" ", prefixWidth)
@@ -348,4 +368,11 @@ func renderFocusHeader(mysisName string, width int) string {
 
 	line := "◆" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "◆"
 	return headerStyle.Width(width).Render(line)
+}
+
+// isJSON checks if a string appears to be JSON
+func isJSON(s string) bool {
+	s = strings.TrimSpace(s)
+	return (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) ||
+		(strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"))
 }

@@ -92,7 +92,7 @@ func TestRenderLogEntryWithReasoning(t *testing.T) {
 	}
 
 	maxWidth := 80
-	lines := renderLogEntry(entry, maxWidth)
+	lines := renderLogEntryImpl(entry, maxWidth, false)
 
 	// Should have content lines + reasoning section
 	if len(lines) < 4 {
@@ -111,5 +111,34 @@ func TestRenderLogEntryWithReasoning(t *testing.T) {
 	// Verify ANSI codes are present (styling is applied)
 	if !strings.Contains(output, "\x1b[") {
 		t.Error("Expected ANSI escape codes (styling) in output")
+	}
+}
+
+func TestRenderLogEntryToolWithJSON(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	jsonPayload := `{"ship_id": "abc123", "cargo": [{"item": "iron", "quantity": 50}, {"item": "gold", "quantity": 10}], "fuel": 100}`
+
+	entry := LogEntry{
+		Role:      "tool",
+		Source:    "tool",
+		Content:   jsonPayload,
+		Timestamp: time.Now(),
+	}
+
+	maxWidth := 80
+	lines := renderLogEntryImpl(entry, maxWidth, false)
+
+	output := strings.Join(lines, "\n")
+
+	// Should have tree structure
+	if !strings.Contains(output, "├─") && !strings.Contains(output, "└─") {
+		t.Error("Expected tree box characters in tool JSON output")
+	}
+
+	// Should contain field names
+	if !strings.Contains(output, "ship_id") || !strings.Contains(output, "cargo") {
+		t.Error("Expected JSON field names in tree output")
 	}
 }

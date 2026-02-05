@@ -35,6 +35,7 @@ type Model struct {
 	height      int
 	selectedIdx int
 	showHelp    bool
+	verboseJSON bool // show full JSON trees without truncation
 
 	input   InputModel
 	myses   []MysisInfo
@@ -235,7 +236,7 @@ func (m Model) View() string {
 	if m.showHelp {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -413,6 +414,12 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Go to bottom and enable auto-scroll
 		m.viewport.GotoBottom()
 		m.autoScroll = true
+		return m, nil
+
+	case key.Matches(msg, keys.VerboseToggle):
+		m.verboseJSON = !m.verboseJSON
+		// Re-render viewport content with new verbose setting
+		m.updateViewportContent()
 		return m, nil
 	}
 
@@ -637,7 +644,7 @@ func (m *Model) updateViewportContent() {
 
 	var lines []string
 	for _, entry := range m.logs {
-		entryLines := renderLogEntry(entry, panelContentWidth)
+		entryLines := renderLogEntryImpl(entry, panelContentWidth, m.verboseJSON)
 		lines = append(lines, entryLines...)
 	}
 
@@ -685,37 +692,39 @@ func (m Model) listenForEvents() tea.Cmd {
 
 // Key bindings
 var keys = struct {
-	Quit      key.Binding
-	Help      key.Binding
-	Escape    key.Binding
-	Enter     key.Binding
-	Tab       key.Binding
-	ShiftTab  key.Binding
-	Up        key.Binding
-	Down      key.Binding
-	NewMysis  key.Binding
-	Delete    key.Binding
-	Relaunch  key.Binding
-	Stop      key.Binding
-	Broadcast key.Binding
-	Message   key.Binding
-	Configure key.Binding
-	End       key.Binding
+	Quit          key.Binding
+	Help          key.Binding
+	Escape        key.Binding
+	Enter         key.Binding
+	Tab           key.Binding
+	ShiftTab      key.Binding
+	Up            key.Binding
+	Down          key.Binding
+	NewMysis      key.Binding
+	Delete        key.Binding
+	Relaunch      key.Binding
+	Stop          key.Binding
+	Broadcast     key.Binding
+	Message       key.Binding
+	Configure     key.Binding
+	End           key.Binding
+	VerboseToggle key.Binding
 }{
-	Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Help:      key.NewBinding(key.WithKeys("?")),
-	Escape:    key.NewBinding(key.WithKeys("esc")),
-	Enter:     key.NewBinding(key.WithKeys("enter")),
-	Tab:       key.NewBinding(key.WithKeys("tab")),
-	ShiftTab:  key.NewBinding(key.WithKeys("shift+tab")),
-	Up:        key.NewBinding(key.WithKeys("up", "k")),
-	Down:      key.NewBinding(key.WithKeys("down", "j")),
-	NewMysis:  key.NewBinding(key.WithKeys("n")),
-	Delete:    key.NewBinding(key.WithKeys("d")),
-	Relaunch:  key.NewBinding(key.WithKeys("r")),
-	Stop:      key.NewBinding(key.WithKeys("s")),
-	Broadcast: key.NewBinding(key.WithKeys("b")),
-	Message:   key.NewBinding(key.WithKeys("m")),
-	Configure: key.NewBinding(key.WithKeys("c")),
-	End:       key.NewBinding(key.WithKeys("end", "G")),
+	Quit:          key.NewBinding(key.WithKeys("q", "ctrl+c")),
+	Help:          key.NewBinding(key.WithKeys("?")),
+	Escape:        key.NewBinding(key.WithKeys("esc")),
+	Enter:         key.NewBinding(key.WithKeys("enter")),
+	Tab:           key.NewBinding(key.WithKeys("tab")),
+	ShiftTab:      key.NewBinding(key.WithKeys("shift+tab")),
+	Up:            key.NewBinding(key.WithKeys("up", "k")),
+	Down:          key.NewBinding(key.WithKeys("down", "j")),
+	NewMysis:      key.NewBinding(key.WithKeys("n")),
+	Delete:        key.NewBinding(key.WithKeys("d")),
+	Relaunch:      key.NewBinding(key.WithKeys("r")),
+	Stop:          key.NewBinding(key.WithKeys("s")),
+	Broadcast:     key.NewBinding(key.WithKeys("b")),
+	Message:       key.NewBinding(key.WithKeys("m")),
+	Configure:     key.NewBinding(key.WithKeys("c")),
+	End:           key.NewBinding(key.WithKeys("end", "G")),
+	VerboseToggle: key.NewBinding(key.WithKeys("v")),
 }
