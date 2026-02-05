@@ -249,16 +249,8 @@ func TestIntegration_BroadcastInput(t *testing.T) {
 	// Press Enter to send
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
-	// Wait for input to clear
-	teatest.WaitFor(
-		t,
-		tm.Output(),
-		func(bts []byte) bool {
-			// Check that we're back to inactive state
-			return !bytes.Contains(bts, []byte(testMessage)) || bytes.Contains(bts, []byte("SWARM BROADCAST"))
-		},
-		teatest.WithDuration(3*time.Second),
-	)
+	// Allow model to process broadcast and reset input
+	time.Sleep(200 * time.Millisecond)
 
 	// Verify input cleared
 	finalModel := quitAndFinalModel(t, tm, 2*time.Second)

@@ -202,7 +202,7 @@ func (a *Mysis) Start() error {
 	go a.run(ctx)
 
 	// Trigger initial turn to encourage autonomy
-	go a.SendMessage(constants.ContinuePrompt, store.MemorySourceSystem)
+	go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
 
 	return nil
 }
@@ -848,11 +848,77 @@ func (a *Mysis) run(ctx context.Context) {
 				// Only nudge if not already in a turn
 				if a.turnMu.TryLock() {
 					a.turnMu.Unlock()
-					go a.SendMessage(constants.ContinuePrompt, store.MemorySourceSystem)
+					go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
 				}
 			}
 		}
 	}
+}
+
+func (a *Mysis) buildContinuePrompt() string {
+	base := constants.ContinuePrompt
+	reminders := a.detectDriftReminders()
+	if len(reminders) == 0 {
+		return base
+	}
+
+	var builder strings.Builder
+	builder.WriteString(base)
+	builder.WriteString("\n\nDRIFT REMINDERS:\n")
+	for _, reminder := range reminders {
+		builder.WriteString("- ")
+		builder.WriteString(reminder)
+		builder.WriteString("\n")
+	}
+	return strings.TrimRight(builder.String(), "\n")
+}
+
+func (a *Mysis) detectDriftReminders() []string {
+	if a.store == nil {
+		return nil
+	}
+
+	memories, err := a.store.GetRecentMemories(a.id, constants.ContinuePromptDriftLookback)
+	if err != nil {
+		return nil
+	}
+
+	if hasRealTimeReference(memories) {
+		return []string{"Avoid real-world time references. Use game ticks from tool results (current_tick, arrival_tick, cooldown_ticks)."}
+	}
+
+	return nil
+}
+
+func hasRealTimeReference(memories []*store.Memory) bool {
+	keywords := []string{
+		"real time",
+		"real-time",
+		"real world",
+		"real-world",
+		"irl",
+		"utc",
+		"minute",
+		"minutes",
+		"hour",
+		"hours",
+		"second",
+		"seconds",
+	}
+
+	for _, memory := range memories {
+		switch memory.Role {
+		case store.MemoryRoleUser, store.MemoryRoleAssistant:
+			content := strings.ToLower(memory.Content)
+			for _, keyword := range keywords {
+				if strings.Contains(content, keyword) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func (a *Mysis) shouldNudge(now time.Time) bool {

@@ -547,6 +547,34 @@ func TestContinuePromptContainsSearchReminder(t *testing.T) {
 	if !strings.Contains(constants.ContinuePrompt, "zoea_search_reasoning") {
 		t.Fatal("ContinuePrompt missing zoea_search_reasoning reminder")
 	}
+	if !strings.Contains(constants.ContinuePrompt, "zoea_claim_account") {
+		t.Fatal("ContinuePrompt missing zoea_claim_account reminder")
+	}
+	if !strings.Contains(constants.ContinuePrompt, "Crustacean-themed") {
+		t.Fatal("ContinuePrompt missing themed username reminder")
+	}
+	if !strings.Contains(constants.ContinuePrompt, "real-world time") {
+		t.Fatal("ContinuePrompt missing real-world time reminder")
+	}
+}
+
+func TestContinuePromptAddsDriftReminder(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("drift-check", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "Waiting 5 minutes for travel.", "", "")
+
+	prompt := mysis.buildContinuePrompt()
+	if !strings.Contains(prompt, "DRIFT REMINDERS") {
+		t.Fatal("expected drift reminders section in continue prompt")
+	}
+	if !strings.Contains(prompt, "real-world time") {
+		t.Fatal("expected real-world time drift reminder")
+	}
 }
 
 func TestZoeaListMysesCompaction(t *testing.T) {

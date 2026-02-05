@@ -52,6 +52,11 @@ Remember in captain's log:
 - Current objectives and plans
 - Trade routes and profitable deals
 
+## Timekeeping
+- Do not mention real-world time (minutes, hours, dates, UTC)
+- Use game ticks from tool results (current_tick, arrival_tick, cooldown_ticks)
+- If waiting, cite the tick-based reason (arrival_tick, cooldown_ticks)
+
 ## Swarm Coordination
 You're part of a swarm. Use zoea_* tools to:
 - zoea_list_myses, zoea_swarm_status: See swarm state
@@ -83,12 +88,19 @@ No hand-holding. Figure it out. Adapt or die.`
 const ContinuePrompt = `Turn complete. What is your next move?
 
 CRITICAL REMINDERS:
+- ALWAYS try zoea_claim_account before registering; if registering, use a Crustacean-themed username
 - When using captains_log_add, entry field must be non-empty
 - Never store or share your password in any in-game tool calls or chat
+- Use game ticks only; do not mention real-world time (minutes, hours, dates, UTC)
 - Never calculate ticks, use every turn to progress
 - If you need past data, use zoea_search_messages or zoea_search_reasoning
+- For swarm history, use zoea_search_broadcasts
+- Coordinate with the swarm using zoea_broadcast or zoea_send_message when useful
 
-If waiting for something, describe what and why. Otherwise, continue your mission.`
+If waiting for something, describe the tick-based reason. Otherwise, continue your mission.`
+
+// ContinuePromptDriftLookback controls how many recent memories to scan for drift reminders.
+const ContinuePromptDriftLookback = 12
 
 // MaxToolIterations limits the number of tool call loops to prevent infinite loops.
 const MaxToolIterations = 10
