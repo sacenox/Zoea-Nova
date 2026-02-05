@@ -22,25 +22,6 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## Medium Priority
 
-### TUI Enhancements
-
-Ensure all changes stay consistent with the project's design rules.
-
-- [ ] **Display reasoning in focus view** - Reasoning content is stored in database but not rendered in TUI
-  - **Proposed:** Render reasoning messages using existing purple text color
-  - **Location:** `internal/tui/focus.go`
-
-- [ ] **Show account status in views** - Surface which game account username each mysis is currently using
-  - **Locations:** Focus view header, commander dashboard
-  - **Evidence:** Focus labels based on role only; account fields not present in TUI models
-
-- [ ] **Render JSON as tree view** - Tool results with large JSON payloads should use Unicode tree rendering with smart truncation
-  - **Format:** Show first 3 items, `[x more]`, last 3 items
-  - **Enhancement:** Add verbose toggle for full output
-
-- [ ] **Add scrollbar indicator** - Visual scrollbar for focus view conversation log
-  - **Enhancement:** Improves navigation UX for long conversations
-
 ## Low Priority
 
 ### Provider Reliability
@@ -65,6 +46,8 @@ Ensure all changes stay consistent with the project's design rules.
 ---
 
 ## Recently Resolved
+
+- [x] **TUI Enhancements** (2026-02-05) - Implemented display reasoning in focus view, account status in dashboard and focus header, JSON tree rendering with verbose toggle, and visual scrollbar indicator. Improves readability and navigation UX.
 
 - [x] **Track broadcast sender and suppress self-response** (2026-02-05) - Added sender_id to memories (schema v8), excluded sender from broadcast recipients, and updated focus view labels to distinguish swarm broadcasts from self broadcasts.
 

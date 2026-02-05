@@ -51,6 +51,7 @@ make run          # Build and start
 | `c`     | Configure Mysis          |
 | `Enter` | Focus on selected Mysis  |
 | `Esc`   | Return to dashboard      |
+| `v`     | Toggle verbose JSON (focus) |
 | `?`     | Show help                |
 | `q`     | Quit                     |
 
