@@ -1,37 +1,37 @@
- ⬥────────────────────────────────────────────────── ⬡ MYSIS: beta ⬡ ──────────────────────────────────────────────────⬥
+ ⬥─────────────────────────────────────────────── ⬡ MYSIS: beta (1/1) ⬡ ───────────────────────────────────────────────⬥
                                                                                                                         
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ID: test-mysis  State: running  Provider: ollama  Account: (not logged in)                                           │
+│ ID: test-mysis  State: running  Provider: ollama  Account: (not logged in)  Created: 2026-01-15 09:30                │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                                      │
-│   YOU:  Test message line Q                                                                                          │
+│   10:16:00 YOU: Test message line Q                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line R                                                                                          │
+│   10:17:00 YOU: Test message line R                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line S                                                                                          │
+│   10:18:00 YOU: Test message line S                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line T                                                                                          │
+│   10:19:00 YOU: Test message line T                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line U                                                                                          │
+│   10:20:00 YOU: Test message line U                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line V                                                                                          │
+│   10:21:00 YOU: Test message line V                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line W                                                                                          │
+│   10:22:00 YOU: Test message line W                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line X                                                                                          │
+│   10:23:00 YOU: Test message line X                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line Y                                                                                          │
+│   10:24:00 YOU: Test message line Y                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line Z                                                                                          │
+│   10:25:00 YOU: Test message line Z                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line [                                                                                          │
+│   10:26:00 YOU: Test message line [                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line \                                                                                          │
+│   10:27:00 YOU: Test message line \                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line ]                                                                                          │
+│   10:28:00 YOU: Test message line ]                                                                                  │
 │                                                                                                                      │
-│   YOU:  Test message line ^                                                                                          │
+│   10:29:00 YOU: Test message line ^                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 [ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ r ] RELAUNCH  ·  [ s ] STOP                                                        

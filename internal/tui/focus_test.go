@@ -20,6 +20,7 @@ func TestLogEntryFromMemoryWithSender(t *testing.T) {
 		memory     *store.Memory
 		currentID  string
 		wantPrefix string
+		senderName string
 	}{
 		{
 			name: "direct message",
@@ -41,6 +42,7 @@ func TestLogEntryFromMemoryWithSender(t *testing.T) {
 			},
 			currentID:  currentMysisID,
 			wantPrefix: "YOU (BROADCAST):",
+			senderName: "alpha",
 		},
 		{
 			name: "broadcast from other",
@@ -52,6 +54,7 @@ func TestLogEntryFromMemoryWithSender(t *testing.T) {
 			},
 			currentID:  currentMysisID,
 			wantPrefix: "SWARM:",
+			senderName: "beta",
 		},
 		{
 			name: "broadcast legacy (no sender)",
@@ -68,12 +71,15 @@ func TestLogEntryFromMemoryWithSender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := LogEntryFromMemory(tt.memory, tt.currentID)
+			entry := LogEntryFromMemory(tt.memory, tt.currentID, tt.senderName)
 			if entry.Role != string(tt.memory.Role) {
 				t.Errorf("role: got %q, want %q", entry.Role, tt.memory.Role)
 			}
 			if entry.SenderID != tt.memory.SenderID {
 				t.Errorf("sender_id: got %q, want %q", entry.SenderID, tt.memory.SenderID)
+			}
+			if entry.SenderName != tt.senderName {
+				t.Errorf("sender_name: got %q, want %q", entry.SenderName, tt.senderName)
 			}
 		})
 	}
@@ -259,7 +265,7 @@ func TestRenderFocusViewWithScrollbar(t *testing.T) {
 
 	width := 100
 	totalLines := 50
-	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", true, false, totalLines)
+	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", true, false, totalLines, 1, 1)
 
 	// Should contain scrollbar characters
 	if !strings.Contains(output, "█") && !strings.Contains(output, "│") {

@@ -1,23 +1,23 @@
- ⬥───────────────────────────────────────────────── ⬡ MYSIS: alpha ⬡ ──────────────────────────────────────────────────⬥
+ ⬥────────────────────────────────────────────── ⬡ MYSIS: alpha (1/1) ⬡ ───────────────────────────────────────────────⬥
                                                                                                                         
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ID: test-mysis  State: running  Provider: ollama  Account: crab_explorer                                             │
+│ ID: test-mysis  State: running  Provider: ollama  Account: crab_explorer  Created: 2026-01-15 10:00                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                                      │
-│   SYS:  You are a space exploration AI controlling a ship in the Crustacean Cosmos.                                  │
+│   10:00:00 SYS: You are a space exploration AI controlling a ship in the Crustacean Cosmos.                          │
 │                                                                                                                      │
-│   YOU:  What is your current status?                                                                                 │
+│   10:01:00 YOU: What is your current status?                                                                         │
 │                                                                                                                      │
-│   AI:   I am currently orbiting planet Crabulous Prime. All systems nominal.                                         │
+│   10:01:30 AI: I am currently orbiting planet Crabulous Prime. All systems nominal.                                  │
 │                                                                                                                      │
 │   REASONING: The ship sensors show stable orbit. Fuel at 75%. Cargo hold empty.                                      │
 │                                                                                                                      │
-│   TOOL: {                                                                                                            │
-│           ├─"fuel": 75                                                                                               │
-│           └─"name": alpha                                                                                            │
-│           }                                                                                                          │
+│   10:01:35 TOOL: {                                                                                                   │
+│                    ├─"fuel": 75                                                                                      │
+│                    └─"name": alpha                                                                                   │
+│                    }                                                                                                 │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

@@ -14,6 +14,7 @@ import (
 func TestDashboard(t *testing.T) {
 	defer setupGoldenTest(t)()
 
+	// Use fixed timestamps for deterministic golden files.
 	tests := []struct {
 		name        string
 		myses       []MysisInfo
@@ -21,6 +22,7 @@ func TestDashboard(t *testing.T) {
 		selectedIdx int
 		width       int
 		height      int
+		loadingSet  map[string]bool
 	}{
 		{
 			name:        "empty_swarm",
@@ -29,6 +31,7 @@ func TestDashboard(t *testing.T) {
 			selectedIdx: 0,
 			width:       TestTerminalWidth,
 			height:      TestTerminalHeight,
+			loadingSet:  map[string]bool{},
 		},
 		{
 			name: "with_swarm_messages",
@@ -40,6 +43,7 @@ func TestDashboard(t *testing.T) {
 					Provider:        "ollama",
 					AccountUsername: "crab_warrior",
 					LastMessage:     "Mining asteroid belt",
+					LastMessageAt:   time.Date(2026, 1, 15, 10, 45, 0, 0, time.UTC),
 					CreatedAt:       time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
 				},
 				{
@@ -49,23 +53,106 @@ func TestDashboard(t *testing.T) {
 					Provider:        "opencode_zen",
 					AccountUsername: "crab_trader",
 					LastMessage:     "Waiting for orders",
+					LastMessageAt:   time.Date(2026, 1, 15, 10, 46, 0, 0, time.UTC),
 					CreatedAt:       time.Date(2026, 1, 15, 10, 35, 0, 0, time.UTC),
 				},
 			},
 			swarmMsgs: []SwarmMessageInfo{
-				{Content: "All units: proceed to sector 7", CreatedAt: time.Date(2026, 1, 15, 11, 0, 0, 0, time.UTC)},
-				{Content: "Target rich environment detected", CreatedAt: time.Date(2026, 1, 15, 11, 5, 0, 0, time.UTC)},
+				{SenderID: "mysis-1", SenderName: "alpha", Content: "All units: proceed to sector 7", CreatedAt: time.Date(2026, 1, 15, 11, 0, 0, 0, time.UTC)},
+				{SenderID: "mysis-2", SenderName: "beta", Content: "Target rich environment detected", CreatedAt: time.Date(2026, 1, 15, 11, 5, 0, 0, time.UTC)},
 			},
 			selectedIdx: 0,
 			width:       TestTerminalWidth,
 			height:      TestTerminalHeight,
+			loadingSet:  map[string]bool{},
+		},
+		{
+			name: "with_multiline_broadcast",
+			myses: []MysisInfo{
+				{
+					ID:              "mysis-3",
+					Name:            "gamma",
+					State:           "idle",
+					Provider:        "ollama",
+					AccountUsername: "crab_cartographer",
+					LastMessage:     "Standing by",
+					LastMessageAt:   time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC),
+					CreatedAt:       time.Date(2026, 1, 15, 11, 55, 0, 0, time.UTC),
+				},
+			},
+			swarmMsgs: []SwarmMessageInfo{
+				{SenderID: "mysis-3", SenderName: "gamma", Content: "Line one\nLine two", CreatedAt: time.Date(2026, 1, 15, 12, 1, 0, 0, time.UTC)},
+			},
+			selectedIdx: 0,
+			width:       TestTerminalWidth,
+			height:      TestTerminalHeight,
+			loadingSet:  map[string]bool{},
+		},
+		{
+			name: "with_loading_mysis",
+			myses: []MysisInfo{
+				{
+					ID:              "mysis-4",
+					Name:            "delta",
+					State:           "running",
+					Provider:        "ollama",
+					AccountUsername: "crab_runner",
+					LastMessage:     "Processing",
+					LastMessageAt:   time.Date(2026, 1, 15, 12, 5, 0, 0, time.UTC),
+					CreatedAt:       time.Date(2026, 1, 15, 11, 50, 0, 0, time.UTC),
+				},
+			},
+			swarmMsgs:   []SwarmMessageInfo{},
+			selectedIdx: 0,
+			width:       TestTerminalWidth,
+			height:      TestTerminalHeight,
+			loadingSet:  map[string]bool{"mysis-4": true},
+		},
+		{
+			name: "narrow_terminal",
+			myses: []MysisInfo{
+				{
+					ID:              "mysis-5",
+					Name:            "epsilon",
+					State:           "idle",
+					Provider:        "ollama",
+					AccountUsername: "crab_navigator",
+					LastMessage:     "Holding position",
+					LastMessageAt:   time.Date(2026, 1, 15, 12, 10, 0, 0, time.UTC),
+					CreatedAt:       time.Date(2026, 1, 15, 12, 5, 0, 0, time.UTC),
+				},
+			},
+			swarmMsgs:   []SwarmMessageInfo{},
+			selectedIdx: 0,
+			width:       80,
+			height:      24,
+			loadingSet:  map[string]bool{},
+		},
+		{
+			name: "wide_terminal",
+			myses: []MysisInfo{
+				{
+					ID:              "mysis-6",
+					Name:            "zeta",
+					State:           "running",
+					Provider:        "opencode_zen",
+					AccountUsername: "crab_scout",
+					LastMessage:     "Surveying sector",
+					LastMessageAt:   time.Date(2026, 1, 15, 12, 20, 0, 0, time.UTC),
+					CreatedAt:       time.Date(2026, 1, 15, 12, 15, 0, 0, time.UTC),
+				},
+			},
+			swarmMsgs:   []SwarmMessageInfo{},
+			selectedIdx: 0,
+			width:       200,
+			height:      60,
+			loadingSet:  map[string]bool{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			loadingSet := make(map[string]bool)
-			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, loadingSet, "⠋")
+			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋")
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -133,10 +220,11 @@ func TestFocusView(t *testing.T) {
 		{
 			name: "with_scrollbar",
 			mysis: MysisInfo{
-				ID:       "test-mysis",
-				Name:     "beta",
-				State:    "running",
-				Provider: "ollama",
+				ID:        "test-mysis",
+				Name:      "beta",
+				State:     "running",
+				Provider:  "ollama",
+				CreatedAt: time.Date(2026, 1, 15, 9, 30, 0, 0, time.UTC),
 			},
 			logs: func() []LogEntry {
 				// Create enough logs to trigger scrollbar
@@ -154,11 +242,32 @@ func TestFocusView(t *testing.T) {
 			width:  TestTerminalWidth,
 			height: TestTerminalHeight,
 		},
+		{
+			name: "narrow_terminal",
+			mysis: MysisInfo{
+				ID:              "test-mysis",
+				Name:            "gamma",
+				State:           "idle",
+				Provider:        "opencode_zen",
+				AccountUsername: "crab_surveyor",
+				CreatedAt:       time.Date(2026, 1, 15, 9, 45, 0, 0, time.UTC),
+			},
+			logs: []LogEntry{
+				{
+					Role:      "assistant",
+					Source:    "llm",
+					Content:   "Short response for narrow view.",
+					Timestamp: time.Date(2026, 1, 15, 9, 46, 0, 0, time.UTC),
+				},
+			},
+			width:  80,
+			height: 24,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false)
+			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -297,6 +406,7 @@ func TestFocusViewWithViewport(t *testing.T) {
 		width      int
 		height     int
 		totalLines int
+		autoScroll bool
 	}{
 		{
 			name: "with_scrollbar",
@@ -306,14 +416,16 @@ func TestFocusViewWithViewport(t *testing.T) {
 				State:           "running",
 				Provider:        "ollama",
 				AccountUsername: "crab_pilot",
+				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: func() []LogEntry {
 				logs := make([]LogEntry, 50)
 				for i := 0; i < 50; i++ {
 					logs[i] = LogEntry{
-						Role:    "user",
-						Source:  "direct",
-						Content: "Test line " + string(rune('0'+i%10)),
+						Role:      "user",
+						Source:    "direct",
+						Content:   "Test line " + string(rune('0'+i%10)),
+						Timestamp: time.Date(2026, 1, 15, 10, i%60, 0, 0, time.UTC),
 					}
 				}
 				return logs
@@ -321,6 +433,34 @@ func TestFocusViewWithViewport(t *testing.T) {
 			width:      TestTerminalWidth,
 			height:     20,
 			totalLines: 50,
+			autoScroll: true,
+		},
+		{
+			name: "with_scroll_indicator",
+			mysis: MysisInfo{
+				ID:              "test-id",
+				Name:            "test-mysis",
+				State:           "running",
+				Provider:        "ollama",
+				AccountUsername: "crab_pilot",
+				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
+			},
+			logs: func() []LogEntry {
+				logs := make([]LogEntry, 30)
+				for i := 0; i < 30; i++ {
+					logs[i] = LogEntry{
+						Role:      "assistant",
+						Source:    "llm",
+						Content:   "Focus log line " + string(rune('A'+i)),
+						Timestamp: time.Date(2026, 1, 15, 10, i%60, 0, 0, time.UTC),
+					}
+				}
+				return logs
+			}(),
+			width:      TestTerminalWidth,
+			height:     20,
+			totalLines: 30,
+			autoScroll: false,
 		},
 	}
 
@@ -336,7 +476,7 @@ func TestFocusViewWithViewport(t *testing.T) {
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
-			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", true, false, tt.totalLines)
+			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", tt.autoScroll, false, tt.totalLines, 1, 1)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -456,9 +596,10 @@ func TestMysisLine(t *testing.T) {
 	defer setupGoldenTest(t)()
 
 	tests := []struct {
-		name  string
-		mysis MysisInfo
-		width int
+		name    string
+		mysis   MysisInfo
+		width   int
+		loading bool
 	}{
 		{
 			name: "with_account",
@@ -469,6 +610,7 @@ func TestMysisLine(t *testing.T) {
 				Provider:        "ollama",
 				AccountUsername: "crab_miner",
 				LastMessage:     "Mining asteroid",
+				LastMessageAt:   time.Date(2026, 1, 15, 10, 5, 0, 0, time.UTC),
 				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			width: 100,
@@ -486,11 +628,54 @@ func TestMysisLine(t *testing.T) {
 			},
 			width: 100,
 		},
+		{
+			name: "long_name",
+			mysis: MysisInfo{
+				ID:              "abc123",
+				Name:            "mysis-with-a-very-long-name",
+				State:           "running",
+				Provider:        "ollama",
+				AccountUsername: "crab_miner",
+				LastMessage:     "Holding",
+				LastMessageAt:   time.Date(2026, 1, 15, 10, 10, 0, 0, time.UTC),
+				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
+			},
+			width: 100,
+		},
+		{
+			name: "errored_state",
+			mysis: MysisInfo{
+				ID:              "abc123",
+				Name:            "test-mysis",
+				State:           "errored",
+				Provider:        "ollama",
+				AccountUsername: "crab_miner",
+				LastMessage:     "",
+				LastError:       "connection lost",
+				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
+			},
+			width: 100,
+		},
+		{
+			name: "loading_state",
+			mysis: MysisInfo{
+				ID:              "abc123",
+				Name:            "test-mysis",
+				State:           "running",
+				Provider:        "ollama",
+				AccountUsername: "crab_miner",
+				LastMessage:     "Processing",
+				LastMessageAt:   time.Date(2026, 1, 15, 10, 15, 0, 0, time.UTC),
+				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
+			},
+			width:   100,
+			loading: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := renderMysisLine(tt.mysis, false, false, "⬡", tt.width)
+			output := renderMysisLine(tt.mysis, false, tt.loading, "⬡", tt.width)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -511,8 +696,9 @@ func TestBroadcastLabels(t *testing.T) {
 	currentMysisID := "current-mysis"
 
 	tests := []struct {
-		name   string
-		memory *store.Memory
+		name       string
+		memory     *store.Memory
+		senderName string
 	}{
 		{
 			name: "direct_message",
@@ -530,6 +716,7 @@ func TestBroadcastLabels(t *testing.T) {
 				SenderID: currentMysisID,
 				Content:  "My broadcast to the swarm",
 			},
+			senderName: "alpha",
 		},
 		{
 			name: "broadcast_from_other",
@@ -539,6 +726,7 @@ func TestBroadcastLabels(t *testing.T) {
 				SenderID: "other-mysis",
 				Content:  "Another mysis's broadcast",
 			},
+			senderName: "beta",
 		},
 		{
 			name: "broadcast_legacy_no_sender",
@@ -553,7 +741,7 @@ func TestBroadcastLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := LogEntryFromMemory(tt.memory, currentMysisID)
+			entry := LogEntryFromMemory(tt.memory, currentMysisID, tt.senderName)
 			lines := renderLogEntryImpl(entry, 80, false)
 			output := strings.Join(lines, "\n")
 

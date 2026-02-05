@@ -254,3 +254,32 @@ func truncateToWidth(s string, maxWidth int) string {
 	}
 	return s
 }
+
+func formatSenderLabel(senderID, senderName string) string {
+	const maxLabelWidth = 12
+	if senderName != "" {
+		return truncateWithEllipsis(senderName, maxLabelWidth)
+	}
+	if senderID == "" {
+		return ""
+	}
+	prefix := "id:"
+	maxIDWidth := maxLabelWidth - lipgloss.Width(prefix)
+	if maxIDWidth <= 0 {
+		return prefix
+	}
+	return prefix + truncateWithEllipsis(senderID, maxIDWidth)
+}
+
+func truncateWithEllipsis(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	if maxWidth <= 3 {
+		return truncateToWidth(s, maxWidth)
+	}
+	return truncateToWidth(s, maxWidth-3) + "..."
+}

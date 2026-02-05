@@ -17,13 +17,17 @@ type MysisInfo struct {
 	Provider        string
 	AccountUsername string    // NEW: game account username
 	LastMessage     string    // Most recent message (user or assistant)
+	LastMessageAt   time.Time // Timestamp of most recent message
 	CreatedAt       time.Time // When mysis was created
+	LastError       string    // Last error string (if errored)
 }
 
 // SwarmMessageInfo holds display info for a broadcast message.
 type SwarmMessageInfo struct {
-	Content   string
-	CreatedAt time.Time
+	SenderID   string
+	SenderName string
+	Content    string
+	CreatedAt  time.Time
 }
 
 // RenderDashboard renders the main dashboard view.
@@ -79,15 +83,24 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		for i := 0; i < displayCount; i++ {
 			msg := swarmMessages[i]
 			timeStr := msg.CreatedAt.Local().Format("15:04:05")
+			senderLabel := formatSenderLabel(msg.SenderID, msg.SenderName)
+			senderText := ""
+			if senderLabel != "" {
+				senderText = " [" + senderLabel + "]"
+			}
 			content := strings.ReplaceAll(msg.Content, "\n", " ")
-			maxLen := width - 15
-			if maxLen < 20 {
-				maxLen = 20
+			maxLen := width - 15 - lipgloss.Width(senderText)
+			if maxLen < 1 {
+				maxLen = 1
 			}
 			if lipgloss.Width(content) > maxLen {
-				content = truncateToWidth(content, maxLen-3) + "..."
+				if maxLen > 3 {
+					content = truncateToWidth(content, maxLen-3) + "..."
+				} else {
+					content = truncateToWidth(content, maxLen)
+				}
 			}
-			line := fmt.Sprintf("%s %s", dimmedStyle.Render(timeStr), content)
+			line := fmt.Sprintf("%s%s %s", dimmedStyle.Render(timeStr), highlightStyle.Render(senderText), content)
 			msgLines = append(msgLines, line)
 		}
 	}
@@ -195,12 +208,30 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 
 	// Format last message (truncated) - use display width
 	var msgPart string
-	if m.LastMessage != "" {
-		msg := strings.ReplaceAll(m.LastMessage, "\n", " ")
-		if lipgloss.Width(msg) > msgWidth {
-			msg = truncateToWidth(msg, msgWidth-3) + "..."
+	messageContent := m.LastMessage
+	if messageContent == "" && m.State == "errored" && m.LastError != "" {
+		messageContent = "Error: " + m.LastError
+	}
+	if messageContent != "" {
+		msg := strings.ReplaceAll(messageContent, "\n", " ")
+		msgPrefix := ""
+		if !m.LastMessageAt.IsZero() {
+			msgPrefix = m.LastMessageAt.Local().Format("15:04:05") + " "
 		}
-		msgPart = dimmedStyle.Render(" │ " + msg)
+		prefixWidth := lipgloss.Width(msgPrefix)
+		availableWidth := msgWidth - prefixWidth
+		if availableWidth < 10 {
+			msgPrefix = ""
+			availableWidth = msgWidth
+		}
+		if lipgloss.Width(msg) > availableWidth {
+			if availableWidth > 3 {
+				msg = truncateToWidth(msg, availableWidth-3) + "..."
+			} else {
+				msg = truncateToWidth(msg, availableWidth)
+			}
+		}
+		msgPart = dimmedStyle.Render(" │ " + msgPrefix + msg)
 	}
 
 	line := contentPart + msgPart
@@ -224,5 +255,13 @@ func MysisInfoFromCore(m *core.Mysis) MysisInfo {
 		Provider:        m.ProviderName(),
 		AccountUsername: m.CurrentAccountUsername(), // NEW: copy account username
 		CreatedAt:       m.CreatedAt(),
+		LastError:       formatCoreError(m.LastError()),
 	}
+}
+
+func formatCoreError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

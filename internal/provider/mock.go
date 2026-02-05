@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -18,6 +19,7 @@ type MockProvider struct {
 	chatErr   error
 	limiter   *rate.Limiter
 	reasoning string
+	delay     time.Duration
 }
 
 // NewMock creates a new mock provider.
@@ -87,6 +89,13 @@ func (p *MockProvider) WithLimiter(limiter *rate.Limiter) *MockProvider {
 	return p
 }
 
+func (p *MockProvider) SetDelay(delay time.Duration) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.delay = delay
+	return p
+}
+
 // WithResponse sets the predefined response to return from Chat.
 func (p *MockProvider) WithResponse(response string) *MockProvider {
 	p.mu.Lock()
@@ -107,6 +116,9 @@ func (p *MockProvider) Chat(ctx context.Context, messages []Message) (string, er
 			return "", err
 		}
 	}
+	if err := p.waitDelay(ctx); err != nil {
+		return "", err
+	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -122,6 +134,9 @@ func (p *MockProvider) ChatWithTools(ctx context.Context, messages []Message, to
 		if err := p.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
+	}
+	if err := p.waitDelay(ctx); err != nil {
+		return nil, err
 	}
 
 	p.mu.RLock()
@@ -143,6 +158,9 @@ func (p *MockProvider) Stream(ctx context.Context, messages []Message) (<-chan S
 			return nil, err
 		}
 	}
+	if err := p.waitDelay(ctx); err != nil {
+		return nil, err
+	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -159,4 +177,23 @@ func (p *MockProvider) Stream(ctx context.Context, messages []Message) (<-chan S
 	}()
 
 	return ch, nil
+}
+
+func (p *MockProvider) waitDelay(ctx context.Context) error {
+	p.mu.RLock()
+	delay := p.delay
+	p.mu.RUnlock()
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

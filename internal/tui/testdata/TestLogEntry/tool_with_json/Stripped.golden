@@ -1,6 +1,6 @@
                                                                                 
- TOOL: {                                                                        
-         ├─"fuel": 100                                                          
-         ├─"name": mysis-1                                                      
-         └─"state": running                                                     
-         }                                                                      
+ 10:30:00 TOOL: {                                                               
+                  ├─"fuel": 100                                                 
+                  ├─"name": mysis-1                                             
+                  └─"state": running                                            
+                  }                                                             

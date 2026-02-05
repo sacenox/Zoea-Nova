@@ -63,6 +63,7 @@ type Model struct {
 
 // SwarmMessage represents a broadcast message for display.
 type SwarmMessage struct {
+	SenderID  string
 	Content   string
 	CreatedAt time.Time
 }
@@ -237,15 +238,18 @@ func (m Model) View() string {
 	if m.showHelp {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines)
+		focusIndex, totalMyses := m.focusPosition(m.focusID)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
 		for i, msg := range m.swarmMessages {
 			// Reverse order: most recent first
 			swarmInfos[len(m.swarmMessages)-1-i] = SwarmMessageInfo{
-				Content:   msg.Content,
-				CreatedAt: msg.CreatedAt,
+				SenderID:   msg.SenderID,
+				SenderName: m.mysisNameByID(msg.SenderID),
+				Content:    msg.Content,
+				CreatedAt:  msg.CreatedAt,
 			}
 		}
 		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
@@ -583,6 +587,7 @@ func (m *Model) refreshMysisList() {
 		memories, err := m.store.GetRecentMemories(mysis.ID(), 1)
 		if err == nil && len(memories) > 0 {
 			info.LastMessage = memories[0].Content
+			info.LastMessageAt = memories[0].CreatedAt
 		}
 
 		m.myses[i] = info
@@ -604,6 +609,7 @@ func (m *Model) refreshSwarmMessages() {
 	m.swarmMessages = make([]SwarmMessage, len(broadcasts))
 	for i, b := range broadcasts {
 		m.swarmMessages[i] = SwarmMessage{
+			SenderID:  b.SenderID,
 			Content:   b.Content,
 			CreatedAt: b.CreatedAt,
 		}
@@ -625,7 +631,8 @@ func (m *Model) loadMysisLogs() {
 
 	m.logs = make([]LogEntry, len(memories))
 	for i, mem := range memories {
-		m.logs[i] = LogEntryFromMemory(mem, m.focusID)
+		senderName := m.mysisNameByID(mem.SenderID)
+		m.logs[i] = LogEntryFromMemory(mem, m.focusID, senderName)
 	}
 
 	m.updateViewportContent()
@@ -667,6 +674,31 @@ func (m Model) mysisByID(id string) MysisInfo {
 		}
 	}
 	return MysisInfo{ID: id, Name: "Unknown", State: "unknown"}
+}
+
+func (m Model) mysisNameByID(id string) string {
+	if id == "" {
+		return ""
+	}
+	for _, mysis := range m.myses {
+		if mysis.ID == id {
+			return mysis.Name
+		}
+	}
+	return ""
+}
+
+func (m Model) focusPosition(focusID string) (int, int) {
+	total := len(m.myses)
+	if focusID == "" || total == 0 {
+		return 0, total
+	}
+	for i, mysis := range m.myses {
+		if mysis.ID == focusID {
+			return i + 1, total
+		}
+	}
+	return 0, total
 }
 
 type refreshMysesMsg struct{}

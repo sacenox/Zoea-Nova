@@ -12,12 +12,13 @@ import (
 
 // LogEntry represents a log entry for display.
 type LogEntry struct {
-	Role      string
-	Source    string
-	SenderID  string
-	Content   string
-	Reasoning string // NEW: reasoning content from LLM
-	Timestamp time.Time
+	Role       string
+	Source     string
+	SenderID   string
+	SenderName string
+	Content    string
+	Reasoning  string // NEW: reasoning content from LLM
+	Timestamp  time.Time
 }
 
 // wrapText wraps text to fit within maxWidth display columns, preserving words.
@@ -92,11 +93,11 @@ func wrapText(text string, maxWidth int) []string {
 }
 
 // RenderFocusView renders the detailed mysis view (legacy, without viewport).
-func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool) string {
+func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
-	header := renderFocusHeader(mysis.Name, width)
+	header := renderFocusHeader(mysis.Name, focusIndex, totalMyses, width)
 	sections = append(sections, header)
 
 	// Mysis info panel
@@ -116,6 +117,16 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), valueStyle.Render(mysis.AccountUsername)))
 	} else {
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
+	}
+
+	createdText := dimmedStyle.Render("(unknown)")
+	if !mysis.CreatedAt.IsZero() {
+		createdText = valueStyle.Render(mysis.CreatedAt.Local().Format("2006-01-02 15:04"))
+	}
+	infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Created:"), createdText))
+
+	if mysis.State == "errored" && mysis.LastError != "" {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Error:"), stateErroredStyle.Render(mysis.LastError)))
 	}
 
 	infoContent := strings.Join(infoLines, "  ")
@@ -164,11 +175,11 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int, focusIndex, totalMyses int) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
-	header := renderFocusHeader(mysis.Name, width)
+	header := renderFocusHeader(mysis.Name, focusIndex, totalMyses, width)
 	sections = append(sections, header)
 
 	// Mysis info panel
@@ -190,14 +201,28 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
 	}
 
+	createdText := dimmedStyle.Render("(unknown)")
+	if !mysis.CreatedAt.IsZero() {
+		createdText = valueStyle.Render(mysis.CreatedAt.Local().Format("2006-01-02 15:04"))
+	}
+	infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Created:"), createdText))
+
+	if mysis.State == "errored" && mysis.LastError != "" {
+		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Error:"), stateErroredStyle.Render(mysis.LastError)))
+	}
+
 	infoContent := strings.Join(infoLines, "  ")
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
 
 	// Conversation title with scroll indicator - spans full width
 	scrollInfo := ""
-	if !autoScroll {
-		scrollInfo = "  ↑ SCROLLED"
+	if !autoScroll && totalLines > 0 {
+		currentLine := vp.YOffset + 1
+		if currentLine > totalLines {
+			currentLine = totalLines
+		}
+		scrollInfo = fmt.Sprintf("  LINE %d/%d", currentLine, totalLines)
 	}
 	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", scrollInfo, width)
 	sections = append(sections, logTitle)
@@ -253,33 +278,47 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 	// Content style - no styling (transparent background)
 	contentStyle := lipgloss.NewStyle()
 
-	var prefix string
+	var rolePrefix string
 	switch entry.Role {
 	case "user":
 		if entry.Source == "broadcast_self" {
-			prefix = "YOU (BROADCAST): "
+			rolePrefix = "YOU (BROADCAST):"
 		} else if entry.Source == "broadcast" {
-			prefix = "SWARM: "
+			label := formatSenderLabel(entry.SenderID, entry.SenderName)
+			if label != "" {
+				rolePrefix = fmt.Sprintf("SWARM (%s):", label)
+			} else {
+				rolePrefix = "SWARM:"
+			}
 			roleColor = lipgloss.Color("214")
 		} else {
-			prefix = "YOU: "
+			rolePrefix = "YOU:"
 		}
 	case "assistant":
-		prefix = "AI:  "
+		rolePrefix = "AI:"
 	case "system":
-		prefix = "SYS: "
+		rolePrefix = "SYS:"
 	case "tool":
-		prefix = "TOOL:"
+		rolePrefix = "TOOL:"
 	default:
-		prefix = "???:"
+		rolePrefix = "???:"
 	}
+
+	timePrefix := "--:--:--"
+	if !entry.Timestamp.IsZero() {
+		timePrefix = entry.Timestamp.Local().Format("15:04:05")
+	}
+
+	prefix := fmt.Sprintf("%s %s", timePrefix, rolePrefix)
+	// Update prefix style with final role color
+	prefixStyle = prefixStyle.Foreground(roleColor)
 
 	// Inside padding: 1 space on left and right of all content
 	const padLeft = 1
 	const padRight = 1
 
 	// Calculate content width (accounting for prefix, padding, and gap after prefix)
-	prefixWidth := len(prefix) + 1 // +1 for space after prefix
+	prefixWidth := lipgloss.Width(prefix) + 1 // +1 for space after prefix
 	contentWidth := maxWidth - prefixWidth - padLeft - padRight
 	if contentWidth < 20 {
 		contentWidth = 20
@@ -434,26 +473,31 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 }
 
 // LogEntryFromMemory converts a store.Memory to LogEntry.
-func LogEntryFromMemory(m *store.Memory, currentMysisID string) LogEntry {
+func LogEntryFromMemory(m *store.Memory, currentMysisID, senderName string) LogEntry {
 	source := string(m.Source)
 	if m.Source == store.MemorySourceBroadcast && m.SenderID == currentMysisID {
 		source = "broadcast_self"
 	}
 	return LogEntry{
-		Role:      string(m.Role),
-		Source:    source,
-		SenderID:  m.SenderID,
-		Content:   m.Content,
-		Reasoning: m.Reasoning, // NEW: copy reasoning field
-		Timestamp: m.CreatedAt,
+		Role:       string(m.Role),
+		Source:     source,
+		SenderID:   m.SenderID,
+		SenderName: senderName,
+		Content:    m.Content,
+		Reasoning:  m.Reasoning, // NEW: copy reasoning field
+		Timestamp:  m.CreatedAt,
 	}
 }
 
 // renderFocusHeader renders the focus view header spanning full width.
-func renderFocusHeader(mysisName string, width int) string {
+func renderFocusHeader(mysisName string, focusIndex, totalMyses int, width int) string {
 	// Format:  ⬥─── ⬡ MYSIS: name ⬡ ───⬥ with dashes filling the remaining space
 	// Build title with spaces
-	titleText := " ⬡ MYSIS: " + mysisName + " ⬡ "
+	countText := ""
+	if totalMyses > 0 && focusIndex > 0 {
+		countText = fmt.Sprintf(" (%d/%d)", focusIndex, totalMyses)
+	}
+	titleText := " ⬡ MYSIS: " + mysisName + countText + " ⬡ "
 	titleDisplayWidth := lipgloss.Width(titleText)
 	// Total fixed chars: space (1) + ⬥ (1) on left, ⬥ (1) on right = 3
 	availableWidth := width - titleDisplayWidth - 3

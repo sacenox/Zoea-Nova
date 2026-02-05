@@ -55,6 +55,37 @@ func TestMockProviderChat(t *testing.T) {
 	}
 }
 
+func TestMockProviderChatDelay(t *testing.T) {
+	delay := 30 * time.Millisecond
+	mock := NewMock("test", "ok").SetDelay(delay)
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+
+	start := time.Now()
+	_, err := mock.Chat(ctx, messages)
+	if err != nil {
+		t.Fatalf("Chat() error: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed < delay {
+		t.Fatalf("expected delay >= %v, got %v", delay, elapsed)
+	}
+}
+
+func TestMockProviderChatDelayContextCancel(t *testing.T) {
+	mock := NewMock("test", "ok").SetDelay(100 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	_, err := mock.Chat(ctx, messages)
+	if err == nil {
+		t.Fatal("expected context deadline error")
+	}
+}
+
 func TestMockProviderChatError(t *testing.T) {
 	expectedErr := errors.New("chat error")
 	mock := NewMock("test", "").WithChatError(expectedErr)
