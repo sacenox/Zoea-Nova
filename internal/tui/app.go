@@ -617,7 +617,7 @@ func (m *Model) loadMysisLogs() {
 
 	m.logs = make([]LogEntry, len(memories))
 	for i, mem := range memories {
-		m.logs[i] = LogEntryFromMemory(mem)
+		m.logs[i] = LogEntryFromMemory(mem, m.focusID)
 	}
 
 	m.updateViewportContent()

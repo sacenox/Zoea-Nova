@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -11,8 +12,11 @@ import (
 
 // LogEntry represents a log entry for display.
 type LogEntry struct {
-	Role    string
-	Content string
+	Role      string
+	Source    string
+	SenderID  string
+	Content   string
+	Timestamp time.Time
 }
 
 // wrapText wraps text to fit within maxWidth display columns, preserving words.
@@ -179,7 +183,14 @@ func renderLogEntry(entry LogEntry, maxWidth int) []string {
 	var prefix string
 	switch entry.Role {
 	case "user":
-		prefix = "YOU: "
+		if entry.Source == "broadcast_self" {
+			prefix = "YOU (BROADCAST): "
+		} else if entry.Source == "broadcast" {
+			prefix = "SWARM: "
+			roleColor = lipgloss.Color("214")
+		} else {
+			prefix = "YOU: "
+		}
 	case "assistant":
 		prefix = "AI:  "
 	case "system":
@@ -239,10 +250,17 @@ func renderLogEntry(entry LogEntry, maxWidth int) []string {
 }
 
 // LogEntryFromMemory converts a store.Memory to LogEntry.
-func LogEntryFromMemory(m *store.Memory) LogEntry {
+func LogEntryFromMemory(m *store.Memory, currentMysisID string) LogEntry {
+	source := string(m.Source)
+	if m.Source == store.MemorySourceBroadcast && m.SenderID == currentMysisID {
+		source = "broadcast_self"
+	}
 	return LogEntry{
-		Role:    string(m.Role),
-		Content: m.Content,
+		Role:      string(m.Role),
+		Source:    source,
+		SenderID:  m.SenderID,
+		Content:   m.Content,
+		Timestamp: m.CreatedAt,
 	}
 }
 
