@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 )
 
 // ToolHandler is a function that handles a tool call.
@@ -90,9 +92,9 @@ func (p *Proxy) ListTools(ctx context.Context) ([]Tool, error) {
 	if p.upstream != nil {
 		upstreamTools, err := p.upstream.ListTools(ctx)
 		if err != nil {
-			// Log but don't fail - upstream may be temporarily unavailable
-			// In production, we'd want proper logging here
-			_ = err
+			log.Warn().
+				Err(err).
+				Msg("failed to list upstream tools")
 		} else {
 			tools = append(tools, upstreamTools...)
 		}
