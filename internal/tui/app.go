@@ -128,7 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if vpHeight < 5 {
 			vpHeight = 5
 		}
-		m.viewport.Width = msg.Width - 6 - 1 // -6 for existing padding, -1 for scrollbar
+		m.viewport.Width = msg.Width - 6 - 2 // -6 for panel padding, -2 for scrollbar (space + char)
 		m.viewport.Height = vpHeight
 
 		// Re-render content if in focus view
