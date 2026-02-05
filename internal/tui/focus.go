@@ -244,19 +244,14 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// logBgColor is the background color for log entries (same as colorBgPanel)
-var logBgColor = colorBgPanel
-
 func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
-	// Get the role's foreground color and create a style with background
+	// Get the role's foreground color
 	roleColor := RoleColor(entry.Role)
 	prefixStyle := lipgloss.NewStyle().
-		Foreground(roleColor).
-		Background(logBgColor)
+		Foreground(roleColor)
 
-	// Content style - just background, no foreground override
-	contentStyle := lipgloss.NewStyle().
-		Background(logBgColor)
+	// Content style - no styling (transparent background)
+	contentStyle := lipgloss.NewStyle()
 
 	var prefix string
 	switch entry.Role {
@@ -352,16 +347,13 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 
 		// Reasoning header in dimmed purple/magenta
 		reasoningHeaderStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("170")). // Dimmed purple
-			Background(logBgColor)
+			Foreground(lipgloss.Color("170")) // Dimmed purple
 
 		reasoningStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("213")). // Lighter purple for reasoning text
-			Background(logBgColor)
+			Foreground(lipgloss.Color("213")) // Lighter purple for reasoning text
 
 		dimmedStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")). // Dim gray for truncation indicator
-			Background(logBgColor)
+			Foreground(lipgloss.Color("240")) // Dim gray for truncation indicator
 
 		reasoningHeader := "REASONING:"
 		reasoningHeaderWidth := len(reasoningHeader) + 1 // +1 for space after

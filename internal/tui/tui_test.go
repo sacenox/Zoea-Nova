@@ -522,34 +522,45 @@ func TestRenderLogEntryLineWidthConsistent(t *testing.T) {
 	}
 }
 
-func TestRenderLogEntryBackgroundApplied(t *testing.T) {
+func TestRenderLogEntryForegroundApplied(t *testing.T) {
 	// Force color output in tests (lipgloss strips colors without TTY)
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii) // Reset after test
 
-	// Test that background styling is applied to ALL lines, not just the first
-	// Background color is applied via ANSI escape codes containing "48;" (background)
+	// Test that foreground styling is applied to prefix (backgrounds removed for cleaner UI)
+	// Foreground color is applied via ANSI escape codes containing "38;" (foreground)
 	entry := LogEntry{
 		Role:    "assistant",
-		Content: "First line\nSecond line\nThird line",
+		Content: "Test message",
 	}
 	maxWidth := 60
 	lines := renderLogEntryImpl(entry, maxWidth, false)
 
-	if len(lines) < 3 {
-		t.Fatalf("expected at least 3 lines, got %d", len(lines))
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines (padding + content), got %d", len(lines))
 	}
 
-	// Every line must contain ANSI background escape code
-	// ANSI background codes use "48;" prefix (e.g., "\x1b[48;2;..." for RGB)
-	for i, line := range lines {
-		if !strings.Contains(line, "\x1b[") {
-			t.Errorf("line %d missing ANSI escape codes (no styling applied)\nline bytes: %v", i, []byte(line))
+	// Find the first non-empty line (skip padding line)
+	var contentLine string
+	for _, line := range lines {
+		stripped := strings.TrimSpace(stripANSI(line))
+		if stripped != "" {
+			contentLine = line
+			break
 		}
-		// Check for background specifically - "48;" indicates background color
-		if !strings.Contains(line, "48;") {
-			t.Errorf("line %d missing background color escape code (48;)\nline: %q", i, line)
-		}
+	}
+
+	if contentLine == "" {
+		t.Fatal("no content line found")
+	}
+
+	// Content line should have ANSI foreground color for the prefix
+	// ANSI foreground codes use "38;" prefix (e.g., "\x1b[38;2;..." for RGB)
+	if !strings.Contains(contentLine, "\x1b[") {
+		t.Error("content line missing ANSI escape codes (no styling applied)")
+	}
+	if !strings.Contains(contentLine, "38;") {
+		t.Error("content line missing foreground color escape code (38;)")
 	}
 }
 
