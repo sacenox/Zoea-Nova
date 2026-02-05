@@ -27,7 +27,12 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 
 ## Versions
 
-- Version format: use semver strickly
+- Version format: `vMAJOR.MINOR.PATCH`
+- Start at `v0.1.0`
+- MAJOR: breaking changes or required database reset
+- MINOR: new features
+- PATCH: fixes, refactors, docs, chores
+- Release tags must be annotated
 
 ## Offline Mode
 
