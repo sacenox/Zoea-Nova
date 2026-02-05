@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
@@ -71,5 +75,41 @@ func TestLogEntryFromMemoryWithSender(t *testing.T) {
 				t.Errorf("sender_id: got %q, want %q", entry.SenderID, tt.memory.SenderID)
 			}
 		})
+	}
+}
+
+func TestRenderLogEntryWithReasoning(t *testing.T) {
+	// Force color output for testing
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	entry := LogEntry{
+		Role:      "assistant",
+		Source:    "llm",
+		Content:   "I will mine the asteroid.",
+		Reasoning: "The asteroid contains valuable ore. I have enough fuel and cargo space.",
+		Timestamp: time.Now(),
+	}
+
+	maxWidth := 80
+	lines := renderLogEntry(entry, maxWidth)
+
+	// Should have content lines + reasoning section
+	if len(lines) < 4 {
+		t.Errorf("Expected at least 4 lines (padding + content + reasoning header + reasoning), got %d", len(lines))
+	}
+
+	// Join lines and check for reasoning content
+	output := strings.Join(lines, "\n")
+	if !strings.Contains(output, "REASONING:") {
+		t.Error("Expected reasoning header 'REASONING:' in output")
+	}
+	if !strings.Contains(output, "The asteroid contains valuable ore") {
+		t.Error("Expected reasoning content in output")
+	}
+
+	// Verify ANSI codes are present (styling is applied)
+	if !strings.Contains(output, "\x1b[") {
+		t.Error("Expected ANSI escape codes (styling) in output")
 	}
 }

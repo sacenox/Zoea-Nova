@@ -16,6 +16,7 @@ type LogEntry struct {
 	Source    string
 	SenderID  string
 	Content   string
+	Reasoning string // NEW: reasoning content from LLM
 	Timestamp time.Time
 }
 
@@ -246,6 +247,56 @@ func renderLogEntry(entry LogEntry, maxWidth int) []string {
 		}
 	}
 
+	// Render reasoning if present
+	if entry.Reasoning != "" {
+		// Add spacing line
+		emptyLine := contentStyle.Width(maxWidth).Render("")
+		result = append(result, emptyLine)
+
+		// Reasoning header in dimmed purple/magenta
+		reasoningHeaderStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("170")). // Dimmed purple
+			Background(logBgColor)
+
+		reasoningStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("213")). // Lighter purple for reasoning text
+			Background(logBgColor)
+
+		reasoningHeader := "REASONING:"
+		reasoningHeaderWidth := len(reasoningHeader) + 1 // +1 for space after
+		reasoningContentWidth := maxWidth - reasoningHeaderWidth - padLeft - padRight
+		if reasoningContentWidth < 20 {
+			reasoningContentWidth = 20
+		}
+
+		// Wrap reasoning text
+		wrappedReasoning := wrapText(entry.Reasoning, reasoningContentWidth)
+
+		for i, line := range wrappedReasoning {
+			lineLen := lipgloss.Width(line)
+			remainingWidth := reasoningContentWidth - lineLen
+			if remainingWidth < 0 {
+				remainingWidth = 0
+			}
+			paddedLine := line + strings.Repeat(" ", remainingWidth+padRight)
+
+			if i == 0 {
+				// First line: left pad + styled header + space + content
+				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+				styledHeader := reasoningHeaderStyle.Render(reasoningHeader)
+				styledContent := reasoningStyle.Render(" " + paddedLine)
+				result = append(result, leftPad+styledHeader+styledContent)
+			} else {
+				// Continuation lines: left pad + indent + content
+				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+				indent := strings.Repeat(" ", reasoningHeaderWidth)
+				styledIndent := contentStyle.Render(indent)
+				styledContent := reasoningStyle.Render(paddedLine)
+				result = append(result, leftPad+styledIndent+styledContent)
+			}
+		}
+	}
+
 	return result
 }
 
@@ -260,6 +311,7 @@ func LogEntryFromMemory(m *store.Memory, currentMysisID string) LogEntry {
 		Source:    source,
 		SenderID:  m.SenderID,
 		Content:   m.Content,
+		Reasoning: m.Reasoning, // NEW: copy reasoning field
 		Timestamp: m.CreatedAt,
 	}
 }
