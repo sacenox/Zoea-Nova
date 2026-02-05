@@ -142,6 +142,11 @@ func TestGetRecentBroadcasts(t *testing.T) {
 	if len(results) != 2 {
 		t.Errorf("expected 2 results, got %d", len(results))
 	}
+	for _, result := range results {
+		if result.CreatedAt.IsZero() {
+			t.Fatal("expected broadcast CreatedAt to be parsed")
+		}
+	}
 	// Should be B2, B3 (most recent)
 	if results[0].Content != "B2" {
 		t.Errorf("expected B2, got %s", results[0].Content)

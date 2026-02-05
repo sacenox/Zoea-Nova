@@ -3,7 +3,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // MemoryRole represents the role in a conversation.
@@ -156,6 +159,27 @@ type BroadcastMessage struct {
 	CreatedAt time.Time
 }
 
+var broadcastTimeLayouts = []string{
+	"2006-01-02 15:04:05.999999999 -0700 MST",
+	time.RFC3339Nano,
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+}
+
+func parseBroadcastTime(value string) (time.Time, error) {
+	for _, layout := range broadcastTimeLayouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+
+	if unixSeconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return time.Unix(unixSeconds, 0).UTC(), nil
+	}
+
+	return time.Time{}, fmt.Errorf("parse broadcast time: %q", value)
+}
+
 // GetRecentBroadcasts retrieves the most recent N unique broadcast messages.
 // Since broadcasts are stored per-mysis, this groups by content to get unique messages.
 func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
@@ -179,11 +203,12 @@ func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
 		if err := rows.Scan(&senderID, &content, &createdAtStr); err != nil {
 			return nil, fmt.Errorf("scan broadcast: %w", err)
 		}
-		// Parse the time string (SQLite returns aggregated times as strings)
-		createdAt, _ := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", createdAtStr)
-		if createdAt.IsZero() {
-			// Try alternate format
-			createdAt, _ = time.Parse(time.RFC3339Nano, createdAtStr)
+		createdAt, err := parseBroadcastTime(createdAtStr)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("created_at", createdAtStr).
+				Msg("failed to parse broadcast time")
 		}
 		message := &BroadcastMessage{
 			Content:   content,
@@ -295,9 +320,12 @@ func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, 
 		if err := rows.Scan(&senderID, &content, &createdAtStr); err != nil {
 			return nil, fmt.Errorf("scan broadcast: %w", err)
 		}
-		createdAt, _ := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", createdAtStr)
-		if createdAt.IsZero() {
-			createdAt, _ = time.Parse(time.RFC3339Nano, createdAtStr)
+		createdAt, err := parseBroadcastTime(createdAtStr)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("created_at", createdAtStr).
+				Msg("failed to parse broadcast time")
 		}
 		message := &BroadcastMessage{
 			Content:   content,
