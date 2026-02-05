@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,11 @@ type Mysis struct {
 	// For runtime tracking
 	lastError              error
 	currentAccountUsername string
+	activityState          ActivityState
+	activityUntil          time.Time
+	lastServerTick         int64
+	lastServerTickAt       time.Time
+	tickDuration           time.Duration
 }
 
 type contextStats struct {
@@ -52,13 +58,14 @@ type contextStats struct {
 // NewMysis creates a new mysis from stored data.
 func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Mysis {
 	return &Mysis{
-		id:        id,
-		name:      name,
-		createdAt: createdAt,
-		provider:  p,
-		store:     s,
-		bus:       bus,
-		state:     MysisStateIdle,
+		id:            id,
+		name:          name,
+		createdAt:     createdAt,
+		provider:      p,
+		store:         s,
+		bus:           bus,
+		state:         MysisStateIdle,
+		activityState: ActivityStateIdle,
 	}
 }
 
@@ -165,6 +172,8 @@ func (a *Mysis) Start() error {
 	oldState := a.state
 	a.state = MysisStateRunning
 	a.lastError = nil
+	a.activityState = ActivityStateIdle
+	a.activityUntil = time.Time{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.ctx = ctx
@@ -435,6 +444,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 
 			// Execute each tool call
 			for _, tc := range response.ToolCalls {
+				a.updateActivityFromToolCall(tc.Name)
 				// Signal MCP activity
 				a.bus.Publish(Event{
 					Type:      EventNetworkMCP,
@@ -444,6 +454,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				})
 
 				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
+				a.updateActivityFromToolResult(tc.Name, result, execErr)
 
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
@@ -833,7 +844,7 @@ func (a *Mysis) run(ctx context.Context) {
 			isRunning := a.state == MysisStateRunning
 			a.mu.RUnlock()
 
-			if isRunning {
+			if isRunning && a.shouldNudge(time.Now()) {
 				// Only nudge if not already in a turn
 				if a.turnMu.TryLock() {
 					a.turnMu.Unlock()
@@ -841,6 +852,224 @@ func (a *Mysis) run(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+func (a *Mysis) shouldNudge(now time.Time) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.activityState != ActivityStateTraveling && a.activityState != ActivityStateCooldown {
+		return true
+	}
+
+	if !a.activityUntil.IsZero() && now.Before(a.activityUntil) {
+		return false
+	}
+
+	a.activityState = ActivityStateIdle
+	a.activityUntil = time.Time{}
+	return true
+}
+
+func (a *Mysis) updateActivityFromToolCall(toolName string) {
+	switch toolName {
+	case "travel":
+		a.setActivity(ActivityStateTraveling, time.Now().Add(constants.WaitStateNudgeInterval))
+	case "mine":
+		a.setActivity(ActivityStateMining, time.Time{})
+	case "attack", "attack_base":
+		a.setActivity(ActivityStateInCombat, time.Time{})
+	}
+}
+
+func (a *Mysis) updateActivityFromToolResult(toolName string, result *mcp.ToolResult, err error) {
+	if err != nil || result == nil || result.IsError {
+		a.clearActivityIf(ActivityStateMining)
+		a.clearActivityIf(ActivityStateInCombat)
+		if toolName == "travel" {
+			a.setActivity(ActivityStateIdle, time.Time{})
+		}
+		return
+	}
+
+	now := time.Now()
+	payload, ok := parseToolResultPayload(result)
+	var currentTick int64
+	var currentTickOK bool
+	if ok {
+		currentTick, currentTickOK = findIntField(payload, "current_tick", "tick")
+		if currentTickOK {
+			a.updateServerTick(now, currentTick)
+		}
+	}
+
+	if toolName == "travel" {
+		arrivalTick, found := findIntField(payload, "arrival_tick")
+		if found {
+			if currentTickOK && arrivalTick <= currentTick {
+				a.setActivity(ActivityStateIdle, time.Time{})
+				return
+			}
+			until := a.estimateTravelUntil(now, arrivalTick, currentTick, currentTickOK)
+			a.setActivity(ActivityStateTraveling, until)
+		}
+		return
+	}
+
+	if cooldownTicks, found := findIntField(payload, "cooldown_ticks", "cooldown_remaining"); found && cooldownTicks > 0 {
+		until := a.estimateCooldownUntil(now, cooldownTicks)
+		a.setActivity(ActivityStateCooldown, until)
+		return
+	}
+
+	switch toolName {
+	case "mine":
+		a.clearActivityIf(ActivityStateMining)
+	case "attack", "attack_base":
+		a.clearActivityIf(ActivityStateInCombat)
+	}
+}
+
+func (a *Mysis) setActivity(state ActivityState, until time.Time) {
+	a.mu.Lock()
+	a.activityState = state
+	a.activityUntil = until
+	a.mu.Unlock()
+}
+
+func (a *Mysis) clearActivityIf(state ActivityState) {
+	a.mu.Lock()
+	if a.activityState == state {
+		a.activityState = ActivityStateIdle
+		a.activityUntil = time.Time{}
+	}
+	a.mu.Unlock()
+}
+
+func (a *Mysis) updateServerTick(now time.Time, tick int64) {
+	if tick <= 0 {
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.lastServerTick > 0 && tick > a.lastServerTick && !a.lastServerTickAt.IsZero() {
+		elapsed := now.Sub(a.lastServerTickAt)
+		delta := tick - a.lastServerTick
+		if elapsed > 0 && delta > 0 {
+			a.tickDuration = elapsed / time.Duration(delta)
+		}
+	}
+
+	a.lastServerTick = tick
+	a.lastServerTickAt = now
+}
+
+func (a *Mysis) estimateTravelUntil(now time.Time, arrivalTick, currentTick int64, currentTickOK bool) time.Time {
+	if currentTickOK {
+		a.mu.RLock()
+		tickDuration := a.tickDuration
+		a.mu.RUnlock()
+		if tickDuration > 0 && arrivalTick > currentTick {
+			return now.Add(time.Duration(arrivalTick-currentTick) * tickDuration)
+		}
+	}
+
+	return now.Add(constants.WaitStateNudgeInterval)
+}
+
+func (a *Mysis) estimateCooldownUntil(now time.Time, cooldownTicks int64) time.Time {
+	a.mu.RLock()
+	tickDuration := a.tickDuration
+	a.mu.RUnlock()
+
+	if tickDuration > 0 && cooldownTicks > 0 {
+		return now.Add(time.Duration(cooldownTicks) * tickDuration)
+	}
+
+	return now.Add(constants.WaitStateNudgeInterval)
+}
+
+func parseToolResultPayload(result *mcp.ToolResult) (interface{}, bool) {
+	if result == nil {
+		return nil, false
+	}
+
+	var texts []string
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			texts = append(texts, block.Text)
+		}
+	}
+
+	content := strings.TrimSpace(strings.Join(texts, "\n"))
+	if content == "" {
+		return nil, false
+	}
+	if !strings.HasPrefix(content, "{") && !strings.HasPrefix(content, "[") {
+		return nil, false
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.UseNumber()
+	var payload interface{}
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, false
+	}
+
+	return payload, true
+}
+
+func findIntField(payload interface{}, keys ...string) (int64, bool) {
+	switch value := payload.(type) {
+	case map[string]interface{}:
+		for _, key := range keys {
+			if raw, ok := value[key]; ok {
+				if number, ok := normalizeInt(raw); ok {
+					return number, true
+				}
+			}
+		}
+		for _, child := range value {
+			if number, ok := findIntField(child, keys...); ok {
+				return number, true
+			}
+		}
+	case []interface{}:
+		for _, child := range value {
+			if number, ok := findIntField(child, keys...); ok {
+				return number, true
+			}
+		}
+	}
+
+	return 0, false
+}
+
+func normalizeInt(value interface{}) (int64, bool) {
+	switch v := value.(type) {
+	case int:
+		return int64(v), true
+	case int64:
+		return v, true
+	case float64:
+		return int64(v), true
+	case json.Number:
+		number, err := v.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return number, true
+	case string:
+		number, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return number, true
+	default:
+		return 0, false
 	}
 }
 

@@ -103,6 +103,9 @@ const LLMRequestTimeout = 5 * time.Minute
 // IdleNudgeInterval defines how often to prompt idle myses for next action.
 const IdleNudgeInterval = 30 * time.Second
 
+// WaitStateNudgeInterval defines how often to prompt myses in wait states.
+const WaitStateNudgeInterval = 2 * time.Minute
+
 // ToolResultDisplayMaxChars limits tool result text shown in the UI.
 const ToolResultDisplayMaxChars = 500
 

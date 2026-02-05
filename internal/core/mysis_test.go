@@ -731,3 +731,62 @@ func TestComputeMessageStats(t *testing.T) {
 		}
 	})
 }
+
+func TestMysisActivityTravelUntilFromTicks(t *testing.T) {
+	m := &Mysis{}
+
+	now := time.Now()
+	m.lastServerTick = 100
+	m.lastServerTickAt = now.Add(-20 * time.Second)
+
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: `{"current_tick":110,"arrival_tick":120}`}},
+	}
+
+	m.updateActivityFromToolResult("travel", result, nil)
+
+	if m.activityState != ActivityStateTraveling {
+		t.Fatalf("expected activity state traveling, got %s", m.activityState)
+	}
+
+	remaining := time.Until(m.activityUntil)
+	if remaining < 18*time.Second || remaining > 25*time.Second {
+		t.Fatalf("expected travel wait around 20s, got %s", remaining)
+	}
+}
+
+func TestMysisActivityTravelFallbackWait(t *testing.T) {
+	m := &Mysis{}
+
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: `{"arrival_tick":5000}`}},
+	}
+
+	m.updateActivityFromToolResult("travel", result, nil)
+
+	if m.activityState != ActivityStateTraveling {
+		t.Fatalf("expected activity state traveling, got %s", m.activityState)
+	}
+
+	remaining := time.Until(m.activityUntil)
+	if remaining < constants.WaitStateNudgeInterval-2*time.Second || remaining > constants.WaitStateNudgeInterval+2*time.Second {
+		t.Fatalf("expected travel fallback wait around %s, got %s", constants.WaitStateNudgeInterval, remaining)
+	}
+}
+
+func TestMysisActivityTravelArrivalTickReached(t *testing.T) {
+	m := &Mysis{}
+
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: `{"current_tick":120,"arrival_tick":120}`}},
+	}
+
+	m.updateActivityFromToolResult("travel", result, nil)
+
+	if m.activityState != ActivityStateIdle {
+		t.Fatalf("expected activity state idle, got %s", m.activityState)
+	}
+	if !m.activityUntil.IsZero() {
+		t.Fatal("expected activityUntil to be zero when arrival tick reached")
+	}
+}

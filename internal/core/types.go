@@ -15,6 +15,17 @@ const (
 	MysisStateErrored MysisState = "errored"
 )
 
+// ActivityState represents what the mysis is currently doing in-game.
+type ActivityState string
+
+const (
+	ActivityStateIdle      ActivityState = "idle"
+	ActivityStateTraveling ActivityState = "traveling"
+	ActivityStateMining    ActivityState = "mining"
+	ActivityStateInCombat  ActivityState = "in_combat"
+	ActivityStateCooldown  ActivityState = "cooldown"
+)
+
 // EventType identifies the type of event.
 type EventType string
 
