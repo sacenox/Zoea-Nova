@@ -2,6 +2,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 )
 
@@ -120,3 +121,10 @@ const (
 	ErrorCodeInvalidParams  = -32602
 	ErrorCodeInternalError  = -32603
 )
+
+// UpstreamClient defines the interface for an upstream MCP server connection.
+type UpstreamClient interface {
+	Initialize(ctx context.Context, clientInfo map[string]interface{}) (*Response, error)
+	ListTools(ctx context.Context) ([]Tool, error)
+	CallTool(ctx context.Context, name string, arguments interface{}) (*ToolResult, error)
+}

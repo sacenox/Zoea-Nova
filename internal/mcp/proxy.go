@@ -34,7 +34,7 @@ type Account struct {
 // Proxy combines an upstream MCP client with local tool handlers.
 type Proxy struct {
 	mu              sync.RWMutex
-	upstream        *Client
+	upstream        UpstreamClient
 	localTools      map[string]Tool
 	localHandlers   map[string]ToolHandler
 	contextHandlers map[string]ToolHandlerWithContext
@@ -42,12 +42,7 @@ type Proxy struct {
 }
 
 // NewProxy creates a new MCP proxy.
-func NewProxy(upstreamEndpoint string) *Proxy {
-	var upstream *Client
-	if upstreamEndpoint != "" {
-		upstream = NewClient(upstreamEndpoint)
-	}
-
+func NewProxy(upstream UpstreamClient) *Proxy {
 	return &Proxy{
 		upstream:        upstream,
 		localTools:      make(map[string]Tool),

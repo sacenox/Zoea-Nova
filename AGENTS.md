@@ -32,6 +32,16 @@ UI changes: increment the first number.
 DB schema changes: increment the middle number and require a fresh database.
 MINOR changes: increment on every commit.
 
+## Offline Mode
+
+To run Zoea Nova without connecting to the SpaceMolt MCP server, use the `--offline` flag:
+
+```bash
+./bin/zoea --offline
+```
+
+This uses a stub MCP client that returns mock data for essential tools (`get_status`, `get_system`, etc.), allowing TUI development and testing without an active game session.
+
 ## TUI Testing:
 
 Zoea Nova uses three types of TUI tests:

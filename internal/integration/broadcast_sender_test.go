@@ -147,7 +147,7 @@ func setupIntegrationCommander(t *testing.T) (*core.Commander, *store.Store, *mc
 	}
 
 	cmd := core.NewCommander(s, reg, bus, cfg)
-	proxy := mcp.NewProxy("")
+	proxy := mcp.NewProxy(nil)
 	mcp.RegisterOrchestratorTools(proxy, &orchestratorAdapter{commander: cmd})
 	cmd.SetMCP(proxy)
 

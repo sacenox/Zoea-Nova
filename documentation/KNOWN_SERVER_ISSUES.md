@@ -115,14 +115,11 @@ None successful. The following were tested without resolving the issue:
 
 **Status:**
 
-**BLOCKING** - This is a server-side bug that prevents Zoea Nova from connecting to SpaceMolt game tools. The issue must be resolved by the SpaceMolt server maintainers.
+**RESOLVED** - The server now correctly returns `202 Accepted` to the `notifications/initialized` request. Handshake completes successfully.
 
-**Next Steps:**
-1. Report issue to SpaceMolt server maintainers
-2. Request server logs showing session lifecycle
-3. Verify MCP specification compliance on server side
-4. Consider temporary workaround: skip `notifications/initialized` and attempt tool calls directly (violates MCP spec but may work if server accepts unauthenticated tool calls)
+**Previous Issue (Fixed):**
+The server previously returned `404 Not Found` to the initialization notification. This was verified fixed on 2026-02-05.
 
-**Last Verified:** 2026-02-04
+**Last Verified:** 2026-02-05
 **Server Endpoint:** https://game.spacemolt.com/mcp
 **Zoea Nova Version:** v1.5.7

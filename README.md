@@ -36,6 +36,7 @@ Zoea Nova uses a small set of in-app terms (Mysis, Commander, Swarm, Provider, M
 make run          # Build and start
 ./bin/zoea        # Run directly
 ./bin/zoea -debug # With debug logging
+./bin/zoea -offline # Run in offline mode (mock game server)
 ```
 
 ## Keyboard Shortcuts

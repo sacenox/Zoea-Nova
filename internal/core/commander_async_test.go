@@ -32,7 +32,7 @@ func setupCommanderAsyncTest(t *testing.T) (*Commander, *store.Store, *EventBus,
 	c := NewCommander(s, reg, bus, cfg)
 
 	// Set a dummy MCP proxy to avoid "no tools" error events
-	proxy := mcp.NewProxy("")
+	proxy := mcp.NewProxy(nil)
 	c.SetMCP(proxy)
 
 	cleanup := func() {

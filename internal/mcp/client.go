@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // Client is an MCP client that communicates with an upstream server.
@@ -217,9 +218,32 @@ func (c *Client) Initialize(ctx context.Context, clientInfo map[string]interface
 		"clientInfo":      clientInfo,
 	}
 
-	resp, err := c.Call(ctx, "initialize", params)
+	var resp *Response
+	var err error
+	maxRetries := 3
+	backoff := 1 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			// Wait with backoff
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+			}
+		}
+
+		resp, err = c.Call(ctx, "initialize", params)
+		if err == nil {
+			break
+		}
+		// Log attempt (using fmt to avoid dependency on logger)
+		fmt.Printf("MCP connection attempt %d/%d failed: %v\n", i+1, maxRetries, err)
+	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initialize failed after %d attempts: %w", maxRetries, err)
 	}
 
 	if resp.Error != nil {

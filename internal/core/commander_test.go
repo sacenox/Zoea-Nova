@@ -42,7 +42,7 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	cmd := NewCommander(s, reg, bus, cfg)
 
 	// Set a dummy MCP proxy to avoid "no tools" error events
-	proxy := mcp.NewProxy("")
+	proxy := mcp.NewProxy(nil)
 	cmd.SetMCP(proxy)
 
 	cleanup := func() {

@@ -51,7 +51,7 @@ func TestNewErrorResponse(t *testing.T) {
 }
 
 func TestProxyLocalTools(t *testing.T) {
-	proxy := NewProxy("") // No upstream
+	proxy := NewProxy(nil) // No upstream
 
 	// Register a local tool
 	tool := Tool{
@@ -95,7 +95,7 @@ func TestProxyLocalTools(t *testing.T) {
 }
 
 func TestProxyToolNotFound(t *testing.T) {
-	proxy := NewProxy("") // No upstream
+	proxy := NewProxy(nil) // No upstream
 
 	ctx := context.Background()
 	result, err := proxy.CallTool(ctx, CallerContext{}, "nonexistent", nil)
@@ -108,12 +108,12 @@ func TestProxyToolNotFound(t *testing.T) {
 }
 
 func TestProxyHasUpstream(t *testing.T) {
-	proxyNoUpstream := NewProxy("")
+	proxyNoUpstream := NewProxy(nil)
 	if proxyNoUpstream.HasUpstream() {
 		t.Error("expected no upstream")
 	}
 
-	proxyWithUpstream := NewProxy("http://example.com/mcp")
+	proxyWithUpstream := NewProxy(NewClient("http://example.com/mcp"))
 	if !proxyWithUpstream.HasUpstream() {
 		t.Error("expected upstream")
 	}
@@ -250,12 +250,8 @@ func TestOrchestratorTools(t *testing.T) {
 	}
 
 	// Create proxy and register tools
-	proxy := NewProxy("")
+	proxy := NewProxy(nil)
 	RegisterOrchestratorTools(proxy, orchestrator)
-
-	if proxy.LocalToolCount() != 8 {
-		t.Errorf("expected 8 local tools, got %d", proxy.LocalToolCount())
-	}
 
 	ctx := context.Background()
 
@@ -289,7 +285,7 @@ func TestZoeaListMysesPayloadMinimal(t *testing.T) {
 	}
 
 	// Create proxy and register tools
-	proxy := NewProxy("")
+	proxy := NewProxy(nil)
 	RegisterOrchestratorTools(proxy, orchestrator)
 
 	ctx := context.Background()

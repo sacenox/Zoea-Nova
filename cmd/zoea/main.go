@@ -32,6 +32,7 @@ func main() {
 		configPath  = flag.String("config", "config.toml", "Path to config file")
 		debug       = flag.Bool("debug", false, "Enable debug logging")
 		testMCP     = flag.Bool("test-mcp", false, "Test MCP connection and tool calling, then exit")
+		offline     = flag.Bool("offline", false, "Run in offline mode with stub MCP server")
 	)
 	flag.Parse()
 
@@ -100,7 +101,15 @@ func main() {
 	}
 
 	// Initialize MCP proxy
-	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
+	var upstreamClient mcp.UpstreamClient
+	if *offline {
+		log.Info().Msg("Running in offline mode using stub MCP client")
+		upstreamClient = mcp.NewStubClient()
+	} else if cfg.MCP.Upstream != "" {
+		upstreamClient = mcp.NewClient(cfg.MCP.Upstream)
+	}
+
+	mcpProxy := mcp.NewProxy(upstreamClient)
 	mcpProxy.SetAccountStore(&accountStoreAdapter{s})
 	mcp.RegisterOrchestratorTools(mcpProxy, &commanderAdapter{commander})
 
@@ -358,7 +367,11 @@ func runMCPTest(configPath string) {
 
 	// Create MCP proxy
 	fmt.Printf("Upstream MCP: %s\n", cfg.MCP.Upstream)
-	mcpProxy := mcp.NewProxy(cfg.MCP.Upstream)
+	var upstreamClient mcp.UpstreamClient
+	if cfg.MCP.Upstream != "" {
+		upstreamClient = mcp.NewClient(cfg.MCP.Upstream)
+	}
+	mcpProxy := mcp.NewProxy(upstreamClient)
 
 	// Create a mock orchestrator for local tools
 	mockOrch := &mockOrchestrator{}

@@ -25,7 +25,7 @@ func TestMysisToolExecution(t *testing.T) {
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Setup MCP proxy with a local tool
-	proxy := mcp.NewProxy("")
+	proxy := mcp.NewProxy(nil)
 	proxy.RegisterTool(mcp.Tool{
 		Name:        "test_tool",
 		Description: "A test tool",
@@ -133,8 +133,9 @@ func TestMysisToolError(t *testing.T) {
 
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	proxy := mcp.NewProxy("")
+	proxy := mcp.NewProxy(nil)
 	proxy.RegisterTool(mcp.Tool{
+
 		Name: "error_tool",
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
 		return nil, errors.New("tool failed")

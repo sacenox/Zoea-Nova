@@ -327,6 +327,11 @@ Decorative elements (icons, indicators) must be rendered OUTSIDE styled areas to
 ### 4. Tests Don't Replace Manual Verification
 Always run the actual TUI application to verify visual changes. Tests validate logic and catch regressions, but human eyes catch visual issues tests miss.
 
+Use offline mode for safe UI testing without connecting to the live game server:
+```bash
+./bin/zoea -offline
+```
+
 ### 5. Integration Tests Need Quit Pattern
 Integration tests must send quit command before calling `FinalModel()` to avoid timeouts. See `TestIntegration_DashboardNavigation` for the correct pattern.
 
