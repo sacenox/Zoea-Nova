@@ -514,3 +514,162 @@ func TestCommanderLoadMyses(t *testing.T) {
 		t.Errorf("expected 2 myses loaded, got %d", cmd.MysisCount())
 	}
 }
+
+// TestBroadcastDoesNotBlockOnBusyMysis verifies that broadcasting doesn't block
+// when one or more myses are busy processing a previous message.
+// This test ensures the parallel broadcast implementation works correctly.
+func TestBroadcastDoesNotBlockOnBusyMysis(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	defer s.Close()
+
+	bus := NewEventBus(100)
+	defer bus.Close()
+
+	reg := provider.NewRegistry()
+	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
+
+	// Create a slow provider that will block for 2 seconds
+	slowProvider := provider.NewMock("slow", "slow response").
+		WithLimiter(limiter).
+		SetDelay(2 * time.Second)
+
+	// Create a fast provider for the other mysis
+	fastProvider := provider.NewMock("fast", "fast response").
+		WithLimiter(limiter)
+
+	// Register custom factories that return our specific providers
+	reg.RegisterFactory(&customMockFactory{
+		name:     "slow",
+		provider: slowProvider,
+	})
+	reg.RegisterFactory(&customMockFactory{
+		name:     "fast",
+		provider: fastProvider,
+	})
+
+	cfg := &config.Config{
+		Swarm: config.SwarmConfig{MaxMyses: 16},
+		Providers: map[string]config.ProviderConfig{
+			"slow": {Endpoint: "http://slow", Model: "slow-model", Temperature: 0.7},
+			"fast": {Endpoint: "http://fast", Model: "fast-model", Temperature: 0.7},
+		},
+	}
+
+	cmd := NewCommander(s, reg, bus, cfg)
+	proxy := mcp.NewProxy(nil)
+	cmd.SetMCP(proxy)
+
+	// Create two myses: one slow, one fast
+	slowMysis, err := cmd.CreateMysis("slow-mysis", "slow")
+	if err != nil {
+		t.Fatalf("CreateMysis(slow) error: %v", err)
+	}
+
+	fastMysis, err := cmd.CreateMysis("fast-mysis", "fast")
+	if err != nil {
+		t.Fatalf("CreateMysis(fast) error: %v", err)
+	}
+
+	// Start both myses
+	if err := cmd.StartMysis(slowMysis.ID()); err != nil {
+		t.Fatalf("StartMysis(slow) error: %v", err)
+	}
+	if err := cmd.StartMysis(fastMysis.ID()); err != nil {
+		t.Fatalf("StartMysis(fast) error: %v", err)
+	}
+
+	// Wait for both to be running
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if slowMysis.State() == MysisStateRunning && fastMysis.State() == MysisStateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if slowMysis.State() != MysisStateRunning || fastMysis.State() != MysisStateRunning {
+		t.Fatal("myses failed to start within timeout")
+	}
+
+	// Send a direct message to the slow mysis to make it busy
+	// This will block for 2 seconds due to the delay
+	go func() {
+		cmd.SendMessage(slowMysis.ID(), "make slow mysis busy")
+	}()
+
+	// Give the slow mysis time to start processing (acquire turnMu lock)
+	time.Sleep(100 * time.Millisecond)
+
+	// Now broadcast a message - this should NOT block waiting for the slow mysis
+	// The broadcast should complete quickly (within 500ms) because it sends in parallel
+	start := time.Now()
+	err = cmd.Broadcast("broadcast message")
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Broadcast() error: %v", err)
+	}
+
+	// The broadcast should complete much faster than the 2-second delay
+	// We allow up to 1 second for the broadcast to complete (generous margin)
+	// If it takes longer, it means the broadcast blocked waiting for the slow mysis
+	if elapsed > 1*time.Second {
+		t.Errorf("Broadcast took too long (%v), likely blocked on busy mysis", elapsed)
+	}
+
+	// Verify both myses received the broadcast
+	// Wait a bit for the slow mysis to finish processing
+	time.Sleep(2500 * time.Millisecond)
+
+	slowMemories, err := s.GetRecentMemories(slowMysis.ID(), 50)
+	if err != nil {
+		t.Fatalf("GetRecentMemories(slow) error: %v", err)
+	}
+
+	fastMemories, err := s.GetRecentMemories(fastMysis.ID(), 50)
+	if err != nil {
+		t.Fatalf("GetRecentMemories(fast) error: %v", err)
+	}
+
+	// Check that both myses have the broadcast message
+	slowHasBroadcast := false
+	for _, m := range slowMemories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "broadcast message" {
+			slowHasBroadcast = true
+			break
+		}
+	}
+
+	fastHasBroadcast := false
+	for _, m := range fastMemories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "broadcast message" {
+			fastHasBroadcast = true
+			break
+		}
+	}
+
+	if !slowHasBroadcast {
+		t.Error("slow mysis did not receive broadcast message")
+	}
+	if !fastHasBroadcast {
+		t.Error("fast mysis did not receive broadcast message")
+	}
+
+	cmd.StopAll()
+}
+
+// customMockFactory is a factory that returns a specific provider instance
+type customMockFactory struct {
+	name     string
+	provider provider.Provider
+}
+
+func (f *customMockFactory) Name() string { return f.name }
+
+func (f *customMockFactory) Create(model string, temperature float64) provider.Provider {
+	return f.provider
+}

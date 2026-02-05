@@ -271,7 +271,9 @@ func (c *Commander) SendMessageAsync(id, content string) error {
 	return nil
 }
 
-// Broadcast sends a message to all running myses (synchronous).
+// Broadcast sends a message to all running myses.
+// Stores the message immediately and triggers async processing.
+// Returns quickly without waiting for LLM processing.
 func (c *Commander) Broadcast(content string) error {
 	c.mu.RLock()
 	myses := make([]*Mysis, 0)
@@ -294,9 +296,10 @@ func (c *Commander) Broadcast(content string) error {
 		Timestamp: time.Now(),
 	})
 
+	// Queue broadcast to each mysis (non-blocking)
 	var errs []error
 	for _, m := range myses {
-		if err := m.SendMessage(content, store.MemorySourceBroadcast); err != nil {
+		if err := m.QueueBroadcast(content, ""); err != nil {
 			errs = append(errs, fmt.Errorf("mysis %s: %w", m.ID(), err))
 		}
 	}

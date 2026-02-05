@@ -534,6 +534,46 @@ func (m *Mysis) SendMessage(content string, source store.MemorySource) error {
 	return a.SendMessageFrom(content, source, "")
 }
 
+// QueueBroadcast stores a broadcast message and triggers async processing.
+// Unlike SendMessage, this does not block waiting for the mysis to process.
+// Returns immediately after storing the message in the database.
+func (m *Mysis) QueueBroadcast(content string, senderID string) error {
+	a := m
+
+	a.mu.RLock()
+	state := a.state
+	a.mu.RUnlock()
+
+	if state != MysisStateRunning {
+		return fmt.Errorf("mysis not running")
+	}
+
+	// Store the message immediately (fast DB write, no LLM call)
+	if err := a.store.AddMemory(a.id, store.MemoryRoleUser, store.MemorySourceBroadcast, content, "", senderID); err != nil {
+		return fmt.Errorf("store broadcast: %w", err)
+	}
+
+	// Emit message event
+	a.bus.Publish(Event{
+		Type:      EventMysisMessage,
+		MysisID:   a.id,
+		MysisName: a.name,
+		Message:   &MessageData{Role: "user", Content: content},
+		Timestamp: time.Now(),
+	})
+
+	// Trigger async processing (nudge the mysis to process the new message)
+	select {
+	case a.nudgeCh <- struct{}{}:
+		// Nudge sent successfully
+	default:
+		// Channel full or mysis not listening, that's OK
+		// The mysis will pick up the message on its next turn
+	}
+
+	return nil
+}
+
 // memoriesToMessages converts stored memories to provider messages.
 func (m *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message {
 	a := m
