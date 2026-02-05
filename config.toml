@@ -17,3 +17,4 @@ rate_burst = 5
 
 [mcp]
 upstream = "https://game.spacemolt.com/mcp"
+upstream_version = "v0.43.0"

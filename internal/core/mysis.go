@@ -451,7 +451,6 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 
 			// Execute each tool call
 			for _, tc := range response.ToolCalls {
-				a.updateActivityFromToolCall(tc.Name)
 				// Signal MCP activity
 				a.bus.Publish(Event{
 					Type:      EventNetworkMCP,
@@ -461,7 +460,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				})
 
 				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
-				a.updateActivityFromToolResult(tc.Name, result, execErr)
+				a.updateActivityFromToolResult(result, execErr)
 
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
@@ -767,7 +766,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 		}
 
 		// If this is a snapshot tool, track its position
-		if constants.SnapshotTools[toolName] {
+		if a.isSnapshotTool(toolName) {
 			latestSnapshot[toolName] = i
 		}
 	}
@@ -789,7 +788,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 		}
 
 		// If this is a snapshot tool, only keep if it's the latest
-		if constants.SnapshotTools[toolName] {
+		if a.isSnapshotTool(toolName) {
 			if latestSnapshot[toolName] == i {
 				result = append(result, m)
 			}
@@ -833,6 +832,21 @@ func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
 	}
 
 	return index
+}
+
+func (a *Mysis) isSnapshotTool(toolName string) bool {
+	if toolName == "" {
+		return false
+	}
+	if strings.HasPrefix(toolName, "get_") {
+		return true
+	}
+	switch toolName {
+	case "zoea_swarm_status", "zoea_list_myses":
+		return true
+	default:
+		return false
+	}
 }
 
 // run is the mysis main processing loop.
@@ -950,24 +964,8 @@ func (a *Mysis) shouldNudge(now time.Time) bool {
 	return true
 }
 
-func (a *Mysis) updateActivityFromToolCall(toolName string) {
-	switch toolName {
-	case "travel":
-		a.setActivity(ActivityStateTraveling, time.Now().Add(constants.WaitStateNudgeInterval))
-	case "mine":
-		a.setActivity(ActivityStateMining, time.Time{})
-	case "attack", "attack_base":
-		a.setActivity(ActivityStateInCombat, time.Time{})
-	}
-}
-
-func (a *Mysis) updateActivityFromToolResult(toolName string, result *mcp.ToolResult, err error) {
+func (a *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) {
 	if err != nil || result == nil || result.IsError {
-		a.clearActivityIf(ActivityStateMining)
-		a.clearActivityIf(ActivityStateInCombat)
-		if toolName == "travel" {
-			a.setActivity(ActivityStateIdle, time.Time{})
-		}
 		return
 	}
 
@@ -982,17 +980,26 @@ func (a *Mysis) updateActivityFromToolResult(toolName string, result *mcp.ToolRe
 		}
 	}
 
-	if toolName == "travel" {
-		arrivalTick, found := findIntField(payload, "arrival_tick")
-		if found {
-			if currentTickOK && arrivalTick <= currentTick {
-				a.setActivity(ActivityStateIdle, time.Time{})
-				return
-			}
-			until := a.estimateTravelUntil(now, arrivalTick, currentTick, currentTickOK)
-			a.setActivity(ActivityStateTraveling, until)
+	arrivalTick, found := findIntField(payload, "arrival_tick", "travel_arrival_tick")
+	if found {
+		if currentTickOK && arrivalTick <= currentTick {
+			a.setActivity(ActivityStateIdle, time.Time{})
+			return
 		}
+		until := a.estimateTravelUntil(now, arrivalTick, currentTick, currentTickOK)
+		a.setActivity(ActivityStateTraveling, until)
 		return
+	}
+
+	if progress, ok := findFloatField(payload, "travel_progress"); ok {
+		if progress >= 1 {
+			a.setActivity(ActivityStateIdle, time.Time{})
+			return
+		}
+		if progress > 0 {
+			a.setActivity(ActivityStateTraveling, now.Add(constants.WaitStateNudgeInterval))
+			return
+		}
 	}
 
 	if cooldownTicks, found := findIntField(payload, "cooldown_ticks", "cooldown_remaining"); found && cooldownTicks > 0 {
@@ -1001,12 +1008,6 @@ func (a *Mysis) updateActivityFromToolResult(toolName string, result *mcp.ToolRe
 		return
 	}
 
-	switch toolName {
-	case "mine":
-		a.clearActivityIf(ActivityStateMining)
-	case "attack", "attack_base":
-		a.clearActivityIf(ActivityStateInCombat)
-	}
 }
 
 func (a *Mysis) setActivity(state ActivityState, until time.Time) {
@@ -1133,6 +1134,39 @@ func findIntField(payload interface{}, keys ...string) (int64, bool) {
 	return 0, false
 }
 
+func findFloatField(payload interface{}, keys ...string) (float64, bool) {
+	queue := []interface{}{payload}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		switch value := current.(type) {
+		case map[string]interface{}:
+			for _, key := range keys {
+				if raw, ok := value[key]; ok {
+					if number, ok := normalizeFloat(raw); ok {
+						return number, true
+					}
+				}
+			}
+
+			childKeys := make([]string, 0, len(value))
+			for key := range value {
+				childKeys = append(childKeys, key)
+			}
+			sort.Strings(childKeys)
+			for _, key := range childKeys {
+				queue = append(queue, value[key])
+			}
+		case []interface{}:
+			queue = append(queue, value...)
+		}
+	}
+
+	return 0, false
+}
+
 func findCurrentTick(payload interface{}) (int64, bool) {
 	if number, ok := findIntFieldAtKeys(payload, "current_tick"); ok {
 		return number, true
@@ -1208,6 +1242,31 @@ func normalizeInt(value interface{}) (int64, bool) {
 		return number, true
 	case string:
 		number, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return number, true
+	default:
+		return 0, false
+	}
+}
+
+func normalizeFloat(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case float64:
+		return v, true
+	case json.Number:
+		number, err := v.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return number, true
+	case string:
+		number, err := strconv.ParseFloat(v, 64)
 		if err != nil {
 			return 0, false
 		}

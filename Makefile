@@ -1,4 +1,4 @@
-.PHONY: fmt build run test test-integration install clean db-reset-accounts
+.PHONY: fmt build run test test-integration install clean db-reset-accounts check-upstream-version
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -24,6 +24,12 @@ test:
 
 test-integration:
 	go test -v ./internal/tui -run TestIntegration -count=1
+
+check-upstream-version:
+	@echo "Config upstream version:"
+	@rg "upstream_version" config.toml
+	@echo "Remote upstream version:"
+	@curl -s https://www.spacemolt.com/api.md | rg -o "gameserver v[0-9.]+"
 
 clean:
 	rm -rf bin/ coverage.out

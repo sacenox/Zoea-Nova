@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -163,19 +164,14 @@ func (p *Proxy) handleRegisterResponse(arguments json.RawMessage, result *ToolRe
 		return
 	}
 
-	if len(result.Content) == 0 {
+	payload, ok := parseToolResultPayload(result)
+	if !ok {
 		return
 	}
 
-	var response struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &response); err != nil {
-		return
-	}
-
-	if args.Username != "" && response.Password != "" {
-		_, _ = p.accountStore.CreateAccount(args.Username, response.Password)
+	password, ok := findStringField(payload, "password", "token")
+	if args.Username != "" && ok && password != "" {
+		_, _ = p.accountStore.CreateAccount(args.Username, password)
 	}
 }
 
@@ -193,22 +189,109 @@ func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResul
 }
 
 func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResult) {
-	if len(result.Content) == 0 {
+	payload, ok := parseToolResultPayload(result)
+	if !ok {
 		return
 	}
 
-	var response struct {
-		Player struct {
-			Username string `json:"username"`
-		} `json:"player"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &response); err != nil {
-		return
+	username, ok := findStringFieldAtPath(payload, "player", "username")
+	if !ok {
+		username, _ = findStringField(payload, "username")
 	}
 
-	if response.Player.Username != "" {
-		_ = p.accountStore.ReleaseAccount(response.Player.Username)
+	if username != "" {
+		_ = p.accountStore.ReleaseAccount(username)
 	}
+}
+
+func parseToolResultPayload(result *ToolResult) (interface{}, bool) {
+	if result == nil {
+		return nil, false
+	}
+
+	content := strings.TrimSpace(joinToolResultText(result))
+	if content == "" {
+		return nil, false
+	}
+	if !strings.HasPrefix(content, "{") && !strings.HasPrefix(content, "[") {
+		return nil, false
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.UseNumber()
+	var payload interface{}
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, false
+	}
+
+	return payload, true
+}
+
+func joinToolResultText(result *ToolResult) string {
+	if result == nil {
+		return ""
+	}
+
+	var parts []string
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func findStringField(payload interface{}, keys ...string) (string, bool) {
+	queue := []interface{}{payload}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		switch value := current.(type) {
+		case map[string]interface{}:
+			for _, key := range keys {
+				if raw, ok := value[key]; ok {
+					if str, ok := raw.(string); ok {
+						return str, true
+					}
+				}
+			}
+
+			for _, child := range value {
+				queue = append(queue, child)
+			}
+		case []interface{}:
+			queue = append(queue, value...)
+		}
+	}
+
+	return "", false
+}
+
+func findStringFieldAtPath(payload interface{}, path ...string) (string, bool) {
+	current, ok := payload.(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+
+	for i, key := range path {
+		value, exists := current[key]
+		if !exists {
+			return "", false
+		}
+		if i == len(path)-1 {
+			str, ok := value.(string)
+			return str, ok
+		}
+		next, ok := value.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		current = next
+	}
+
+	return "", false
 }
 
 // Initialize initializes the upstream connection if available.

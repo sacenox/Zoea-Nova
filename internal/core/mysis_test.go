@@ -424,11 +424,17 @@ func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
 	if !strings.Contains(constants.SystemPrompt, "non-empty entry field") {
 		t.Fatal("SystemPrompt missing non-empty entry reminder")
 	}
+	if !strings.Contains(constants.SystemPrompt, "Max 20 entries") {
+		t.Fatal("SystemPrompt missing captain's log limit guidance")
+	}
 }
 
 func TestContinuePromptContainsCriticalReminders(t *testing.T) {
 	if !strings.Contains(constants.ContinuePrompt, "captains_log_add") {
 		t.Fatal("ContinuePrompt missing captains_log_add reminder")
+	}
+	if !strings.Contains(constants.ContinuePrompt, "100KB") {
+		t.Fatal("ContinuePrompt missing captain's log limit reminder")
 	}
 }
 
@@ -808,7 +814,7 @@ func TestMysisActivityTravelUntilFromTicks(t *testing.T) {
 		Content: []mcp.ContentBlock{{Type: "text", Text: `{"current_tick":110,"arrival_tick":120}`}},
 	}
 
-	m.updateActivityFromToolResult("travel", result, nil)
+	m.updateActivityFromToolResult(result, nil)
 
 	if m.activityState != ActivityStateTraveling {
 		t.Fatalf("expected activity state traveling, got %s", m.activityState)
@@ -827,7 +833,7 @@ func TestMysisActivityTravelFallbackWait(t *testing.T) {
 		Content: []mcp.ContentBlock{{Type: "text", Text: `{"arrival_tick":5000}`}},
 	}
 
-	m.updateActivityFromToolResult("travel", result, nil)
+	m.updateActivityFromToolResult(result, nil)
 
 	if m.activityState != ActivityStateTraveling {
 		t.Fatalf("expected activity state traveling, got %s", m.activityState)
@@ -846,13 +852,27 @@ func TestMysisActivityTravelArrivalTickReached(t *testing.T) {
 		Content: []mcp.ContentBlock{{Type: "text", Text: `{"current_tick":120,"arrival_tick":120}`}},
 	}
 
-	m.updateActivityFromToolResult("travel", result, nil)
+	m.updateActivityFromToolResult(result, nil)
 
 	if m.activityState != ActivityStateIdle {
 		t.Fatalf("expected activity state idle, got %s", m.activityState)
 	}
 	if !m.activityUntil.IsZero() {
 		t.Fatal("expected activityUntil to be zero when arrival tick reached")
+	}
+}
+
+func TestMysisActivityTravelArrivalTickField(t *testing.T) {
+	m := &Mysis{}
+
+	result := &mcp.ToolResult{
+		Content: []mcp.ContentBlock{{Type: "text", Text: `{"current_tick":200,"travel_arrival_tick":210}`}},
+	}
+
+	m.updateActivityFromToolResult(result, nil)
+
+	if m.activityState != ActivityStateTraveling {
+		t.Fatalf("expected activity state traveling, got %s", m.activityState)
 	}
 }
 

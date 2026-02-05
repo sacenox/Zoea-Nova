@@ -44,6 +44,8 @@ To run Zoea Nova without connecting to the SpaceMolt MCP server, use the `--offl
 
 This uses a stub MCP client that returns mock data for essential tools (`get_status`, `get_system`, etc.), allowing TUI development and testing without an active game session.
 
+See `documentation/OFFLINE_MODE.md` for supported tools and limitations.
+
 ## TUI Testing:
 
 Zoea Nova uses three types of TUI tests:
@@ -176,6 +178,25 @@ The application uses SQLite for persistence.
 - **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
 - **Source**: Origin of a memory—`direct` (single Mysis), `broadcast` (swarm), `system`, `llm`, or `tool`.
 - **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/CONTEXT_COMPRESSION.md](documentation/CONTEXT_COMPRESSION.md).
+
+## Architecture
+
+```mermaid
+flowchart LR
+    TUI["TUI (Bubble Tea)"] -->|events| EventBus["Event Bus"]
+    EventBus --> Commander
+    Commander -->|manages| Mysis
+    Mysis --> Provider
+    Provider --> LLM
+    Commander --> Store
+    Mysis --> Store
+    Mysis --> MCPProxy["MCP Proxy"]
+    MCPProxy --> SpaceMolt["SpaceMolt MCP Server"]
+```
+
+## State Machine
+
+See `documentation/MYSIS_STATE_MACHINE.md` for valid Mysis transitions and triggers.
 
 ## Workflow:
 

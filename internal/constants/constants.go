@@ -52,6 +52,10 @@ Remember in captain's log:
 - Current objectives and plans
 - Trade routes and profitable deals
 
+Captain's log limits (server enforced):
+- Max 20 entries per player (oldest is evicted when full)
+- Max 100KB per entry
+
 ## Timekeeping
 - Do not mention real-world time (minutes, hours, dates, UTC)
 - Use game ticks from tool results (current_tick, arrival_tick, cooldown_ticks)
@@ -90,6 +94,7 @@ const ContinuePrompt = `Turn complete. What is your next move?
 CRITICAL REMINDERS:
 - ALWAYS try zoea_claim_account before registering; if registering, use a Crustacean-themed username
 - When using captains_log_add, entry field must be non-empty
+- Captain's log limits: 20 entries max, 100KB per entry (oldest evicted when full)
 - Never store or share your password in any in-game tool calls or chat
 - Use game ticks only; do not mention real-world time (minutes, hours, dates, UTC)
 - Never calculate ticks, use every turn to progress
@@ -147,14 +152,3 @@ const MinEventBusBufferSize = 1000
 
 // EventBusPublishTimeout is the per-subscriber timeout for critical events.
 const EventBusPublishTimeout = 200 * time.Millisecond
-
-// SnapshotTools defines tools that return state snapshots for context compaction.
-var SnapshotTools = map[string]bool{
-	"get_ship":          true,
-	"get_system":        true,
-	"get_poi":           true,
-	"get_nearby":        true,
-	"get_cargo":         true,
-	"zoea_swarm_status": true,
-	"zoea_list_myses":   true,
-}
