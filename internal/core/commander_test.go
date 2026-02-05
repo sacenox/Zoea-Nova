@@ -405,6 +405,58 @@ func TestCommanderBroadcastSource(t *testing.T) {
 	}
 }
 
+func TestBroadcastExcludesSender(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	sender, _ := cmd.CreateMysis("sender", "mock")
+	receiver, _ := cmd.CreateMysis("receiver", "mock")
+
+	cmd.StartMysis(sender.ID())
+	cmd.StartMysis(receiver.ID())
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if sender.State() == MysisStateRunning && receiver.State() == MysisStateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if sender.State() != MysisStateRunning || receiver.State() != MysisStateRunning {
+		t.Fatal("myses failed to start within timeout")
+	}
+
+	if err := cmd.BroadcastFrom(sender.ID(), "test broadcast"); err != nil {
+		t.Fatalf("BroadcastFrom() error: %v", err)
+	}
+
+	senderMemories, err := cmd.Store().GetRecentMemories(sender.ID(), 50)
+	if err != nil {
+		t.Fatalf("GetRecentMemories() error: %v", err)
+	}
+	for _, m := range senderMemories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "test broadcast" {
+			t.Error("sender received its own broadcast - should be excluded")
+		}
+	}
+
+	receiverMemories, err := cmd.Store().GetRecentMemories(receiver.ID(), 50)
+	if err != nil {
+		t.Fatalf("GetRecentMemories() error: %v", err)
+	}
+
+	found := false
+	for _, m := range receiverMemories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "test broadcast" && m.SenderID == sender.ID() {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("receiver did not receive broadcast with correct sender_id")
+	}
+}
+
 func TestCommanderStopAll(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()

@@ -307,21 +307,19 @@ func (c *Commander) Broadcast(content string) error {
 	return nil
 }
 
-// BroadcastAsync sends a message to all running myses without waiting for processing.
-// Returns immediately after validating at least one mysis is running.
-func (c *Commander) BroadcastAsync(content string) error {
+// BroadcastFrom sends a message to all running myses except the sender.
+func (c *Commander) BroadcastFrom(senderID, content string) error {
 	c.mu.RLock()
 	myses := make([]*Mysis, 0)
 	for _, m := range c.myses {
-		if m.State() == MysisStateRunning {
+		if m.State() == MysisStateRunning && m.ID() != senderID {
 			myses = append(myses, m)
 		}
 	}
 	c.mu.RUnlock()
 
-	// Check if any myses are running
 	if len(myses) == 0 {
-		return fmt.Errorf("no running myses to receive broadcast")
+		return fmt.Errorf("no recipients for broadcast (sender excluded)")
 	}
 
 	// Emit broadcast event
@@ -331,17 +329,23 @@ func (c *Commander) BroadcastAsync(content string) error {
 		Timestamp: time.Now(),
 	})
 
-	// Send to each mysis asynchronously
+	var errs []error
 	for _, m := range myses {
-		mysis := m
-		go func() {
-			if err := mysis.SendMessage(content, store.MemorySourceBroadcast); err != nil {
-				// Error is published to bus by mysis.SendMessage
-			}
-		}()
+		if err := m.SendMessageFrom(content, store.MemorySourceBroadcast, senderID); err != nil {
+			errs = append(errs, fmt.Errorf("mysis %s: %w", m.ID(), err))
+		}
 	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("broadcast failed for %d mysis: %w", len(errs), errors.Join(errs...))
+	}
 	return nil
+}
+
+// BroadcastAsync sends a message to all running myses without waiting for processing.
+// Returns immediately after validating at least one mysis is running.
+func (c *Commander) BroadcastAsync(content string) error {
+	return c.BroadcastFrom("", content)
 }
 
 // StopAll stops all running myses.

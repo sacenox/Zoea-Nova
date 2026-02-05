@@ -173,6 +173,47 @@ eventLoop:
 	mysis.Stop()
 }
 
+func TestMysisReceivesBroadcastWithSender(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	receiverStored, _ := s.CreateMysis("receiver", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	receiver := NewMysis(receiverStored.ID, receiverStored.Name, receiverStored.CreatedAt, mock, s, bus)
+
+	if err := receiver.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+	defer receiver.Stop()
+
+	senderID := "sender-mysis"
+
+	if err := receiver.SendMessageFrom("test broadcast", store.MemorySourceBroadcast, senderID); err != nil {
+		t.Fatalf("SendMessageFrom() error: %v", err)
+	}
+
+	memories, err := s.GetRecentMemories(receiverStored.ID, 10)
+	if err != nil {
+		t.Fatalf("GetRecentMemories() error: %v", err)
+	}
+
+	if len(memories) == 0 {
+		t.Fatal("expected at least 1 memory")
+	}
+
+	found := false
+	for _, m := range memories {
+		if m.Source == store.MemorySourceBroadcast && m.SenderID == senderID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Error("broadcast memory with correct sender_id not found")
+	}
+}
+
 func TestMysisSetErrorState(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -274,12 +315,12 @@ func TestMysisContextMemoryLimit(t *testing.T) {
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	// Add more memories than MaxContextMessages
 	for i := 0; i < MaxContextMessages+10; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "", "")
 	}
 
 	// Get context memories
@@ -312,12 +353,12 @@ func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	// Add fewer memories than MaxContextMessages
 	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "", "")
 	}
 
 	// Get context memories
@@ -407,28 +448,28 @@ func TestMysisContextCompaction(t *testing.T) {
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	// Add multiple get_ship tool results (should be compacted to keep only the latest)
 	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check ship", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:get_ship:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check ship", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:get_ship:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_1:{"ship_id":"ship_%d","hull":100}`, i), "")
+			fmt.Sprintf(`call_1:{"ship_id":"ship_%d","hull":100}`, i), "", "")
 	}
 
 	// Add multiple get_system tool results (should also be compacted)
 	for i := 0; i < 3; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check system", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_2:get_system:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check system", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_2:get_system:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_2:{"system_id":"sys_%d","police_level":1}`, i), "")
+			fmt.Sprintf(`call_2:{"system_id":"sys_%d","police_level":1}`, i), "", "")
 	}
 
 	// Add a non-snapshot tool result (should be kept)
-	s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "mine ore", "")
-	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_3:mine:{}", "")
-	s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, `call_3:{"result":"mining"}`, "")
+	s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "mine ore", "", "")
+	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_3:mine:{}", "", "")
+	s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, `call_3:{"result":"mining"}`, "", "")
 
 	// Get context memories
 	memories, err := mysis.getContextMemories()
@@ -516,14 +557,14 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
 	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	// Add multiple zoea_list_myses tool results (should be compacted to keep only the latest)
 	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "list myses", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:zoea_list_myses:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "list myses", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:zoea_list_myses:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_1:[{"id":"mysis-%d","name":"test-%d"}]`, i, i), "")
+			fmt.Sprintf(`call_1:[{"id":"mysis-%d","name":"test-%d"}]`, i, i), "", "")
 	}
 
 	// Get context memories
@@ -563,12 +604,12 @@ func TestMysisContextCompactionNonSnapshot(t *testing.T) {
 	mock := provider.NewMock("mock", "response")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	for i := 0; i < 2; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "travel", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, fmt.Sprintf("[TOOL_CALLS]call_%d:travel:{}", i), "")
-		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, fmt.Sprintf(`call_%d:{"ship_id":"ship_%d"}`, i, i), "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "travel", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, fmt.Sprintf("[TOOL_CALLS]call_%d:travel:{}", i), "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, fmt.Sprintf(`call_%d:{"ship_id":"ship_%d"}`, i, i), "", "")
 	}
 
 	memories, err := mysis.getContextMemories()

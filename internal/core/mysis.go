@@ -285,7 +285,7 @@ func (a *Mysis) Start() error {
 	// Add system prompt if this is the first time starting (no memories yet)
 	count, err := a.store.CountMemories(a.id)
 	if err == nil && count == 0 {
-		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt, "")
+		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt, "", "")
 	}
 
 	// Emit state change event
@@ -337,10 +337,9 @@ func (a *Mysis) Stop() error {
 	return nil
 }
 
-// SendMessage sends a message to the mysis for processing.
-// This implements the loop with tool calling support.
+// SendMessageFrom sends a message to the mysis for processing with sender tracking.
 // The source parameter indicates whether this is a direct or broadcast message.
-func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
+func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, senderID string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 
@@ -361,7 +360,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 	}
 
 	// Store the message
-	if _, err := a.store.AddMemory(a.id, role, source, content, ""); err != nil {
+	if err := a.store.AddMemory(a.id, role, source, content, "", senderID); err != nil {
 		return fmt.Errorf("store message: %w", err)
 	}
 
@@ -518,7 +517,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 		if len(response.ToolCalls) > 0 {
 			// Store the assistant's tool call request
 			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
-			if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON, response.Reasoning); err != nil {
+			if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON, response.Reasoning, ""); err != nil {
 				a.setError(err)
 				return fmt.Errorf("store tool call: %w", err)
 			}
@@ -550,7 +549,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
-				if _, err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, ""); err != nil {
+				if err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, "", ""); err != nil {
 					a.setError(err)
 					return fmt.Errorf("store tool result: %w", err)
 				}
@@ -576,7 +575,7 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 		}
 
 		// Store the assistant response
-		if _, err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse, response.Reasoning); err != nil {
+		if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse, response.Reasoning, ""); err != nil {
 			a.setError(err)
 			return fmt.Errorf("store response: %w", err)
 		}
@@ -600,6 +599,11 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
 	return fmt.Errorf("max tool iterations (%d) exceeded", MaxToolIterations)
+}
+
+// SendMessage sends a message to the mysis for processing.
+func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
+	return a.SendMessageFrom(content, source, "")
 }
 
 // memoriesToMessages converts stored memories to provider messages.
@@ -643,7 +647,12 @@ func (a *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 		}, nil
 	}
 
-	result, err := mcpProxy.CallTool(ctx, tc.Name, tc.Arguments)
+	caller := mcp.CallerContext{
+		MysisID:   a.id,
+		MysisName: a.name,
+	}
+
+	result, err := mcpProxy.CallTool(ctx, caller, tc.Name, tc.Arguments)
 	if err == nil && result != nil && !result.IsError {
 		switch tc.Name {
 		case "login", "register":
