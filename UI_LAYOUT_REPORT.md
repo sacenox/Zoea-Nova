@@ -9,10 +9,9 @@ Generated: 2026-02-05
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ 1. HEADER (3 lines)                                     │
-│ 2. STATUS BAR (1 line)                                  │
-│ 3. SWARM BROADCAST SECTION (header + variable content)  │
-│ 4. MYSIS SWARM SECTION (header + bordered panel)        │
-│ 5. FOOTER (1 line)                                      │
+│ 2. SWARM BROADCAST SECTION (header + variable content)  │
+│ 3. MYSIS SWARM SECTION (header + bordered panel)        │
+│ 4. FOOTER (1 line)                                      │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -38,36 +37,7 @@ Generated: 2026-02-05
 
 ---
 
-### 2. STATUS BAR (Line 5)
-**Location:** `dashboard.go` lines 58-89  
-**Rendering:** `statusBarStyle.Width(width).Render(stats)`
-
-```
-  ∙  1  ◦  1  ◌  0  ✖  0
-```
-
-**Components:**
-- **Running count:** `∙` (bullet operator U+2219) + count
-- **Idle count:** `◦` (white bullet U+25E6) + count
-- **Stopped count:** `◌` (dotted circle) + count
-- **Errored count:** `✖` (heavy multiplication X) + count
-- **Loading indicator:** (optional) spinner + count if any myses are loading
-
-**Calculation:**
-- Running: Counts myses with `state == "running"`
-- Idle: `len(myses) - running - stopped - errored`
-- Stopped: Counts myses with `state == "stopped"`
-- Errored: Counts myses with `state == "errored"`
-
-**Style:** `statusBarStyle` with colored icons:
-- Running: `stateRunningStyle` (green)
-- Idle: `stateIdleStyle` (yellow)
-- Stopped: `stateStoppedStyle` (dimmed)
-- Errored: `stateErroredStyle` (red)
-
----
-
-### 3. SWARM BROADCAST SECTION (Lines 6-8)
+### 2. SWARM BROADCAST SECTION (Lines 6-8)
 **Location:** `dashboard.go` lines 91-122  
 **Always visible:** Yes (shows placeholder when empty)
 
@@ -100,7 +70,7 @@ No broadcasts yet. Press 'b' to broadcast.
 
 ---
 
-### 4. MYSIS SWARM SECTION (Lines 9-40)
+### 3. MYSIS SWARM SECTION (Lines 9-40)
 **Location:** `dashboard.go` lines 124-161
 
 #### Header (Line 9)
@@ -115,7 +85,7 @@ No broadcasts yet. Press 'b' to broadcast.
 
 **Height calculation:**
 ```
-usedHeight = 6 (header + stats + mysis header + footer)
+usedHeight = 5 (header + mysis header + footer)
            + 1 (swarm header)
            + len(msgLines) (swarm content)
            + 2 (panel borders)
@@ -174,7 +144,7 @@ mysisListHeight = height - usedHeight
 
 ---
 
-### 5. FOOTER (Line 41)
+### 4. FOOTER (Line 41)
 **Location:** `dashboard.go` lines 163-165  
 **Rendering:** `dimmedStyle.Render(hint)`
 
@@ -260,21 +230,12 @@ mysisListHeight = height - usedHeight
 
 ### Current Issues Identified
 
-1. **Status Bar Position:**
-   - Currently at line 5 (between header and swarm broadcast)
-   - Styled with `statusBarStyle` (full-width panel)
-
-2. **No Duplicate Status Icons:**
-   - Status icons appear ONLY in the status bar (line 5)
-   - Footer only shows keyboard hints
-   - No duplication found in current code
-
-3. **Swarm Broadcast Section:**
+1. **Swarm Broadcast Section:**
    - Always visible (shows placeholder when empty)
    - Takes variable height based on message count (max 10)
-   - Positioned between status bar and mysis list
+   - Positioned between header and mysis list
 
-4. **Mysis List Panel:**
+2. **Mysis List Panel:**
    - Bordered box with double-line style
    - Height dynamically calculated to fill remaining space
    - Each mysis line shows: indicator, name, state, provider, account, last message
@@ -303,13 +264,12 @@ mysisListHeight = height - usedHeight
 
 ## Summary
 
-The current UI has **5 main sections** in the dashboard:
+The current UI has **4 main sections** in the dashboard:
 
 1. **Header** (3 lines) - Retro-futuristic banner
-2. **Status Bar** (1 line) - Mysis state counts with icons
-3. **Swarm Broadcast** (variable) - Recent broadcast messages
-4. **Mysis Swarm** (variable) - Bordered list of myses
-5. **Footer** (1 line) - Keyboard hints
+2. **Swarm Broadcast** (variable) - Recent broadcast messages
+3. **Mysis Swarm** (variable) - Bordered list of myses
+4. **Footer** (1 line) - Keyboard hints
 
-**Total fixed height:** 6 lines (header + status + footer + 2 section headers)  
+**Total fixed height:** 5 lines (header + footer + 2 section headers)  
 **Variable height:** Swarm messages + Mysis list (fills remaining space)

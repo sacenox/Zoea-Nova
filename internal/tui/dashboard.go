@@ -55,39 +55,6 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	header := headerStyle.Width(width).Render(headerText)
 	sections = append(sections, header)
 
-	// Stats bar
-	var running, stopped, errored, loading int
-	for _, m := range myses {
-		if loadingSet[m.ID] {
-			loading++
-		}
-		switch m.State {
-		case "running":
-			running++
-		case "stopped":
-			stopped++
-		case "errored":
-			errored++
-		}
-	}
-	stats := fmt.Sprintf(
-		" %s  %d  %s  %d  %s  %d  %s  %d",
-		stateRunningStyle.Render("∙"),
-		running,
-		stateIdleStyle.Render("◦"),
-		len(myses)-running-stopped-errored,
-		stateStoppedStyle.Render("◌"),
-		stopped,
-		stateErroredStyle.Render("✖"),
-		errored,
-	)
-	// Add loading indicator if any myses are loading
-	if loading > 0 {
-		stats += fmt.Sprintf("  %s %d", spinnerView, loading)
-	}
-	statsBar := statusBarStyle.Width(width).Render(stats)
-	sections = append(sections, statsBar)
-
 	// Swarm message history - always visible with fixed height
 	swarmHeader := renderSectionTitle("SWARM BROADCAST", width)
 	sections = append(sections, swarmHeader)
@@ -126,8 +93,8 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	sections = append(sections, mysisHeader)
 
 	// Calculate height used by other elements to fill remaining space
-	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + content, Mysis header: 1 line, Footer: 1 line
-	usedHeight := 6 // header (3 + margin) + stats (1) + mysis header (1) + footer (1)
+	// Header: 3 lines + margin, Swarm: header + content, Mysis header: 1 line, Footer: 1 line
+	usedHeight := 5 // header (3 + margin) + mysis header (1) + footer (1)
 	// Swarm section: header (1) + content lines (at least 1 for placeholder or messages)
 	usedHeight += 1 + len(msgLines)
 	// Account for panel borders (top + bottom = 2 lines)
