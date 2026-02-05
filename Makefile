@@ -1,4 +1,4 @@
-.PHONY: fmt build run test test-integration clean db-reset-accounts
+.PHONY: fmt build run test test-integration install clean db-reset-accounts
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -13,6 +13,10 @@ build:
 
 run: build
 	./bin/zoea
+
+install: build
+	mkdir -p $(HOME)/.zoea-nova/bin
+	cp bin/zoea $(HOME)/.zoea-nova/bin/zoea
 
 test:
 	go test -v -race -coverprofile=coverage.out ./...
