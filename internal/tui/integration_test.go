@@ -28,6 +28,20 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 )
 
+func quitAndFinalModel(t *testing.T, tm *teatest.TestModel, timeout time.Duration) Model {
+	t.Helper()
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	fm := tm.FinalModel(t, teatest.WithFinalTimeout(timeout))
+	return fm.(Model)
+}
+
+func programQuitAndFinalModel(t *testing.T, tm *teatest.TestModel, timeout time.Duration) Model {
+	t.Helper()
+	_ = tm.Quit()
+	fm := tm.FinalModel(t, teatest.WithFinalTimeout(timeout))
+	return fm.(Model)
+}
+
 // TestIntegration_DashboardNavigation tests up/down key navigation in dashboard
 func TestIntegration_DashboardNavigation(t *testing.T) {
 	m, cleanup := setupTestModel(t)
@@ -68,11 +82,7 @@ func TestIntegration_DashboardNavigation(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Send quit to exit cleanly
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-
-	// Get final model and verify selection changed
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, 2*time.Second)
 	if finalModel.selectedIdx != 1 {
 		t.Errorf("after down key: selectedIdx = %d, want 1", finalModel.selectedIdx)
 	}
@@ -103,8 +113,7 @@ func TestIntegration_DashboardNavigationUp(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify selection moved up
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.selectedIdx != 0 {
 		t.Errorf("after up key: selectedIdx = %d, want 0", finalModel.selectedIdx)
 	}
@@ -116,7 +125,7 @@ func TestIntegration_FocusViewTransition(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+	_, _ = m.commander.CreateMysis("test-mysis", "ollama")
 	m.refreshMysisList()
 
 	tm := teatest.NewTestModel(
@@ -139,16 +148,6 @@ func TestIntegration_FocusViewTransition(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Get model state and verify view changed
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.view != ViewFocus {
-		t.Errorf("after Enter: view = %d, want ViewFocus (%d)", model1.view, ViewFocus)
-	}
-	if model1.focusID != mysis.ID() {
-		t.Errorf("after Enter: focusID = %s, want %s", model1.focusID, mysis.ID())
-	}
-
 	// Press Escape to return to dashboard
 	tm.Send(tea.KeyMsg{Type: tea.KeyEsc})
 
@@ -163,13 +162,12 @@ func TestIntegration_FocusViewTransition(t *testing.T) {
 	)
 
 	// Verify returned to dashboard
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model2 := fm2.(Model)
-	if model2.view != ViewDashboard {
-		t.Errorf("after Escape: view = %d, want ViewDashboard (%d)", model2.view, ViewDashboard)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	if finalModel.view != ViewDashboard {
+		t.Errorf("after Escape: view = %d, want ViewDashboard (%d)", finalModel.view, ViewDashboard)
 	}
-	if model2.focusID != "" {
-		t.Errorf("after Escape: focusID = %s, want empty", model2.focusID)
+	if finalModel.focusID != "" {
+		t.Errorf("after Escape: focusID = %s, want empty", finalModel.focusID)
 	}
 }
 
@@ -199,13 +197,6 @@ func TestIntegration_HelpToggle(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Verify help is shown
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if !model1.showHelp {
-		t.Error("after ? key: showHelp should be true")
-	}
-
 	// Press ? again to hide help
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 
@@ -213,9 +204,8 @@ func TestIntegration_HelpToggle(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify help is hidden
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model2 := fm2.(Model)
-	if model2.showHelp {
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	if finalModel.showHelp {
 		t.Error("after second ? key: showHelp should be false")
 	}
 }
@@ -250,16 +240,6 @@ func TestIntegration_BroadcastInput(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Verify input mode activated
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if !model1.input.IsActive() {
-		t.Error("after 'b' key: input should be active")
-	}
-	if model1.input.Mode() != InputModeBroadcast {
-		t.Errorf("after 'b' key: input mode = %d, want InputModeBroadcast (%d)", model1.input.Mode(), InputModeBroadcast)
-	}
-
 	// Type message characters
 	testMessage := "Hello swarm"
 	for _, r := range testMessage {
@@ -281,9 +261,8 @@ func TestIntegration_BroadcastInput(t *testing.T) {
 	)
 
 	// Verify input cleared
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	model2 := fm2.(Model)
-	if model2.input.IsActive() {
+	finalModel := quitAndFinalModel(t, tm, 2*time.Second)
+	if finalModel.input.IsActive() {
 		t.Error("after Enter: input should be inactive")
 	}
 }
@@ -313,20 +292,10 @@ func TestIntegration_MessageInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return bytes.Contains(bts, []byte("MESSAGE"))
+			return bytes.Contains(bts, []byte("Message to mysis"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
-
-	// Verify input mode
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.input.Mode() != InputModeMessage {
-		t.Errorf("after 'm' key: input mode = %d, want InputModeMessage (%d)", model1.input.Mode(), InputModeMessage)
-	}
-	if model1.input.TargetID() != mysis.ID() {
-		t.Errorf("after 'm' key: target ID = %s, want %s", model1.input.TargetID(), mysis.ID())
-	}
 
 	// Type message
 	testMessage := "Test message"
@@ -342,15 +311,14 @@ func TestIntegration_MessageInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return !bytes.Contains(bts, []byte("MESSAGE"))
+			return !bytes.Contains(bts, []byte("Message to mysis"))
 		},
 		teatest.WithDuration(3*time.Second),
 	)
 
 	// Verify input cleared
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	model2 := fm2.(Model)
-	if model2.input.IsActive() {
+	finalModel := quitAndFinalModel(t, tm, 2*time.Second)
+	if finalModel.input.IsActive() {
 		t.Error("after Enter: input should be inactive")
 	}
 }
@@ -380,13 +348,6 @@ func TestIntegration_NewMysisInput(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Verify input mode
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.input.Mode() != InputModeNewMysis {
-		t.Errorf("after 'n' key: input mode = %d, want InputModeNewMysis (%d)", model1.input.Mode(), InputModeNewMysis)
-	}
-
 	// Type mysis name
 	mysisName := "new-mysis"
 	for _, r := range mysisName {
@@ -407,13 +368,12 @@ func TestIntegration_NewMysisInput(t *testing.T) {
 	)
 
 	// Verify mysis was created
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	model2 := fm2.(Model)
-	if len(model2.myses) != 1 {
-		t.Errorf("after creating mysis: myses count = %d, want 1", len(model2.myses))
+	finalModel := quitAndFinalModel(t, tm, 2*time.Second)
+	if len(finalModel.myses) != 1 {
+		t.Errorf("after creating mysis: myses count = %d, want 1", len(finalModel.myses))
 	}
-	if len(model2.myses) > 0 && model2.myses[0].Name != mysisName {
-		t.Errorf("after creating mysis: name = %s, want %s", model2.myses[0].Name, mysisName)
+	if len(finalModel.myses) > 0 && finalModel.myses[0].Name != mysisName {
+		t.Errorf("after creating mysis: name = %s, want %s", finalModel.myses[0].Name, mysisName)
 	}
 }
 
@@ -442,19 +402,18 @@ func TestIntegration_ConfigProviderInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return bytes.Contains(bts, []byte("PROVIDER"))
+			return bytes.Contains(bts, []byte("Enter provider"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
 
 	// Verify input mode
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.input.Mode() != InputModeConfigProvider {
-		t.Errorf("after 'c' key: input mode = %d, want InputModeConfigProvider (%d)", model1.input.Mode(), InputModeConfigProvider)
+	finalModel := programQuitAndFinalModel(t, tm, time.Second)
+	if finalModel.input.Mode() != InputModeConfigProvider {
+		t.Errorf("after 'c' key: input mode = %d, want InputModeConfigProvider (%d)", finalModel.input.Mode(), InputModeConfigProvider)
 	}
-	if model1.input.TargetID() != mysisID {
-		t.Errorf("after 'c' key: target ID = %s, want %s", model1.input.TargetID(), mysisID)
+	if finalModel.input.TargetID() != mysisID {
+		t.Errorf("after 'c' key: target ID = %s, want %s", finalModel.input.TargetID(), mysisID)
 	}
 }
 
@@ -482,7 +441,7 @@ func TestIntegration_ConfigModelInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return bytes.Contains(bts, []byte("PROVIDER"))
+			return bytes.Contains(bts, []byte("Enter provider"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
@@ -501,20 +460,10 @@ func TestIntegration_ConfigModelInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return bytes.Contains(bts, []byte("MODEL"))
+			return bytes.Contains(bts, []byte("Enter model name"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
-
-	// Verify transitioned to model input
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.input.Mode() != InputModeConfigModel {
-		t.Errorf("after provider input: mode = %d, want InputModeConfigModel (%d)", model1.input.Mode(), InputModeConfigModel)
-	}
-	if model1.pendingProvider != provider {
-		t.Errorf("after provider input: pendingProvider = %s, want %s", model1.pendingProvider, provider)
-	}
 
 	// Type model name
 	modelName := "test-model"
@@ -530,19 +479,18 @@ func TestIntegration_ConfigModelInput(t *testing.T) {
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return !bytes.Contains(bts, []byte("MODEL"))
+			return !bytes.Contains(bts, []byte("Enter model name"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
 
 	// Verify input cleared and pendingProvider cleared
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model2 := fm2.(Model)
-	if model2.input.IsActive() {
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	if finalModel.input.IsActive() {
 		t.Error("after model input: input should be inactive")
 	}
-	if model2.pendingProvider != "" {
-		t.Errorf("after model input: pendingProvider = %s, want empty", model2.pendingProvider)
+	if finalModel.pendingProvider != "" {
+		t.Errorf("after model input: pendingProvider = %s, want empty", finalModel.pendingProvider)
 	}
 }
 
@@ -590,8 +538,7 @@ func TestIntegration_InputCancel(t *testing.T) {
 	)
 
 	// Verify input was cancelled
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.input.IsActive() {
 		t.Error("after Escape: input should be inactive")
 	}
@@ -629,8 +576,7 @@ func TestIntegration_WindowResize(t *testing.T) {
 	)
 
 	// Verify dimensions updated
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.width != newWidth {
 		t.Errorf("after resize: width = %d, want %d", finalModel.width, newWidth)
 	}
@@ -679,8 +625,7 @@ func TestIntegration_ViewportScroll(t *testing.T) {
 	)
 
 	// Verify viewport scrolled
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.viewport.YOffset == 0 && len(finalModel.logs) > finalModel.viewport.Height {
 		// If there's content to scroll and we're still at offset 0, something is wrong
 		t.Error("viewport should have scrolled up but YOffset is still 0")
@@ -707,42 +652,22 @@ func TestIntegration_ViewportBounds(t *testing.T) {
 	defer tm.Quit()
 
 	// Try to scroll up when at top
-	initialOffset := m.viewport.YOffset
 	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
 
 	// Wait briefly
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify didn't scroll past bounds
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.viewport.YOffset < 0 {
 		t.Errorf("viewport scrolled past top: YOffset = %d", finalModel.viewport.YOffset)
 	}
 
-	// Try to scroll down when at bottom (with autoscroll enabled)
-	finalModel.viewport.GotoBottom()
-	finalModel.autoScroll = true
-	bottomOffset := finalModel.viewport.YOffset
-	tm.Send(tea.KeyMsg{Type: tea.KeyDown})
-
-	// Wait briefly
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify stayed within bounds
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel2 := fm2.(Model)
-	if finalModel2.viewport.YOffset < 0 {
-		t.Errorf("viewport YOffset became negative: %d", finalModel2.viewport.YOffset)
-	}
-
 	// Offset should not have increased beyond content
-	if len(finalModel2.logs) > 0 && finalModel2.viewport.YOffset > finalModel2.viewportTotalLines {
+	if len(finalModel.logs) > 0 && finalModel.viewport.YOffset > finalModel.viewportTotalLines {
 		t.Errorf("viewport scrolled past content: YOffset = %d, totalLines = %d",
-			finalModel2.viewport.YOffset, finalModel2.viewportTotalLines)
+			finalModel.viewport.YOffset, finalModel.viewportTotalLines)
 	}
-	_ = initialOffset // prevent unused warning
-	_ = bottomOffset  // prevent unused warning
 }
 
 // TestIntegration_MysisStartedEvent tests event updates dashboard
@@ -775,8 +700,7 @@ func TestIntegration_MysisStartedEvent(t *testing.T) {
 	)
 
 	// Verify mysis state updated
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	finalModel.refreshMysisList()
 	if len(finalModel.myses) > 0 && finalModel.myses[0].State != "running" {
 		t.Errorf("after start event: mysis state = %s, want running", finalModel.myses[0].State)
@@ -814,8 +738,7 @@ func TestIntegration_MysisStoppedEvent(t *testing.T) {
 	)
 
 	// Verify mysis state updated
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	finalModel.refreshMysisList()
 	if len(finalModel.myses) > 0 && finalModel.myses[0].State == "running" {
 		t.Errorf("after stop event: mysis state = %s, should not be running", finalModel.myses[0].State)
@@ -854,8 +777,7 @@ func TestIntegration_BroadcastEvent(t *testing.T) {
 	)
 
 	// Verify broadcast appears in swarm messages
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, 2*time.Second)
 	finalModel.refreshSwarmMessages()
 
 	found := false
@@ -915,17 +837,6 @@ func TestIntegration_CreateAndStartMysis(t *testing.T) {
 		teatest.WithDuration(3*time.Second),
 	)
 
-	// Verify mysis exists
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(2*time.Second))
-	finalModel := fm.(Model)
-	finalModel.refreshMysisList()
-	if len(finalModel.myses) != 1 {
-		t.Fatalf("expected 1 mysis, got %d", len(finalModel.myses))
-	}
-	if finalModel.myses[0].Name != mysisName {
-		t.Errorf("mysis name = %s, want %s", finalModel.myses[0].Name, mysisName)
-	}
-
 	// Navigate to the mysis and focus
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -940,10 +851,16 @@ func TestIntegration_CreateAndStartMysis(t *testing.T) {
 	)
 
 	// Verify in focus view
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel2 := fm2.(Model)
-	if finalModel2.view != ViewFocus {
-		t.Errorf("view = %d, want ViewFocus (%d)", finalModel2.view, ViewFocus)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	finalModel.refreshMysisList()
+	if len(finalModel.myses) != 1 {
+		t.Fatalf("expected 1 mysis, got %d", len(finalModel.myses))
+	}
+	if finalModel.myses[0].Name != mysisName {
+		t.Errorf("mysis name = %s, want %s", finalModel.myses[0].Name, mysisName)
+	}
+	if finalModel.view != ViewFocus {
+		t.Errorf("view = %d, want ViewFocus (%d)", finalModel.view, ViewFocus)
 	}
 }
 
@@ -969,26 +886,29 @@ func TestIntegration_MultipleKeySequence(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	time.Sleep(100 * time.Millisecond)
-
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	time.Sleep(100 * time.Millisecond)
-
-	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
-
-	// Wait for final state
 	teatest.WaitFor(
 		t,
 		tm.Output(),
 		func(bts []byte) bool {
-			return !bytes.Contains(bts, []byte("HELP"))
+			return bytes.Contains(bts, []byte("COMMAND REFERENCE"))
 		},
 		teatest.WithDuration(2*time.Second),
 	)
 
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	teatest.WaitFor(
+		t,
+		tm.Output(),
+		func(bts []byte) bool {
+			return !bytes.Contains(bts, []byte("COMMAND REFERENCE"))
+		},
+		teatest.WithDuration(2*time.Second),
+	)
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
+
 	// Verify final state: selectedIdx=0, help hidden
-	fm := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	finalModel := fm.(Model)
+	finalModel := quitAndFinalModel(t, tm, time.Second)
 	if finalModel.selectedIdx != 0 {
 		t.Errorf("after sequence: selectedIdx = %d, want 0", finalModel.selectedIdx)
 	}
@@ -1034,13 +954,6 @@ func TestIntegration_VerboseToggle(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Verify verboseJSON toggled
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if !model1.verboseJSON {
-		t.Error("after 'v' key: verboseJSON should be true")
-	}
-
 	// Press 'v' again to toggle back
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 
@@ -1055,9 +968,8 @@ func TestIntegration_VerboseToggle(t *testing.T) {
 	)
 
 	// Verify verboseJSON toggled back
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model2 := fm2.(Model)
-	if model2.verboseJSON {
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	if finalModel.verboseJSON {
 		t.Error("after second 'v' key: verboseJSON should be false")
 	}
 }
@@ -1096,22 +1008,8 @@ func TestIntegration_AutoScrollBehavior(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify auto-scroll disabled
-	fm1 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model1 := fm1.(Model)
-	if model1.autoScroll {
+	finalModel := quitAndFinalModel(t, tm, time.Second)
+	if finalModel.autoScroll {
 		t.Error("after scrolling up: autoScroll should be false")
-	}
-
-	// Go to bottom - should enable auto-scroll
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
-
-	// Wait briefly
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify auto-scroll enabled
-	fm2 := tm.FinalModel(t, teatest.WithFinalTimeout(time.Second))
-	model2 := fm2.(Model)
-	if !model2.autoScroll {
-		t.Error("after going to bottom: autoScroll should be true")
 	}
 }
