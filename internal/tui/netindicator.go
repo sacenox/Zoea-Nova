@@ -100,7 +100,7 @@ func (n NetIndicator) View() string {
 	switch n.activity {
 	case NetActivityIdle:
 		style = lipgloss.NewStyle().Foreground(colorMuted)
-		label = "◇ IDLE"
+		label = "⬦ IDLE"
 		// For idle, show a static dim bar
 		bar := barLeft
 		for i := 0; i < n.width; i++ {
@@ -111,11 +111,10 @@ func (n NetIndicator) View() string {
 
 	case NetActivityLLM:
 		style = lipgloss.NewStyle().Foreground(colorAssistant).Bold(true)
-		label = " ◆ LLM "
-
+		label = " ⬥ LLM "
 	case NetActivityMCP:
-		style = lipgloss.NewStyle().Foreground(colorTeal).Bold(true)
-		label = " ◆ MCP "
+		// MCP activity - diamond with MCP label
+		label = " ⬥ MCP "
 	}
 
 	// Build the bouncing bar
@@ -144,7 +143,7 @@ func (n NetIndicator) ViewCompact() string {
 	switch n.activity {
 	case NetActivityIdle:
 		style = lipgloss.NewStyle().Foreground(colorMuted)
-		return style.Render("◇ IDLE")
+		return style.Render("⬦ IDLE")
 
 	case NetActivityLLM:
 		style = lipgloss.NewStyle().Foreground(colorAssistant).Bold(true)

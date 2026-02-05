@@ -35,7 +35,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	if width < 20 {
 		width = 20
 	}
-	topLine := " ◆" + strings.Repeat("═", width-3) + "◆"
+	topLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
 	titleText := " ⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
 	// Center the title and pad to full width - use lipgloss.Width() for Unicode
 	titleDisplayWidth := lipgloss.Width(titleText)
@@ -49,7 +49,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	if titleLineWidth < width {
 		titleLine += strings.Repeat(" ", width-titleLineWidth)
 	}
-	bottomLine := " ◆" + strings.Repeat("═", width-3) + "◆"
+	bottomLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
 
 	headerText := topLine + "\n" + titleLine + "\n" + bottomLine
 	header := headerStyle.Width(width).Render(headerText)
@@ -71,10 +71,10 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		}
 	}
 	stats := fmt.Sprintf(
-		" %s %d  %s %d  %s %d  %s %d",
-		stateRunningStyle.Render("●"),
+		" %s  %d  %s  %d  %s  %d  %s  %d",
+		stateRunningStyle.Render("∙"),
 		running,
-		stateIdleStyle.Render("○"),
+		stateIdleStyle.Render("◦"),
 		len(myses)-running-stopped-errored,
 		stateStoppedStyle.Render("◌"),
 		stopped,
@@ -88,13 +88,23 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	statsBar := statusBarStyle.Width(width).Render(stats)
 	sections = append(sections, statsBar)
 
-	// Swarm message history
-	if len(swarmMessages) > 0 {
-		swarmHeader := renderSectionTitle("SWARM BROADCAST", width)
-		sections = append(sections, swarmHeader)
+	// Swarm message history - always visible with fixed height
+	swarmHeader := renderSectionTitle("SWARM BROADCAST", width)
+	sections = append(sections, swarmHeader)
 
-		var msgLines []string
-		for _, msg := range swarmMessages {
+	const maxSwarmMessages = 10
+	var msgLines []string
+	if len(swarmMessages) == 0 {
+		// Show placeholder when empty
+		msgLines = append(msgLines, dimmedStyle.Render("No broadcasts yet. Press 'b' to broadcast."))
+	} else {
+		// Show up to maxSwarmMessages (most recent first)
+		displayCount := len(swarmMessages)
+		if displayCount > maxSwarmMessages {
+			displayCount = maxSwarmMessages
+		}
+		for i := 0; i < displayCount; i++ {
+			msg := swarmMessages[i]
 			timeStr := msg.CreatedAt.Local().Format("15:04:05")
 			content := strings.ReplaceAll(msg.Content, "\n", " ")
 			maxLen := width - 15
@@ -107,20 +117,19 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 			line := fmt.Sprintf("%s %s", dimmedStyle.Render(timeStr), content)
 			msgLines = append(msgLines, line)
 		}
-		swarmContent := strings.Join(msgLines, "\n")
-		sections = append(sections, swarmContent)
 	}
+	swarmContent := strings.Join(msgLines, "\n")
+	sections = append(sections, swarmContent)
 
 	// Mysis list header
 	mysisHeader := renderSectionTitle("MYSIS SWARM", width)
 	sections = append(sections, mysisHeader)
 
 	// Calculate height used by other elements to fill remaining space
-	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + messages, Mysis header: 1 line, Footer: 1 line
+	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + content, Mysis header: 1 line, Footer: 1 line
 	usedHeight := 6 // header (3 + margin) + stats (1) + mysis header (1) + footer (1)
-	if len(swarmMessages) > 0 {
-		usedHeight += 1 + len(swarmMessages) // swarm header + messages
-	}
+	// Swarm section: header (1) + content lines (at least 1 for placeholder or messages)
+	usedHeight += 1 + len(msgLines)
 	// Account for panel borders (top + bottom = 2 lines)
 	usedHeight += 2
 
@@ -169,7 +178,7 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 			// Animated indicator for running myses
 			stateIndicator = spinnerView
 		case "idle":
-			stateIndicator = stateIdleStyle.Render("○")
+			stateIndicator = stateIdleStyle.Render("◦")
 		case "stopped":
 			stateIndicator = stateStoppedStyle.Render("◌")
 		case "errored":
@@ -196,15 +205,16 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 		accountText = dimmedStyle.Render("(no account)")
 	}
 
-	// First part: indicator + name + state + provider + account
-	firstPart := fmt.Sprintf("%s %-16s %s %s %s", stateIndicator, name, stateText, provider, accountText)
+	// Content part: name + state + provider + account (NO indicator - it goes outside)
+	contentPart := fmt.Sprintf("%-16s %s %s %s", name, stateText, provider, accountText)
 
 	// Calculate remaining width for last message
 	// Account for the prefix "│ " for the message
 	// Use lipgloss.Width() for proper Unicode width calculation
+	// Format: name(16) + space(1) + state(8) + space(1) + provider + space(1) + account
 	providerWidth := lipgloss.Width(m.Provider)
 	accountTextWidth := lipgloss.Width(accountText)
-	usedWidth := 2 + 16 + 1 + 8 + 1 + providerWidth + 2 + 1 + accountTextWidth + 4
+	usedWidth := 16 + 1 + 8 + 1 + providerWidth + 2 + 1 + accountTextWidth + 4
 	msgWidth := width - usedWidth - 8
 	if msgWidth < 10 {
 		msgWidth = 10
@@ -220,13 +230,16 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 		msgPart = dimmedStyle.Render(" │ " + msg)
 	}
 
-	line := firstPart + msgPart
+	line := contentPart + msgPart
 
 	// Apply style with full width to ensure background fills the line
+	// Render indicator and space OUTSIDE the styled content so they don't get background color
+	// Format: space + indicator + space + [styled content]
+	// Remove left padding from style (PaddingLeft(0)) and add right padding only
 	if selected {
-		return mysisItemSelectedStyle.Width(width).Render(line)
+		return " " + stateIndicator + " " + mysisItemSelectedStyle.PaddingLeft(0).PaddingRight(1).Width(width-3).Render(line)
 	}
-	return mysisItemStyle.Width(width).Render(line)
+	return " " + stateIndicator + " " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(width-3).Render(line)
 }
 
 // MysisInfoFromCore converts a core.Mysis to MysisInfo.

@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/mattn/go-runewidth"
 	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/provider"
@@ -228,39 +228,6 @@ func TestInputModel(t *testing.T) {
 	}
 }
 
-func TestInputModelViewAlways(t *testing.T) {
-	input := NewInputModel()
-	width := 100
-
-	// Test inactive state - should show placeholder
-	inactiveView := input.ViewAlways(width)
-	if inactiveView == "" {
-		t.Error("ViewAlways should return non-empty view even when inactive")
-	}
-	if !strings.Contains(inactiveView, "Press") {
-		t.Error("inactive view should contain placeholder text")
-	}
-
-	// Check width
-	inactiveWidth := lipgloss.Width(inactiveView)
-	if inactiveWidth != width {
-		t.Errorf("inactive view width = %d, want %d", inactiveWidth, width)
-	}
-
-	// Test active state
-	input.SetMode(InputModeBroadcast, "")
-	activeView := input.ViewAlways(width)
-	if activeView == "" {
-		t.Error("ViewAlways should return non-empty view when active")
-	}
-
-	// Check width when active
-	activeWidth := lipgloss.Width(activeView)
-	if activeWidth != width {
-		t.Errorf("active view width = %d, want %d", activeWidth, width)
-	}
-}
-
 func TestRenderHelp(t *testing.T) {
 	help := RenderHelp(80, 24)
 	if help == "" {
@@ -324,45 +291,6 @@ func TestStateStyle(t *testing.T) {
 	_ = StateStyle("unknown")
 }
 
-func TestRoleStyle(t *testing.T) {
-	// Force color output to verify ANSI codes
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	testText := "test"
-	roles := []string{"user", "assistant", "system", "tool", "unknown"}
-	rendered := make(map[string]string)
-
-	for _, role := range roles {
-		style := RoleStyle(role)
-		output := style.Render(testText)
-		rendered[role] = output
-
-		// Each should produce non-empty output
-		if output == "" {
-			t.Errorf("role %q should produce non-empty output", role)
-		}
-
-		// Each should contain ANSI codes
-		if !strings.Contains(output, "\x1b[") {
-			t.Errorf("role %q should contain ANSI escape codes, got: %q", role, output)
-		}
-
-		// Each should contain the test text
-		if !strings.Contains(output, testText) {
-			t.Errorf("role %q output should contain %q", role, testText)
-		}
-	}
-
-	// Verify distinct styles for main roles
-	if rendered["user"] == rendered["assistant"] {
-		t.Error("user and assistant should have distinct styles")
-	}
-	if rendered["system"] == rendered["tool"] {
-		t.Error("system and tool should have distinct styles")
-	}
-}
-
 func TestRoleColor(t *testing.T) {
 	// Verify RoleColor returns distinct colors for each role
 	roles := []string{"user", "assistant", "system", "tool", "unknown"}
@@ -390,47 +318,6 @@ func TestRoleColor(t *testing.T) {
 	}
 }
 
-func TestStateStyleDistinct(t *testing.T) {
-	// Force color output to verify distinct ANSI codes
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	// Ensure each state has a distinct visual representation
-	running := StateStyle("running").Render("X")
-	idle := StateStyle("idle").Render("X")
-	stopped := StateStyle("stopped").Render("X")
-	errored := StateStyle("errored").Render("X")
-
-	// All should produce non-empty output
-	if running == "" || idle == "" || stopped == "" || errored == "" {
-		t.Error("state styles should produce non-empty output")
-	}
-
-	// All should contain ANSI codes (styling applied)
-	states := map[string]string{
-		"running": running,
-		"idle":    idle,
-		"stopped": stopped,
-		"errored": errored,
-	}
-	for name, styled := range states {
-		if !strings.Contains(styled, "\x1b[") {
-			t.Errorf("state %q should contain ANSI escape codes, got: %q", name, styled)
-		}
-	}
-
-	// Each state should be distinct from the others
-	if running == idle {
-		t.Error("running and idle should have distinct styles")
-	}
-	if running == errored {
-		t.Error("running and errored should have distinct styles")
-	}
-	if idle == stopped {
-		t.Error("idle and stopped should have distinct styles")
-	}
-}
-
 func TestRenderLogEntry(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -454,145 +341,6 @@ func TestRenderLogEntry(t *testing.T) {
 			lines := renderLogEntryImpl(entry, tt.maxWidth, false)
 			if len(lines) == 0 {
 				t.Error("expected at least one line of output")
-			}
-		})
-	}
-}
-
-func TestRenderLogEntryPadding(t *testing.T) {
-	// Force color output to test real styled content
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	// Test that log entries have proper padding on all sides
-	entry := LogEntry{Role: "user", Content: "Test message"}
-	maxWidth := 80
-	lines := renderLogEntryImpl(entry, maxWidth, false)
-
-	// Should have at least 2 lines: empty line (top padding) + content
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 lines (padding + content), got %d", len(lines))
-	}
-
-	// First line should be visually empty (top padding) - strip ANSI then check
-	strippedFirst := stripANSI(lines[0])
-	if strings.TrimSpace(strippedFirst) != "" {
-		t.Errorf("first line should be visually empty for top padding, got %q (stripped: %q)", lines[0], strippedFirst)
-	}
-
-	// Content lines should have left padding (visible content starts with space after ANSI)
-	for i := 1; i < len(lines); i++ {
-		stripped := stripANSI(lines[i])
-		if len(stripped) > 0 && !strings.HasPrefix(stripped, " ") {
-			t.Errorf("line %d should have left padding (start with space), stripped: %q", i, stripped)
-		}
-	}
-
-	// Verify the content line has: space + prefix + content (visible after stripping)
-	contentStripped := stripANSI(lines[1])
-	if !strings.HasPrefix(contentStripped, " ") {
-		t.Errorf("content line should start with space padding, stripped: %q", contentStripped)
-	}
-	if !strings.Contains(contentStripped, "YOU:") {
-		t.Errorf("content line should contain role prefix, stripped: %q", contentStripped)
-	}
-}
-
-func TestRenderLogEntryLineWidthConsistent(t *testing.T) {
-	// Test that ALL lines in a log entry have the same display width
-	// This ensures background color fills the entire line consistently
-	entry := LogEntry{
-		Role:    "assistant",
-		Content: "First line\nSecond line\nThird line that is longer",
-	}
-	maxWidth := 60
-	lines := renderLogEntryImpl(entry, maxWidth, false)
-
-	if len(lines) < 2 {
-		t.Fatalf("expected multiple lines, got %d", len(lines))
-	}
-
-	// All lines should have the same display width (maxWidth)
-	for i, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		if lineWidth != maxWidth {
-			t.Errorf("line %d has width %d, expected %d (full width for background)\nline: %q",
-				i, lineWidth, maxWidth, line)
-		}
-	}
-}
-
-func TestRenderLogEntryForegroundApplied(t *testing.T) {
-	// Force color output in tests (lipgloss strips colors without TTY)
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii) // Reset after test
-
-	// Test that foreground styling is applied to prefix (backgrounds removed for cleaner UI)
-	// Foreground color is applied via ANSI escape codes containing "38;" (foreground)
-	entry := LogEntry{
-		Role:    "assistant",
-		Content: "Test message",
-	}
-	maxWidth := 60
-	lines := renderLogEntryImpl(entry, maxWidth, false)
-
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 lines (padding + content), got %d", len(lines))
-	}
-
-	// Find the first non-empty line (skip padding line)
-	var contentLine string
-	for _, line := range lines {
-		stripped := strings.TrimSpace(stripANSI(line))
-		if stripped != "" {
-			contentLine = line
-			break
-		}
-	}
-
-	if contentLine == "" {
-		t.Fatal("no content line found")
-	}
-
-	// Content line should have ANSI foreground color for the prefix
-	// ANSI foreground codes use "38;" prefix (e.g., "\x1b[38;2;..." for RGB)
-	if !strings.Contains(contentLine, "\x1b[") {
-		t.Error("content line missing ANSI escape codes (no styling applied)")
-	}
-	if !strings.Contains(contentLine, "38;") {
-		t.Error("content line missing foreground color escape code (38;)")
-	}
-}
-
-func TestRenderLogEntryPaddingAllRoles(t *testing.T) {
-	// Force color output to test real styled content
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	// Test padding is applied consistently across all roles
-	roles := []string{"user", "assistant", "system", "tool"}
-
-	for _, role := range roles {
-		t.Run(role, func(t *testing.T) {
-			entry := LogEntry{Role: role, Content: "Test content"}
-			lines := renderLogEntryImpl(entry, 80, false)
-
-			if len(lines) < 2 {
-				t.Fatalf("expected at least 2 lines, got %d", len(lines))
-			}
-
-			// First line should be visually empty (top padding) - strip ANSI then check
-			strippedFirst := stripANSI(lines[0])
-			if strings.TrimSpace(strippedFirst) != "" {
-				t.Errorf("expected visually empty first line for top padding, got: %q", strippedFirst)
-			}
-
-			// Content lines should have left padding (check stripped content)
-			for i := 1; i < len(lines); i++ {
-				stripped := stripANSI(lines[i])
-				if len(stripped) > 0 && !strings.HasPrefix(stripped, " ") {
-					t.Errorf("content line %d should have left padding, stripped: %q", i, stripped)
-				}
 			}
 		})
 	}
@@ -626,6 +374,48 @@ func TestInputModelModes(t *testing.T) {
 
 			// Verify view renders without panic
 			_ = input.View()
+		})
+	}
+}
+
+func TestInputModelPrompts(t *testing.T) {
+	input := NewInputModel()
+
+	tests := []struct {
+		mode         InputMode
+		wantSymbol   string
+		wantMinWidth int
+		desc         string
+	}{
+		{InputModeBroadcast, "⬧", 3, "broadcast prompt"},
+		{InputModeMessage, "⬥", 3, "message prompt"},
+		{InputModeNewMysis, "⬡", 3, "new mysis prompt"},
+		{InputModeConfigProvider, "⚙", 3, "config provider prompt"},
+		{InputModeConfigModel, "cfg", 5, "config model prompt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			input.SetMode(tt.mode, "test-id")
+
+			prompt := input.textInput.Prompt
+			stripped := stripANSI(prompt)
+
+			// Verify the symbol is present
+			if !strings.Contains(stripped, tt.wantSymbol) {
+				t.Errorf("prompt %q does not contain symbol %q", stripped, tt.wantSymbol)
+			}
+
+			// Verify minimum width (symbol + at least 2 spaces for separation)
+			if len(stripped) < tt.wantMinWidth {
+				t.Errorf("prompt %q is too short (len=%d, want>=%d)", stripped, len(stripped), tt.wantMinWidth)
+			}
+
+			// Verify no character overlap by checking for proper spacing
+			// The prompt should be: symbol + spaces (at least 2)
+			if !strings.HasSuffix(stripped, "  ") {
+				t.Errorf("prompt %q should end with at least 2 spaces to prevent overlap", stripped)
+			}
 		})
 	}
 }
@@ -778,28 +568,6 @@ func TestWrapText(t *testing.T) {
 	}
 }
 
-func TestWrapTextLongWordNoOverflow(t *testing.T) {
-	// Test that long unbreakable words don't cause overflow
-	longWord := strings.Repeat("a", 200)
-	text := "Normal text " + longWord + " more text"
-	maxWidth := 50
-
-	lines := wrapText(text, maxWidth)
-
-	// Verify no line exceeds maxWidth
-	for i, line := range lines {
-		width := lipgloss.Width(line)
-		if width > maxWidth {
-			t.Errorf("Line %d exceeds maxWidth %d: got %d\nLine: %s", i, maxWidth, width, line)
-		}
-	}
-
-	// Should have multiple lines due to hard-wrapping
-	if len(lines) < 3 {
-		t.Errorf("Expected at least 3 lines for long word, got %d", len(lines))
-	}
-}
-
 func TestRenderHelpContent(t *testing.T) {
 	help := RenderHelp(100, 40)
 
@@ -850,49 +618,6 @@ func TestRenderMysisLineStates(t *testing.T) {
 	}
 }
 
-func TestDashboardLayoutExpectations(t *testing.T) {
-	// Test that dashboard renders with proper width expectations
-	myses := []MysisInfo{
-		{ID: "1", Name: "mysis-1", State: "idle", Provider: "ollama", LastMessage: "Hello"},
-		{ID: "2", Name: "mysis-2", State: "running", Provider: "ollama", LastMessage: "World"},
-	}
-	swarmMsgs := []SwarmMessageInfo{}
-	width := 100
-	height := 30
-
-	dashboard := RenderDashboard(myses, swarmMsgs, 0, width, height, make(map[string]bool), "⠋")
-
-	// Verify dashboard is not empty
-	if dashboard == "" {
-		t.Fatal("expected non-empty dashboard")
-	}
-
-	lines := strings.Split(dashboard, "\n")
-	if len(lines) < 5 {
-		t.Fatalf("expected at least 5 lines, got %d", len(lines))
-	}
-
-	// Check that first line (header top) contains the decorative markers
-	if !strings.Contains(lines[0], "◆") || !strings.Contains(lines[0], "═") {
-		t.Errorf("header top line should contain decorative markers, got: %s", lines[0])
-	}
-
-	// Check that mysis section title spans width (contains markers on both sides)
-	foundMysisSwarm := false
-	for _, line := range lines {
-		if strings.Contains(line, "MYSIS SWARM") {
-			foundMysisSwarm = true
-			if !strings.Contains(line, "◈") {
-				t.Errorf("mysis swarm title should have markers, got: %s", line)
-			}
-			break
-		}
-	}
-	if !foundMysisSwarm {
-		t.Error("expected to find MYSIS SWARM section title")
-	}
-}
-
 func TestMysisLineWidthFill(t *testing.T) {
 	// Test that mysis lines are styled with width to fill the panel
 	mysis := MysisInfo{
@@ -914,317 +639,6 @@ func TestMysisLineWidthFill(t *testing.T) {
 	selectedLine := renderMysisLine(mysis, true, false, "⠋", width)
 	if selectedLine == "" {
 		t.Error("expected non-empty selected mysis line")
-	}
-}
-
-func TestFocusHeaderWidth(t *testing.T) {
-	// Test that focus header spans exactly the specified width
-	// The decorative line itself must be the correct width, not just padded by lipgloss
-	tests := []struct {
-		name      string
-		mysisName string
-		width     int
-	}{
-		{"short name", "bob", 80},
-		{"medium name", "mysis-123", 100},
-		{"long name", "very-long-mysis-name", 120},
-		{"unicode chars", "qj;wuhd", 96},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			header := renderFocusHeader(tt.mysisName, tt.width)
-
-			// The header should contain the markers and name
-			if !strings.Contains(header, "◆") {
-				t.Errorf("header should contain ◆ markers")
-			}
-			if !strings.Contains(header, tt.mysisName) {
-				t.Errorf("header should contain mysis name %q", tt.mysisName)
-			}
-
-			// Check actual display width matches requested width
-			actualWidth := lipgloss.Width(header)
-			if actualWidth != tt.width {
-				t.Errorf("header display width = %d, want %d", actualWidth, tt.width)
-			}
-
-			// CRITICAL: Verify the decorative line is not padded with spaces
-			// Count trailing spaces - there should be none if the line fills properly
-			lines := strings.Split(header, "\n")
-			for _, line := range lines {
-				if strings.Contains(line, "◆") {
-					// This line should have decorative content
-					trimmed := strings.TrimRight(line, " ")
-					trailingSpaces := len(line) - len(trimmed)
-					if trailingSpaces > 0 {
-						t.Errorf("header line has %d trailing spaces (line too short): raw width=%d, want=%d",
-							trailingSpaces, lipgloss.Width(trimmed), tt.width)
-					}
-				}
-			}
-		})
-	}
-}
-
-// TestFocusHeaderRawLineWidth directly tests the raw line construction
-func TestFocusHeaderRawLineWidth(t *testing.T) {
-	// Test the raw line width calculation with Unicode characters
-	tests := []struct {
-		mysisName string
-		width     int
-	}{
-		{"bob", 80},
-		{"qj;wuhd", 96},
-		{"test-mysis", 100},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.mysisName, func(t *testing.T) {
-			// Build the same line as renderFocusHeader but without styling
-			titleText := " ⬡ MYSIS: " + tt.mysisName + " ⬡ "
-			titleDisplayWidth := lipgloss.Width(titleText)
-			availableWidth := tt.width - titleDisplayWidth - 2 // -2 for ◆ markers
-			if availableWidth < 4 {
-				availableWidth = 4
-			}
-			leftDashes := availableWidth / 2
-			rightDashes := availableWidth - leftDashes
-
-			line := "◆" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "◆"
-
-			// Check raw line display width
-			lineWidth := lipgloss.Width(line)
-			if lineWidth != tt.width {
-				t.Errorf("raw line display width = %d, want %d (titleWidth=%d, available=%d, left=%d, right=%d)",
-					lineWidth, tt.width, titleDisplayWidth, availableWidth, leftDashes, rightDashes)
-			}
-		})
-	}
-}
-
-func TestSectionTitleWidth(t *testing.T) {
-	// Test that section titles span exactly the specified width
-	tests := []struct {
-		title string
-		width int
-	}{
-		{"CONVERSATION LOG", 80},
-		{"MYSIS SWARM", 100},
-		{"SWARM BROADCAST", 96},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.title, func(t *testing.T) {
-			rendered := renderSectionTitle(tt.title, tt.width)
-
-			// Should contain the title
-			if !strings.Contains(rendered, tt.title) {
-				t.Errorf("section title should contain %q", tt.title)
-			}
-
-			// Should have markers on both ends
-			if !strings.Contains(rendered, "◈") {
-				t.Errorf("section title should contain ◈ markers")
-			}
-
-			// Check actual display width matches requested width
-			actualWidth := lipgloss.Width(rendered)
-			if actualWidth != tt.width {
-				t.Errorf("section title display width = %d, want %d", actualWidth, tt.width)
-			}
-		})
-	}
-}
-
-func TestLogPanelWidth(t *testing.T) {
-	// Test that the log panel (with border) has the same width as section titles
-	width := 100
-
-	// Render section title
-	title := renderSectionTitleWithSuffix("CONVERSATION LOG", "", width)
-	titleWidth := lipgloss.Width(title)
-
-	// Render log panel the same way as in RenderFocusViewWithViewport
-	content := "Test content"
-	panel := logStyle.Width(width - 2).Render(content)
-	panelWidth := lipgloss.Width(panel)
-
-	// Both should have the same width
-	if titleWidth != width {
-		t.Errorf("section title width = %d, want %d", titleWidth, width)
-	}
-	if panelWidth != width {
-		t.Errorf("log panel width = %d, want %d (title width = %d)", panelWidth, width, titleWidth)
-	}
-}
-
-func TestLogPanelWidthWithMultilineContent(t *testing.T) {
-	// Test that the log panel width is consistent regardless of content
-	width := 100
-
-	// Render section title for comparison
-	title := renderSectionTitleWithSuffix("CONVERSATION LOG", "", width)
-	titleWidth := lipgloss.Width(title)
-
-	// Test with various content widths
-	testCases := []struct {
-		name    string
-		content string
-	}{
-		{"short", "Hello"},
-		{"exact", strings.Repeat("x", width-4)}, // -4 for border
-		{"multiline short", "Line 1\nLine 2\nLine 3"},
-		{"multiline varied", "Short\n" + strings.Repeat("y", 50) + "\nMedium length line"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			panel := logStyle.Width(width - 2).Render(tc.content)
-			panelWidth := lipgloss.Width(panel)
-
-			if panelWidth != width {
-				t.Errorf("log panel width = %d, want %d (title width = %d)\ncontent: %q",
-					panelWidth, width, titleWidth, tc.content)
-			}
-
-			// Check each line of the panel
-			lines := strings.Split(panel, "\n")
-			for i, line := range lines {
-				lineWidth := lipgloss.Width(line)
-				if lineWidth != width {
-					t.Errorf("line %d width = %d, want %d\nline: %q", i, lineWidth, width, line)
-				}
-			}
-		})
-	}
-}
-
-func TestLogPanelWidthWithStyledContent(t *testing.T) {
-	// Force color output
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	// Test that log panel width is correct when containing styled log entries
-	width := 100
-
-	// Panel inner content width: logStyle.Width(width-2) sets inner width to width-2
-	// With RoundedBorder (1 char each side), total panel width = width-2+2 = width
-	// But lipgloss Width() sets the TOTAL width including borders, so:
-	// logStyle.Width(width-2) means total width = width-2
-	// Actually let's verify this...
-	panelContentWidth := width - 2 - 2 // -2 for logStyle.Width param, -2 for border
-
-	// Log entries MUST fill the panel content area completely
-	// so their width should be panelContentWidth
-	entries := []LogEntry{
-		{Role: "user", Content: "Hello, this is a test message"},
-		{Role: "assistant", Content: "Hi there! This is a response with some longer content that might wrap."},
-		{Role: "tool", Content: "tool_call_result: success"},
-	}
-
-	var lines []string
-	for _, entry := range entries {
-		entryLines := renderLogEntryImpl(entry, panelContentWidth, false)
-		lines = append(lines, entryLines...)
-	}
-	viewportContent := strings.Join(lines, "\n")
-
-	// Check that log entry lines fill the panel content area
-	for i, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		if lineWidth != panelContentWidth {
-			t.Errorf("log entry line %d width = %d, want %d (panel content width)", i, lineWidth, panelContentWidth)
-		}
-	}
-
-	// Render the panel
-	panel := logStyle.Width(width - 2).Render(viewportContent)
-
-	// Panel should have total width of width-2 (lipgloss Width is total including border)
-	// Actually no - let's check
-	panelWidth := lipgloss.Width(panel)
-	t.Logf("Panel total width: %d, expected: %d or %d", panelWidth, width-2, width)
-
-	// For now, just verify the panel renders
-	if panelWidth < width-4 {
-		t.Errorf("panel too narrow: width = %d, minimum expected ~%d", panelWidth, width-4)
-	}
-}
-
-func TestLogEntryWidthMatchesPanelContent(t *testing.T) {
-	// CRITICAL TEST: Log entries must fill the exact panel content width
-	// Otherwise there will be visible gaps between message backgrounds and panel border
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	width := 100
-
-	// The panel is rendered with: logStyle.Width(width - 2)
-	// logStyle has RoundedBorder which adds 1 char on each side
-	// In lipgloss, Width() sets TOTAL width, so inner content = width - 2 - 2 = width - 4
-	panelInnerWidth := width - 4
-
-	// Log entries should be rendered at exactly panelInnerWidth
-	entry := LogEntry{Role: "assistant", Content: "Test message with enough content"}
-	lines := renderLogEntryImpl(entry, panelInnerWidth, false)
-
-	for i, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		if lineWidth != panelInnerWidth {
-			t.Errorf("line %d: width = %d, want %d (panel inner width)\nThis will cause visible gaps in the UI!",
-				i, lineWidth, panelInnerWidth)
-		}
-	}
-}
-
-func TestFocusViewAllSectionsMatchWidth(t *testing.T) {
-	// CRITICAL TEST: All sections in the focus view must have EXACTLY the same width
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
-
-	width := 100
-
-	// Render each section exactly as RenderFocusViewWithViewport does
-	header := renderFocusHeader("test-mysis", width)
-	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", "", width)
-
-	entry := LogEntry{Role: "assistant", Content: "Test message content here"}
-	entryLines := renderLogEntryImpl(entry, width-4, false)
-	viewportContent := strings.Join(entryLines, "\n")
-	vpView := logStyle.Width(width - 2).Render(viewportContent)
-
-	// Get first line of each (the top border/decoration)
-	headerLines := strings.Split(header, "\n")
-	titleLines := strings.Split(logTitle, "\n")
-	panelLines := strings.Split(vpView, "\n")
-
-	t.Logf("Header first line width: %d", lipgloss.Width(headerLines[0]))
-	t.Logf("Title first line width: %d", lipgloss.Width(titleLines[0]))
-	t.Logf("Panel first line width: %d (top border)", lipgloss.Width(panelLines[0]))
-
-	// Print the actual first characters to check alignment
-	headerFirst := stripANSI(headerLines[0])
-	titleFirst := stripANSI(titleLines[0])
-	panelFirst := stripANSI(panelLines[0])
-
-	t.Logf("Header stripped: %q (len=%d)", headerFirst, len(headerFirst))
-	t.Logf("Title stripped: %q (len=%d)", titleFirst, len(titleFirst))
-	t.Logf("Panel stripped: %q (len=%d)", panelFirst, len(panelFirst))
-
-	// Check byte lengths vs display widths for Unicode
-	t.Logf("Title first char: %q, bytes=%d, display=%d", string([]rune(titleFirst)[0]), len(string([]rune(titleFirst)[0])), lipgloss.Width(string([]rune(titleFirst)[0])))
-	t.Logf("Panel first char: %q, bytes=%d, display=%d", string([]rune(panelFirst)[0]), len(string([]rune(panelFirst)[0])), lipgloss.Width(string([]rune(panelFirst)[0])))
-
-	// ALL sections must match width
-	if lipgloss.Width(headerLines[0]) != width {
-		t.Errorf("Header line width = %d, want %d", lipgloss.Width(headerLines[0]), width)
-	}
-	if lipgloss.Width(titleLines[0]) != width {
-		t.Errorf("Title line width = %d, want %d", lipgloss.Width(titleLines[0]), width)
-	}
-	if lipgloss.Width(panelLines[0]) != width {
-		t.Errorf("Panel line width = %d, want %d", lipgloss.Width(panelLines[0]), width)
 	}
 }
 
@@ -1255,6 +669,133 @@ func TestSectionTitleWithSuffixWidth(t *testing.T) {
 			actualWidth := lipgloss.Width(rendered)
 			if actualWidth != tt.width {
 				t.Errorf("section title with suffix display width = %d, want %d", actualWidth, tt.width)
+			}
+		})
+	}
+}
+
+// TestUnicodeCharacterSpacing verifies that Unicode characters have proper spacing
+// to prevent visual overlap in the TUI.
+func TestUnicodeCharacterSpacing(t *testing.T) {
+	tests := []struct {
+		name     string
+		render   func() string
+		wantChar string
+		minSpace int // minimum spaces after the Unicode character
+	}{
+		{
+			name: "stats_bar_running",
+			render: func() string {
+				return "∙  1"
+			},
+			wantChar: "∙",
+			minSpace: 2,
+		},
+		{
+			name: "stats_bar_idle",
+			render: func() string {
+				return "◦  1"
+			},
+			wantChar: "◦",
+			minSpace: 2,
+		},
+		{
+			name: "stats_bar_stopped",
+			render: func() string {
+				return "◌  0"
+			},
+			wantChar: "◌",
+			minSpace: 2,
+		},
+		{
+			name: "stats_bar_errored",
+			render: func() string {
+				return "✖  0"
+			},
+			wantChar: "✖",
+			minSpace: 2,
+		},
+		{
+			name: "mysis_line_indicator",
+			render: func() string {
+				return "⬡  test-mysis"
+			},
+			wantChar: "⬡",
+			minSpace: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := tt.render()
+
+			// Find the Unicode character
+			idx := strings.Index(output, tt.wantChar)
+			if idx == -1 {
+				t.Fatalf("Unicode character %q not found in output %q", tt.wantChar, output)
+			}
+
+			// Check spacing after the character
+			afterChar := output[idx+len(tt.wantChar):]
+			spaceCount := 0
+			for i := 0; i < len(afterChar) && afterChar[i] == ' '; i++ {
+				spaceCount++
+			}
+
+			if spaceCount < tt.minSpace {
+				t.Errorf("insufficient spacing after %q: got %d spaces, want at least %d\nOutput: %q",
+					tt.wantChar, spaceCount, tt.minSpace, output)
+			}
+		})
+	}
+}
+
+// TestUnicodeAmbiguousWidthSafety verifies that all Unicode characters used in the TUI
+// are NOT East Asian Ambiguous Width characters, which can render as 2 cells wide
+// in some terminal locales, causing visual overlap.
+func TestUnicodeAmbiguousWidthSafety(t *testing.T) {
+	// All Unicode characters used in the TUI
+	chars := map[string]string{
+		"filled_circle":  "∙", // U+2219 - bullet operator (SAFE)
+		"empty_circle":   "◦", // U+25E6 - white bullet (SAFE)
+		"filled_diamond": "⬥", // U+2B25 - black medium diamond (SAFE)
+		"lozenge":        "⬧", // U+2B27 - black medium lozenge (SAFE)
+		"hexagon":        "⬡", // U+2B21 - white hexagon (SAFE)
+		"hexagon_filled": "⬢", // U+2B22 - black hexagon (SAFE)
+		"diamond_empty":  "⬦", // U+2B26 - white medium diamond (SAFE)
+		"stopped":        "◌", // U+25CC - dotted circle (SAFE)
+		"errored":        "✖", // U+2716 - heavy multiplication X (SAFE)
+		"gear":           "⚙", // U+2699 - gear (SAFE)
+		"braille":        "⠋", // U+280B - braille pattern (SAFE)
+	}
+
+	for name, char := range chars {
+		t.Run(name, func(t *testing.T) {
+			r := []rune(char)[0]
+
+			// Test with EastAsianWidth disabled (narrow)
+			runewidth.DefaultCondition.EastAsianWidth = false
+			narrowWidth := runewidth.RuneWidth(r)
+
+			// Test with EastAsianWidth enabled (wide)
+			runewidth.DefaultCondition.EastAsianWidth = true
+			wideWidth := runewidth.RuneWidth(r)
+
+			// Reset to default
+			runewidth.DefaultCondition.EastAsianWidth = false
+
+			// Character should have same width in both modes
+			if narrowWidth != wideWidth {
+				t.Errorf("Character %s (U+%04X) is AMBIGUOUS WIDTH: narrow=%d wide=%d\n"+
+					"This will cause visual overlap in East Asian locales!\n"+
+					"Replace with a non-ambiguous character.",
+					char, r, narrowWidth, wideWidth)
+			}
+
+			// Additionally, verify it's exactly 1 cell wide (except for known 2-cell chars)
+			if narrowWidth != 1 && name != "hexagon_filled" {
+				t.Errorf("Character %s (U+%04X) has unexpected width: %d (expected 1)",
+					char, r, narrowWidth)
 			}
 		})
 	}

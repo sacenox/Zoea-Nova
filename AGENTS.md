@@ -33,14 +33,101 @@ MINOR changes: increment on every commit.
 
 ## TUI Testing:
 
-When testing styled TUI output with lipgloss:
+Zoea Nova uses three types of TUI tests:
 
-- **ANSI codes are stripped without TTY**: Lipgloss doesn't output ANSI escape codes when there's no terminal. Tests run without a TTY, so styled output appears unstyled by default.
-- **Force color output**: Use `lipgloss.SetColorProfile(termenv.TrueColor)` at the start of tests that verify styling. Always `defer lipgloss.SetColorProfile(termenv.Ascii)` to reset.
-- **Strip ANSI for content checks**: When verifying text content in styled output, strip ANSI codes first. Use a regex like `\x1b\[[0-9;]*m` to remove escape sequences.
-- **Verify styling is applied**: Check for `"\x1b["` to confirm ANSI codes are present. Check for `"48;"` specifically for background colors, `"38;"` for foreground.
-- **Use `lipgloss.Width()` for display width**: Never use `len()` on styled strings—it counts bytes including ANSI codes. `lipgloss.Width()` returns the actual display width.
-- **Test the actual styled output**: Don't just test that code runs without panicking. Verify the styling produces correct ANSI codes and that content is properly formatted.
+### 1. Unit Tests (Model State & Logic)
+Test model state transitions, business logic, and non-rendering behavior:
+- Navigation (up/down, view switching)
+- Input mode transitions
+- Help toggle, history navigation
+- Error handling
+
+**Pattern:**
+```go
+func TestModelNavigation(t *testing.T) {
+    m, cleanup := setupTestModel(t)
+    defer cleanup()
+    
+    m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+    if m.selectedIdx != 1 {
+        t.Errorf("expected selectedIdx=1, got %d", m.selectedIdx)
+    }
+}
+```
+
+### 2. Golden File Tests (Visual Regression)
+Test visual output using golden files (both ANSI and stripped versions):
+- Dashboard rendering
+- Focus view layouts
+- Log entry formatting
+- JSON tree rendering
+- Scrollbar positioning
+
+**Pattern:**
+```go
+func TestDashboard(t *testing.T) {
+    defer setupGoldenTest(t)()  // Force TrueColor output
+    
+    output := renderDashboard(...)
+    
+    t.Run("ANSI", func(t *testing.T) {
+        golden.RequireEqual(t, []byte(output))
+    })
+    
+    t.Run("Stripped", func(t *testing.T) {
+        stripped := stripANSIForGolden(output)
+        golden.RequireEqual(t, []byte(stripped))
+    })
+}
+```
+
+**Update golden files:** `go test ./internal/tui -update`
+
+### 3. Integration Tests (End-to-End with teatest)
+Test full TUI behavior through Bubble Tea's event loop:
+- Complete user flows (create mysis, send broadcast, etc.)
+- Async event handling
+- Window resize behavior
+- Viewport scrolling
+
+**Pattern:**
+```go
+func TestIntegration_Example(t *testing.T) {
+    m, cleanup := setupTestModel(t)
+    defer cleanup()
+    
+    tm := teatest.NewTestModel(t, m,
+        teatest.WithInitialTermSize(120, 40))
+    defer tm.Quit()
+    
+    // Send input
+    tm.Send(tea.KeyMsg{Type: tea.KeyDown})
+    
+    // Wait for output
+    teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+        return bytes.Contains(bts, []byte("expected"))
+    }, teatest.WithDuration(2*time.Second))
+    
+    // Verify final state
+    fm := tm.FinalModel(t)
+    finalModel := fm.(Model)
+    // ... assertions
+}
+```
+
+### Testing Guidelines
+
+- **DO NOT test width arithmetic** - Terminal rendering is complex and environment-dependent
+- **DO NOT test ANSI codes directly** - Use golden files for visual tests
+- **DO test model state** - Navigation, mode changes, data transformations
+- **DO use teatest for integration** - Test actual user interactions
+- **DO use golden files for visuals** - Snapshot testing for UI regression
+
+### Lipgloss Testing Notes
+
+- **Force color output**: Use `setupGoldenTest(t)` helper for consistent ANSI output
+- **Use `lipgloss.Width()` for display width**: Never use `len()` on styled strings
+- **Strip ANSI for content checks**: Use `stripANSIForGolden()` helper
 
 ## Unicode Width Calculations:
 

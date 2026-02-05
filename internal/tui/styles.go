@@ -224,12 +224,12 @@ func renderSectionTitle(title string, width int) string {
 
 // renderSectionTitleWithSuffix renders a section title with an optional suffix (like scroll indicator).
 func renderSectionTitleWithSuffix(title, suffix string, width int) string {
-	// Format: ◈── TITLE ──◈ [suffix] with dashes filling the remaining space
-	// Account for: 2 (◈ markers) + 2 (─ adjacent to markers) + title + 2 (spaces around title) = 4
+	// Format: ⬧── TITLE ──⬧ [suffix] with dashes filling the remaining space
+	// Account for: 2 (⬧ markers) + 2 (─ adjacent to markers) + title + 2 (spaces around title) = 4
 	titleWithSpaces := " " + title + " "
 	titleDisplayWidth := lipgloss.Width(titleWithSpaces)
 	suffixDisplayWidth := lipgloss.Width(suffix)
-	// Total fixed chars: ◈─ (2) on each side = 4
+	// Total fixed chars: ⬧─ (2) on each side = 4
 	availableWidth := width - titleDisplayWidth - 4 - suffixDisplayWidth
 	if availableWidth < 2 {
 		availableWidth = 2
@@ -237,7 +237,7 @@ func renderSectionTitleWithSuffix(title, suffix string, width int) string {
 	leftDashes := availableWidth / 2
 	rightDashes := availableWidth - leftDashes
 
-	line := "◈─" + strings.Repeat("─", leftDashes) + titleWithSpaces + strings.Repeat("─", rightDashes) + "─◈"
+	line := "⬧─" + strings.Repeat("─", leftDashes) + titleWithSpaces + strings.Repeat("─", rightDashes) + "─⬧"
 	if suffix != "" {
 		line += suffix
 	}

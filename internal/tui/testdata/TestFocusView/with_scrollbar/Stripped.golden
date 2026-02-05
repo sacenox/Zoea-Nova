@@ -1,0 +1,37 @@
+ ◆────────────────────────────────────────────────── ⬡ MYSIS: beta ⬡ ──────────────────────────────────────────────────◆
+                                                                                                                        
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ID: test-mysis  State: running  Provider: ollama  Account: (not logged in)                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+◈────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────◈
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                      │
+│   YOU:  Test message line Q                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line R                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line S                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line T                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line U                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line V                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line W                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line X                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line Y                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line Z                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line [                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line \                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line ]                                                                                          │
+│                                                                                                                      │
+│   YOU:  Test message line ^                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ r ] RELAUNCH  ·  [ s ] STOP                                                        

@@ -77,7 +77,7 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 	// Initialize spinner with hexagonal theme (matching logo)
 	sp := spinner.New()
 	sp.Spinner = spinner.Spinner{
-		Frames: []string{"⬡", "⬢", "⬡", "⬢", "◇", "◆", "◇", "◆"},
+		Frames: []string{"⬡", "⬢", "⬡", "⬢", "⬦", "⬥", "⬦", "⬥"},
 		FPS:    time.Second / 8, // 8 frames per second
 	}
 	sp.Style = lipgloss.NewStyle().Foreground(colorBrand)
