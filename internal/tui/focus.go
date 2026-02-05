@@ -322,6 +322,10 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 			Foreground(lipgloss.Color("213")). // Lighter purple for reasoning text
 			Background(logBgColor)
 
+		dimmedStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")). // Dim gray for truncation indicator
+			Background(logBgColor)
+
 		reasoningHeader := "REASONING:"
 		reasoningHeaderWidth := len(reasoningHeader) + 1 // +1 for space after
 		reasoningContentWidth := maxWidth - reasoningHeaderWidth - padLeft - padRight
@@ -332,13 +336,53 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 		// Wrap reasoning text
 		wrappedReasoning := wrapText(entry.Reasoning, reasoningContentWidth)
 
-		for i, line := range wrappedReasoning {
+		// Smart truncation: show first line, "[x more]", last 2 lines if verbose is false and > 3 lines
+		const reasoningTruncateThreshold = 3
+		const reasoningShowLast = 2
+		shouldTruncate := !verbose && len(wrappedReasoning) > reasoningTruncateThreshold
+
+		var linesToShow []int
+		if shouldTruncate {
+			// First line
+			linesToShow = append(linesToShow, 0)
+			// Last 2 lines
+			for i := len(wrappedReasoning) - reasoningShowLast; i < len(wrappedReasoning); i++ {
+				linesToShow = append(linesToShow, i)
+			}
+		} else {
+			// Show all lines
+			for i := 0; i < len(wrappedReasoning); i++ {
+				linesToShow = append(linesToShow, i)
+			}
+		}
+
+		truncatedCount := len(wrappedReasoning) - len(linesToShow)
+
+		for idx, i := range linesToShow {
+			line := wrappedReasoning[i]
 			lineLen := lipgloss.Width(line)
 			remainingWidth := reasoningContentWidth - lineLen
 			if remainingWidth < 0 {
 				remainingWidth = 0
 			}
 			paddedLine := line + strings.Repeat(" ", remainingWidth+padRight)
+
+			// Insert truncation indicator after first line
+			if shouldTruncate && idx == 1 {
+				truncMsg := fmt.Sprintf("[%d more]", truncatedCount)
+				truncMsgLen := lipgloss.Width(truncMsg)
+				truncRemainingWidth := reasoningContentWidth - truncMsgLen
+				if truncRemainingWidth < 0 {
+					truncRemainingWidth = 0
+				}
+				truncPaddedLine := truncMsg + strings.Repeat(" ", truncRemainingWidth+padRight)
+
+				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+				indent := strings.Repeat(" ", reasoningHeaderWidth)
+				styledIndent := contentStyle.Render(indent)
+				styledTrunc := dimmedStyle.Render(truncPaddedLine)
+				result = append(result, leftPad+styledIndent+styledTrunc)
+			}
 
 			if i == 0 {
 				// First line: left pad + styled header + space + content

@@ -115,6 +115,68 @@ func TestRenderLogEntryWithReasoning(t *testing.T) {
 	}
 }
 
+func TestRenderLogEntryWithReasoningTruncation(t *testing.T) {
+	// Force color output for testing
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	// Create reasoning with multiple lines that will wrap
+	longReasoning := "First line of reasoning that explains the initial thought process. " +
+		"Second line continues with more detailed analysis of the situation. " +
+		"Third line adds even more context about the decision. " +
+		"Fourth line provides additional justification. " +
+		"Fifth line concludes the reasoning with final thoughts."
+
+	entry := LogEntry{
+		Role:      "assistant",
+		Source:    "llm",
+		Content:   "I will proceed with the plan.",
+		Reasoning: longReasoning,
+		Timestamp: time.Now(),
+	}
+
+	maxWidth := 80
+
+	// Test with verbose=false (should truncate)
+	linesTruncated := renderLogEntryImpl(entry, maxWidth, false)
+	outputTruncated := strings.Join(linesTruncated, "\n")
+
+	// Should contain truncation indicator
+	if !strings.Contains(outputTruncated, "more]") {
+		t.Error("Expected truncation indicator '[x more]' in non-verbose output")
+	}
+
+	// Should contain first line
+	if !strings.Contains(outputTruncated, "First line") {
+		t.Error("Expected first line of reasoning in truncated output")
+	}
+
+	// Should contain last lines
+	if !strings.Contains(outputTruncated, "final thoughts") {
+		t.Error("Expected last line of reasoning in truncated output")
+	}
+
+	// Test with verbose=true (should show all)
+	linesVerbose := renderLogEntryImpl(entry, maxWidth, true)
+	outputVerbose := strings.Join(linesVerbose, "\n")
+
+	// Should NOT contain truncation indicator
+	if strings.Contains(outputVerbose, "more]") {
+		t.Error("Should not show truncation indicator in verbose mode")
+	}
+
+	// Should contain all parts of reasoning
+	if !strings.Contains(outputVerbose, "First line") {
+		t.Error("Expected first line in verbose output")
+	}
+	if !strings.Contains(outputVerbose, "Third line") {
+		t.Error("Expected middle lines in verbose output")
+	}
+	if !strings.Contains(outputVerbose, "final thoughts") {
+		t.Error("Expected last line in verbose output")
+	}
+}
+
 func TestRenderLogEntryToolWithJSON(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)
