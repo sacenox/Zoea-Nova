@@ -4,21 +4,7 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## High Priority
 
-### Prompt & Behavior
-- [ ] **State-aware ContinuePrompt**
-  - **Impact:** Reduces redundant "waiting" responses during travel and cooldowns
-  - **Needs:** Suppress or extend prompt intervals for known wait states; allow non-movement actions during long travel
-
-- [ ] **Reinforce critical rules in ContinuePrompt**
-  - **Impact:** Prevents drift when the system prompt falls out of the context window
-  - **Needs:** Repeat collaboration rules, themed usernames, and memory search reminders
-
-- [ ] **Remove real-time awareness**
-  - **Impact:** Avoids references to real-world time; uses game tick time only
-
-- [ ] **Add explicit `captains_log_add` guidance in prompts**
-  - **Impact:** Prevents `empty_entry` errors
-  - **Needs:** Include concise examples and constraints in SystemPrompt and ContinuePrompt
+None currently.
 
 ## Medium Priority
 
@@ -47,6 +33,18 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ---
 
 ## Recently Resolved
+
+- [x] **Config validation and type safety** (2026-02-05) - Added comprehensive config validation with aggregated errors for provider/swarm settings. Replaced Event.Data interface{} with typed fields for type safety. Standardized Mysis receiver names. Coverage improved from 61% to 71.4%.
+
+- [x] **Testing coverage expansion** (2026-02-05) - Added config validation tests (11 subtests), provider error handling tests, HTTP mocking for tool calls, MCP proxy tests, and concurrent write benchmark (p50: 0.3ms, p99: 1.9ms).
+
+- [x] **Memory growth analysis** (2026-02-05) - Documented memory growth rate (279 memories/hour, 0.96 MB/hour DB growth). DB size is not a concern for v1. See `documentation/MEMORY_GROWTH_REPORT.md`.
+
+- [x] **Ollama reliability investigation** (2026-02-05) - Analyzed 24h of Ollama logs. Found 65 HTTP 500s, 19 HTTP 400s, 3 prompt truncations, 23 client disconnects. Evidence documented in KNOWN_ISSUES.md for future investigation.
+
+- [x] **State-aware ContinuePrompt** (2026-02-05) - Implemented activity state tracking (idle, traveling, mining, in_combat, cooldown) to suppress nudges during known wait states. Parses arrival_tick and cooldown_ticks from tool results.
+
+- [x] **Prompt reinforcement and time awareness** (2026-02-05) - Reinforced critical rules in ContinuePrompt with drift detection. Removed real-time awareness, replaced with game tick time instructions. Added captain's log guidance with limits and examples.
 
 - [x] **TUI Enhancements** (2026-02-05) - Implemented display reasoning in focus view, account status in dashboard and focus header, JSON tree rendering with verbose toggle, and visual scrollbar indicator. Improves readability and navigation UX.
 
