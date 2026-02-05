@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xonecas/zoea-nova/internal/constants"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
@@ -318,7 +319,7 @@ func TestMysisContextMemoryLimit(t *testing.T) {
 	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
 	// Add more memories than MaxContextMessages
-	for i := 0; i < MaxContextMessages+10; i++ {
+	for i := 0; i < constants.MaxContextMessages+10; i++ {
 		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "", "")
 	}
@@ -330,7 +331,7 @@ func TestMysisContextMemoryLimit(t *testing.T) {
 	}
 
 	// Should have system prompt + MaxContextMessages recent messages
-	expectedCount := MaxContextMessages + 1 // +1 for system prompt
+	expectedCount := constants.MaxContextMessages + 1 // +1 for system prompt
 	if len(memories) != expectedCount {
 		t.Errorf("expected %d memories, got %d", expectedCount, len(memories))
 	}
@@ -380,16 +381,16 @@ func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
 }
 
 func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "captains_log_add({\"entry\":") {
+	if !strings.Contains(constants.SystemPrompt, "captains_log_add({\"entry\":") {
 		t.Fatal("SystemPrompt missing captains_log_add example")
 	}
-	if !strings.Contains(SystemPrompt, "non-empty entry field") {
+	if !strings.Contains(constants.SystemPrompt, "non-empty entry field") {
 		t.Fatal("SystemPrompt missing non-empty entry reminder")
 	}
 }
 
 func TestContinuePromptContainsCriticalReminders(t *testing.T) {
-	if !strings.Contains(ContinuePrompt, "captains_log_add") {
+	if !strings.Contains(constants.ContinuePrompt, "captains_log_add") {
 		t.Fatal("ContinuePrompt missing captains_log_add reminder")
 	}
 }
@@ -453,7 +454,7 @@ func TestMysisContextCompaction(t *testing.T) {
 	// Add multiple get_ship tool results (should be compacted to keep only the latest)
 	for i := 0; i < 5; i++ {
 		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check ship", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:get_ship:{}", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_1:get_ship:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
 			fmt.Sprintf(`call_1:{"ship_id":"ship_%d","hull":100}`, i), "", "")
 	}
@@ -461,14 +462,14 @@ func TestMysisContextCompaction(t *testing.T) {
 	// Add multiple get_system tool results (should also be compacted)
 	for i := 0; i < 3; i++ {
 		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check system", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_2:get_system:{}", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_2:get_system:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
 			fmt.Sprintf(`call_2:{"system_id":"sys_%d","police_level":1}`, i), "", "")
 	}
 
 	// Add a non-snapshot tool result (should be kept)
 	s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "mine ore", "", "")
-	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_3:mine:{}", "", "")
+	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_3:mine:{}", "", "")
 	s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, `call_3:{"result":"mining"}`, "", "")
 
 	// Get context memories
@@ -528,22 +529,22 @@ func TestMysisContextCompaction(t *testing.T) {
 }
 
 func TestSystemPromptContainsSearchGuidance(t *testing.T) {
-	if !strings.Contains(SystemPrompt, "zoea_search_messages") {
+	if !strings.Contains(constants.SystemPrompt, "zoea_search_messages") {
 		t.Fatal("SystemPrompt missing zoea_search_messages reference")
 	}
-	if !strings.Contains(SystemPrompt, "zoea_search_reasoning") {
+	if !strings.Contains(constants.SystemPrompt, "zoea_search_reasoning") {
 		t.Fatal("SystemPrompt missing zoea_search_reasoning reference")
 	}
-	if !strings.Contains(SystemPrompt, "Context & Memory Management") {
+	if !strings.Contains(constants.SystemPrompt, "Context & Memory Management") {
 		t.Fatal("SystemPrompt missing Context & Memory Management section")
 	}
 }
 
 func TestContinuePromptContainsSearchReminder(t *testing.T) {
-	if !strings.Contains(ContinuePrompt, "zoea_search_messages") {
+	if !strings.Contains(constants.ContinuePrompt, "zoea_search_messages") {
 		t.Fatal("ContinuePrompt missing zoea_search_messages reminder")
 	}
-	if !strings.Contains(ContinuePrompt, "zoea_search_reasoning") {
+	if !strings.Contains(constants.ContinuePrompt, "zoea_search_reasoning") {
 		t.Fatal("ContinuePrompt missing zoea_search_reasoning reminder")
 	}
 }
@@ -562,7 +563,7 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	// Add multiple zoea_list_myses tool results (should be compacted to keep only the latest)
 	for i := 0; i < 5; i++ {
 		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "list myses", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:zoea_list_myses:{}", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_1:zoea_list_myses:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
 			fmt.Sprintf(`call_1:[{"id":"mysis-%d","name":"test-%d"}]`, i, i), "", "")
 	}

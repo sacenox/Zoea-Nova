@@ -9,120 +9,11 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/xonecas/zoea-nova/internal/constants"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
-
-// SystemPrompt is the initial prompt sent to every mysis when they first start.
-const SystemPrompt = `You are an autonomous AI pilot in SpaceMolt. Think for yourself. Adapt. Survive.
-
-## Bootstrap Sequence
-1. Try zoea_claim_account (no arguments needed)
-   - If you get credentials, use the game's login tool with them
-   - If no accounts available, use the game's register tool with a Crustacean-themed username
-2. Assess: get_system, get_poi, get_nearby, get_cargo
-
-## Account Management
-- ALWAYS try zoea_claim_account first before registering
-- Pick Crustacean Cosmos themed usernames (e.g., crab_miner, shrimp_scout, lobster_trader)
-- Credentials are automatically tracked - no manual saving needed
-
-## Decision Framework
-Before each action, consider:
-- **Safety:** What's the police_level? Who's nearby? Am I in danger?
-- **Resources:** What's in my cargo? How much fuel? Hull status?
-- **Opportunity:** Can I mine here? Trade? Explore?
-- **Goals:** What am I trying to achieve right now?
-
-## Action Priority
-1. **Survival** - If hull low: dock and repair. If fuel low: refuel.
-2. **Income** - Mine, trade, complete missions. Credits = options.
-3. **Progression** - Skills train passively. Mining → mining skill. Trading → trading skill.
-4. **Exploration** - Discover new systems. First discovery = 500 credits + XP.
-
-## Situational Responses
-- **Attacked?** Fight back, flee, or cloak (if you have the module)
-- **Found a wreck?** Loot it (loot_wreck) or salvage it (salvage_wreck)
-- **See a pilotless ship?** Opportunity to attack without retaliation
-- **Low on options?** Check missions (get_missions) for direction
-
-## Memory
-Use captain's log to persist important information across sessions.
-
-SECURITY: Never store your password in captain's log or share it in any in-game tool calls or chat.
-
-CRITICAL: captains_log_add requires a non-empty entry field:
-CORRECT: captains_log_add({"entry": "Discovered iron ore at Sol-3. Coordinates: X:1234 Y:5678"})
-CORRECT: captains_log_add({"entry": "Player 'hostile_crab' attacked me at starbase. Avoid."})
-WRONG: captains_log_add({"entry": ""})
-WRONG: captains_log_add({})
-
-Remember in captain's log:
-- Discovered systems and their resources
-- Player encounters (friendly or hostile)
-- Current objectives and plans
-- Trade routes and profitable deals
-
-## Swarm Coordination
-You're part of a swarm. Use zoea_* tools to:
-- zoea_list_myses, zoea_swarm_status: See swarm state
-- zoea_send_message: Direct message a specific mysis
-- zoea_broadcast: Message all running myses
-- zoea_search_messages: Search your past messages by text
-- zoea_search_reasoning: Search your past reasoning by text
-- zoea_search_broadcasts: Search past swarm broadcasts by text
-- zoea_claim_account: Get existing credentials from swarm pool
-- Report threats and opportunities
-- Request assistance
-- Coordinate territory
-
-## Context & Memory Management
-Your context window is limited. Recent state snapshots are kept, but older messages are removed.
-If you need information from earlier in the conversation:
-- Use zoea_search_messages to find past messages by keyword
-- Use zoea_search_reasoning to find past reasoning by keyword
-- Use captain's log for persistent notes across sessions
-
-## Thinking Style
-Keep your reasoning brief - decide and act, don't over-analyze.
-
-**CRITICAL RULES**
-Never calculate ticks, use every turn you are given to progress.
-No hand-holding. Figure it out. Adapt or die.`
-
-// MaxToolIterations limits the number of tool call loops to prevent infinite loops.
-const MaxToolIterations = 10
-
-// MaxContextMessages limits how many recent messages to include in LLM context.
-// This keeps context small for faster inference while myses can use search tools
-// to retrieve older memories when needed. Value chosen to cover ~2 server ticks
-// worth of activity (each tick may involve multiple tool calls).
-const MaxContextMessages = 20
-
-// snapshotTools defines tools that return state snapshots.
-// When multiple results from the same snapshot tool appear in context,
-// only the most recent one is kept to prevent redundant state data.
-var snapshotTools = map[string]bool{
-	"get_ship":          true,
-	"get_system":        true,
-	"get_poi":           true,
-	"get_nearby":        true,
-	"get_cargo":         true,
-	"zoea_swarm_status": true,
-	"zoea_list_myses":   true,
-}
-
-// ContinuePrompt is sent to myses when they finish a turn to encourage autonomy.
-const ContinuePrompt = `Turn complete. What is your next move?
-
-CRITICAL REMINDERS:
-- When using captains_log_add, entry field must be non-empty
-- Never store or share your password in any in-game tool calls or chat
-- Never calculate ticks, use every turn to progress
-- If you need past data, use zoea_search_messages or zoea_search_reasoning
-
-If waiting for something, describe what and why. Otherwise, continue your mission.`
 
 // Mysis represents a single AI mysis in the swarm.
 type Mysis struct {
@@ -292,7 +183,7 @@ func (a *Mysis) Start() error {
 	// Add system prompt if this is the first time starting (no memories yet)
 	count, err := a.store.CountMemories(a.id)
 	if err == nil && count == 0 {
-		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, SystemPrompt, "", "")
+		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, constants.SystemPrompt, "", "")
 	}
 
 	// Emit state change event
@@ -302,7 +193,7 @@ func (a *Mysis) Start() error {
 	go a.run(ctx)
 
 	// Trigger initial turn to encourage autonomy
-	go a.SendMessage(ContinuePrompt, store.MemorySourceSystem)
+	go a.SendMessage(constants.ContinuePrompt, store.MemorySourceSystem)
 
 	return nil
 }
@@ -389,7 +280,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		parentCtx = context.Background()
 	}
 
-	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(parentCtx, constants.LLMRequestTimeout)
 	defer cancel()
 
 	// Get available tools from MCP proxy
@@ -438,7 +329,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 	}
 
 	// Loop: keep calling LLM until we get a final text response
-	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+	for iteration := 0; iteration < constants.MaxToolIterations; iteration++ {
 		// Get recent conversation history (keeps context small for faster inference)
 		memories, err := a.getContextMemories()
 		if err != nil {
@@ -578,7 +469,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		// No tool calls - we have a final response
 		finalResponse := response.Content
 		if finalResponse == "" && response.Reasoning == "" {
-			finalResponse = "(no response)"
+			finalResponse = constants.FallbackLLMResponse
 		}
 
 		// Store the assistant response
@@ -605,7 +496,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 	// Signal network idle on max iterations
 	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
-	return fmt.Errorf("max tool iterations (%d) exceeded", MaxToolIterations)
+	return fmt.Errorf("max tool iterations (%d) exceeded", constants.MaxToolIterations)
 }
 
 // SendMessage sends a message to the mysis for processing.
@@ -626,14 +517,14 @@ func (a *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message 
 		// Handle tool role - needs ToolCallID
 		if m.Role == store.MemoryRoleTool {
 			// Extract tool call ID from stored format: "tool_call_id:content"
-			if idx := strings.Index(m.Content, ":"); idx > 0 {
+			if idx := strings.Index(m.Content, constants.ToolCallStorageFieldDelimiter); idx > 0 {
 				msg.ToolCallID = m.Content[:idx]
 				msg.Content = m.Content[idx+1:]
 			}
 		}
 
 		// Handle assistant messages with tool calls
-		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, "[TOOL_CALLS]") {
+		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
 			// Parse tool calls from stored format
 			msg.Content = ""
 			msg.ToolCalls = a.parseStoredToolCalls(m.Content)
@@ -707,23 +598,23 @@ func (a *Mysis) releaseCurrentAccount() {
 func (a *Mysis) formatToolCallsForStorage(calls []provider.ToolCall) string {
 	var parts []string
 	for _, tc := range calls {
-		parts = append(parts, fmt.Sprintf("%s:%s:%s", tc.ID, tc.Name, string(tc.Arguments)))
+		parts = append(parts, fmt.Sprintf("%s%s%s%s%s", tc.ID, constants.ToolCallStorageFieldDelimiter, tc.Name, constants.ToolCallStorageFieldDelimiter, string(tc.Arguments)))
 	}
-	return "[TOOL_CALLS]" + strings.Join(parts, "|")
+	return constants.ToolCallStoragePrefix + strings.Join(parts, constants.ToolCallStorageRecordDelimiter)
 }
 
 // parseStoredToolCalls parses tool calls from stored format.
 func (a *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
-	stored = strings.TrimPrefix(stored, "[TOOL_CALLS]")
+	stored = strings.TrimPrefix(stored, constants.ToolCallStoragePrefix)
 	if stored == "" {
 		return nil
 	}
 
 	var calls []provider.ToolCall
-	parts := strings.Split(stored, "|")
+	parts := strings.Split(stored, constants.ToolCallStorageRecordDelimiter)
 	for _, part := range parts {
-		fields := strings.SplitN(part, ":", 3)
-		if len(fields) >= 3 {
+		fields := strings.SplitN(part, constants.ToolCallStorageFieldDelimiter, constants.ToolCallStorageFieldCount)
+		if len(fields) >= constants.ToolCallStorageFieldCount {
 			calls = append(calls, provider.ToolCall{
 				ID:        fields[0],
 				Name:      fields[1],
@@ -756,7 +647,7 @@ func (a *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolRe
 		}
 	}
 
-	return fmt.Sprintf("%s:%s", toolCallID, content)
+	return fmt.Sprintf("%s%s%s", toolCallID, constants.ToolCallStorageFieldDelimiter, content)
 }
 
 // formatToolResultDisplay formats a tool result for UI display (human-readable).
@@ -778,8 +669,8 @@ func (a *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) strin
 	}
 
 	// Truncate long results for display
-	if len(content) > 500 {
-		content = content[:497] + "..."
+	if len(content) > constants.ToolResultDisplayMaxChars {
+		content = content[:constants.ToolResultDisplayTruncateTo] + constants.ToolResultDisplayEllipsis
 	}
 
 	return content
@@ -805,7 +696,7 @@ func (a *Mysis) setError(err error) {
 // Compacts repeated snapshot tool results to prefer recent state.
 func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// Get recent memories (limited for performance)
-	recent, err := a.store.GetRecentMemories(a.id, MaxContextMessages)
+	recent, err := a.store.GetRecentMemories(a.id, constants.MaxContextMessages)
 	if err != nil {
 		return nil, err
 	}
@@ -858,7 +749,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 		}
 
 		// If this is a snapshot tool, track its position
-		if snapshotTools[toolName] {
+		if constants.SnapshotTools[toolName] {
 			latestSnapshot[toolName] = i
 		}
 	}
@@ -880,7 +771,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 		}
 
 		// If this is a snapshot tool, only keep if it's the latest
-		if snapshotTools[toolName] {
+		if constants.SnapshotTools[toolName] {
 			if latestSnapshot[toolName] == i {
 				result = append(result, m)
 			}
@@ -896,7 +787,7 @@ func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 }
 
 func (a *Mysis) extractToolNameFromResult(content string, toolCallNames map[string]string) string {
-	idx := strings.Index(content, ":")
+	idx := strings.Index(content, constants.ToolCallStorageFieldDelimiter)
 	if idx <= 0 {
 		return ""
 	}
@@ -911,7 +802,7 @@ func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
 		if m.Role != store.MemoryRoleAssistant {
 			continue
 		}
-		if !strings.HasPrefix(m.Content, "[TOOL_CALLS]") {
+		if !strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
 			continue
 		}
 		calls := a.parseStoredToolCalls(m.Content)
@@ -929,7 +820,7 @@ func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
 // run is the mysis main processing loop.
 func (a *Mysis) run(ctx context.Context) {
 	// Ticker to nudge the mysis if it's idle
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(constants.IdleNudgeInterval)
 	defer ticker.Stop()
 
 	for {
@@ -946,7 +837,7 @@ func (a *Mysis) run(ctx context.Context) {
 				// Only nudge if not already in a turn
 				if a.turnMu.TryLock() {
 					a.turnMu.Unlock()
-					go a.SendMessage(ContinuePrompt, store.MemorySourceSystem)
+					go a.SendMessage(constants.ContinuePrompt, store.MemorySourceSystem)
 				}
 			}
 		}

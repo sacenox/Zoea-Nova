@@ -2,6 +2,8 @@ package core
 
 import (
 	"sync"
+
+	"github.com/xonecas/zoea-nova/internal/constants"
 )
 
 // EventBus distributes events to subscribers.
@@ -13,8 +15,8 @@ type EventBus struct {
 
 // NewEventBus creates a new event bus.
 func NewEventBus(bufferSize int) *EventBus {
-	if bufferSize < 1000 {
-		bufferSize = 1000
+	if bufferSize < constants.MinEventBusBufferSize {
+		bufferSize = constants.MinEventBusBufferSize
 	}
 	return &EventBus{
 		bufferSize: bufferSize,
