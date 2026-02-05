@@ -372,6 +372,26 @@ func (c *Commander) MaxMyses() int {
 	return c.maxMyses
 }
 
+// GetStateCounts returns the count of myses in each state.
+func (c *Commander) GetStateCounts() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	counts := map[string]int{
+		"running": 0,
+		"idle":    0,
+		"stopped": 0,
+		"errored": 0,
+	}
+
+	for _, m := range c.myses {
+		state := string(m.State())
+		counts[state]++
+	}
+
+	return counts
+}
+
 // Store returns the store for direct access (e.g., for testing).
 func (c *Commander) Store() *store.Store {
 	return c.store

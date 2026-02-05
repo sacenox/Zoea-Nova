@@ -1,73 +1,82 @@
-# KNOWN ISSUES:
+# Known Issues & Technical Debt
 
-These are the currently known issues to investigate:
+Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
-## Context & Memory Management
+## High Priority
 
-- [ ] Myses should know to prefer more recent information in their context. We should improve our context messages list to compact repeated state updates into the most recent state snapshot. We should also re-enforce the use of search tools to access older memory. Maybe increase the tool loop for longer autonomy.
-- [ ] Evidence: Sliding-window context uses MaxContextMessages=20 with no compaction of repeated state snapshots.
-- [ ] zoea exclusive fields in tool payload is unecessary bloat (the ollama model here.):
-  > ````│ │ TOOL: call_42829tff:[                                                                                                  │  │
-  > │  │       {                                                                                                                │  │
-  > │  │       "id": "22c38707-f6a9-4643-8bc4-27b47fe31cbd",                                                                    │  │
-  > │  │       "name": "test",                                                                                                  │  │
-  > │  │       "provider": "ollama",                                                                                            │  │
-  > │  │       "state": "running"                                                                                               │  │
-  > │  │       }                                                                                                                │  │
-  > │  │       ]```
-  > ````
+### Context & Memory Management
+- [x] **Remove internal fields from tool payloads** - Strip Zoea-only fields (`provider`, `state`) from orchestrator tool results to reduce token bloat for LLM context. **RESOLVED**: Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
 
-## Prompt & Behavior
+### Prompt & Behavior
+- [ ] **Fix self-response to broadcasts** - Myses respond to their own broadcast messages instead of recognizing them as sent by themselves
+  - **Impact:** Creates unnecessary conversation loops
+  - **Root Cause:** Broadcast messages lack sender tracking
+  
+- [ ] **Reduce cognitive looping during waits** - ContinuePrompt fires every 30 seconds regardless of mysis state (travel, cooldown), causing redundant "waiting" responses
+  - **Current:** Fixed 30-second ticker with no state awareness
+  - **Proposed:** Suppress prompts during known wait states or extend interval dynamically
+  
+- [ ] **Reinforce critical rules in ContinuePrompt** - Important rules (collaboration, themed usernames) only appear in SystemPrompt, which may fall out of the 20-message context window
+  - **Impact:** Myses may forget critical behaviors during long sessions
+  - **Evidence:** ContinuePrompt includes limited reminders; enforcement depends on SystemPrompt being in context
 
-- [ ] Mysis prompt review: Encourage myses to collaborate together via zoea tooling to create a goal and collaborate towards it. Encourage to pick a Crustacean Cosmos + Zoea/Mysis themed username. Critical rules must be in every prompt, not only the first one.
-- [ ] Evidence: SystemPrompt includes collaboration + themed usernames; ContinuePrompt now includes limited CRITICAL REMINDERS but not the full CRITICAL RULES, so enforcement still depends on the system prompt being present in the 20-message window.
-- [ ] mysis dont recognize their own messages in broadcast, so they reply to them
+### Provider Issues
+- [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
+  - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
+  - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
 
-- [ ] Cognitive Looping and Prompt Inefficiency: Myses can get stuck in "cooldown" loops or redundant "waiting" states, consuming tokens every 30 seconds without operational progress. The system prompts Myses every tick regardless of their state. Myses may hallucinate non-existent cooldowns or fail to use non-traveling actions during long journeys.
-- [ ] Evidence: ContinuePrompt is sent on a fixed 30-second ticker with no state-aware suppression.
+## Medium Priority
 
-## Gameplay Issues
+### Gameplay Improvements
+- [ ] **Enable multi-tasking during travel** - Myses should use ticks for non-movement actions (checking cargo, planning routes) during long travel periods
+  - **Current:** ContinuePrompt fires but myses just report "waiting for travel"
+  - **Evidence:** ContinuePrompt always fires while running, even during travel or cooldown
+  
+- [ ] **Remove real-time awareness** - Myses reference real-world time instead of game tick time
+  - **Impact:** Breaks immersion, may cause confusion about game state timing
 
-- [ ] Travel Duration: The travel to the asteroid belt is a long-duration task (30k+ ticks). The Myses correctly entered a "waiting" mode, showing they can manage long-term state without wasting tokens on redundant actions. However, Mysis should continue to act on their tick during travel. They can still use other actions when traveling, like chatting or other non-traveling actions in the game. Currently the Mysis loses their ticks waiting when they could be using the turns to explore the game API and interacting with the swarm.
-- [ ] Evidence: ContinuePrompt is always issued while running, even during travel/cooldown states.
-- [ ] Mysis are aware of real time, they should only know tick time.
+### TUI Enhancements
+- [ ] **Display reasoning in focus view** - Reasoning content is stored in database but not rendered in TUI
+  - **Proposed:** Render reasoning messages using existing purple text color
+  - **Location:** `internal/tui/focus.go`
+  
+- [ ] **Fix broadcast sender labels** - Broadcast messages show "YOU" in focus view regardless of actual sender
+  - **Needs:** Track sender ID in broadcast messages and render with consistent style
+  
+- [ ] **Show account status in views** - Surface which game account username each mysis is currently using
+  - **Locations:** Focus view header, commander dashboard
+  - **Evidence:** Focus labels based on role only; account fields not present in TUI models
+  
+- [ ] **Render JSON as tree view** - Tool results with large JSON payloads should use Unicode tree rendering with smart truncation
+  - **Format:** Show first 3 items, `[x more]`, last 3 items
+  - **Enhancement:** Add verbose toggle for full output
 
-## TUI Issues
+- [ ] **Add scrollbar indicator** - Visual scrollbar for focus view conversation log
+  - **Enhancement:** Improves navigation UX for long conversations
 
-- [ ] Broadcast messages are labelled YOU in focus view. We don't differentiate between swarm broadcast senders. We need to start tracking it and reflecting it in the UI, in a consistent formatting and style according to our thematic and design rules (see the documentation before doing changes).
-- [ ] Reasoning messages are not displayed in the UI. They should appear in the focus mysis view, and be rendered with the purple color we use for text elsewhere. Note: Reasoning capture and storage was implemented in v1.5.2, but UI display is still pending.
-- [ ] Username status for each mysis focus view and in commander view.
-- [ ] Evidence: Focus view labels are based on Role only (broadcast source ignored); reasoning is stored but not rendered; TUI models do not include account username fields.
-- [ ] Json needs to be human formatted in TUI and preserve a "Tree" view of it use unicode for the "tree" visuals. TUI focus view needs a `verbose` toggle to show truncated or not. Use inteligent truncation: first 3 items, [x more], last 3 item.
+## Low Priority
 
-## Ollama error:
+### Documentation & Tooling
+- [ ] **Document OpenCode Zen API key path** - Confirm and document the configuration path for OpenCode Zen API keys in user-facing documentation
+  - **Target:** README.md or new setup guide section
 
-- [ ] Investigate:
+- [ ] **Add plan enforcement command** - OpenCode slash command to require plan/todo creation before implementation
+  - **Purpose:** Enforce workflow discipline for complex changes
 
-```
-│  │ TOOL: call_a66zlzes:{                                                                                                  │  │
-│  │       "id": "34657164-845d-423e-8cfd-9994199dc10f",                                                                    │  │
-│  │       "last_error": "Post \"http://localhost:11434/v1/chat/completions\": context deadline exceeded",                  │  │
-│  │       "name": "test2",                                                                                                 │  │
-│  │       "provider": "ollama",                                                                                            │  │
-│  │       "state": "running"                                                                                               │  │
-│  │       }
-```
+- [ ] **Add documentation audit command** - OpenCode slash command to audit AGENTS.md and README.md against codebase using @explore
+  - **Purpose:** Keep documentation in sync with code changes
 
-## Opencode Zen auth
+### Operations
+- [ ] **Validate game server API changes** - Monitor and validate MCP and SpaceMolt game server updates for breaking changes
+  - **Reference:** `documentation/KNOWN_SERVER_ISSUES.md`
+  - **Process:** Periodic checks against upstream API
 
-- [ ] Zen requires an api key, where are configuring this?
+---
 
-## Notes
+## Recently Resolved
 
-- [ ] Create an OpenCode workflow command to enforce: "Save the plan, make a todo list, then follow the plan. Stop if anything deviates from the plan."
+- [x] **Tool payload bloat removal** (2026-02-04) - Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
 
-= [ ] another opencode command: "Audit our agents, readme, and documentation/ against the code. show me the differences or inconsistencies between the two. Use @explore to help."
+- [x] **Context snapshot compaction** (2026-02-04) - Implemented snapshot compaction in `getContextMemories()` to keep only most recent result for each snapshot tool (get_ship, get_system, get_poi, get_nearby, get_cargo, zoea_swarm_status, zoea_list_myses). Added search tool reminders to SystemPrompt and ContinuePrompt. See `documentation/CONTEXT_COMPRESSION.md` for details.
 
-- [x] Add a Make command that:
-  - extracts username/passwords from the current DB to a root-level file
-  - wipes the current DB
-  - imports username/passwords from file
-  - updates docs to use this when wiping the DB
-
-- [ ] Validate MCP and game server updates for inconsistencies.
+- [x] **Database reset with account backup** - Added `make db-reset-accounts` target to safely wipe database while preserving account credentials via export/import cycle.

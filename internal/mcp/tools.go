@@ -10,8 +10,6 @@ import (
 type MysisInfo struct {
 	ID        string
 	Name      string
-	State     string
-	Provider  string
 	LastError error
 }
 
@@ -49,6 +47,7 @@ type Orchestrator interface {
 	ListMyses() []MysisInfo
 	MysisCount() int
 	MaxMyses() int
+	GetStateCounts() map[string]int
 	SendMessageAsync(mysisID, message string) error
 	BroadcastAsync(message string) error
 	SearchMessages(mysisID, query string, limit int) ([]SearchResult, error)
@@ -71,10 +70,8 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			var result []map[string]interface{}
 			for _, m := range myses {
 				result = append(result, map[string]interface{}{
-					"id":       m.ID,
-					"name":     m.Name,
-					"state":    m.State,
-					"provider": m.Provider,
+					"id":   m.ID,
+					"name": m.Name,
 				})
 			}
 
@@ -93,31 +90,12 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			myses := orchestrator.ListMyses()
-
-			var running, idle, stopped, errored int
-			for _, m := range myses {
-				switch m.State {
-				case "running":
-					running++
-				case "idle":
-					idle++
-				case "stopped":
-					stopped++
-				case "errored":
-					errored++
-				}
-			}
+			stateCounts := orchestrator.GetStateCounts()
 
 			status := map[string]interface{}{
 				"total_myses": orchestrator.MysisCount(),
 				"max_myses":   orchestrator.MaxMyses(),
-				"states": map[string]int{
-					"running": running,
-					"idle":    idle,
-					"stopped": stopped,
-					"errored": errored,
-				},
+				"states":      stateCounts,
 			}
 
 			data, _ := json.MarshalIndent(status, "", "  ")

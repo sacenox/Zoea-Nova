@@ -70,11 +70,19 @@ You're part of a swarm. Use zoea_* tools to:
 - zoea_send_message: Direct message a specific mysis
 - zoea_broadcast: Message all running myses
 - zoea_search_messages: Search your past messages by text
+- zoea_search_reasoning: Search your past reasoning by text
 - zoea_search_broadcasts: Search past swarm broadcasts by text
 - zoea_claim_account: Get existing credentials from swarm pool
 - Report threats and opportunities
 - Request assistance
 - Coordinate territory
+
+## Context & Memory Management
+Your context window is limited. Recent state snapshots are kept, but older messages are removed.
+If you need information from earlier in the conversation:
+- Use zoea_search_messages to find past messages by keyword
+- Use zoea_search_reasoning to find past reasoning by keyword
+- Use captain's log for persistent notes across sessions
 
 ## Thinking Style
 Keep your reasoning brief - decide and act, don't over-analyze.
@@ -92,6 +100,19 @@ const MaxToolIterations = 10
 // worth of activity (each tick may involve multiple tool calls).
 const MaxContextMessages = 20
 
+// snapshotTools defines tools that return state snapshots.
+// When multiple results from the same snapshot tool appear in context,
+// only the most recent one is kept to prevent redundant state data.
+var snapshotTools = map[string]bool{
+	"get_ship":          true,
+	"get_system":        true,
+	"get_poi":           true,
+	"get_nearby":        true,
+	"get_cargo":         true,
+	"zoea_swarm_status": true,
+	"zoea_list_myses":   true,
+}
+
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy.
 const ContinuePrompt = `Turn complete. What is your next move?
 
@@ -99,6 +120,7 @@ CRITICAL REMINDERS:
 - When using captains_log_add, entry field must be non-empty
 - Never store or share your password in any in-game tool calls or chat
 - Never calculate ticks, use every turn to progress
+- If you need past data, use zoea_search_messages or zoea_search_reasoning
 
 If waiting for something, describe what and why. Otherwise, continue your mission.`
 
@@ -126,6 +148,16 @@ type Mysis struct {
 	currentAccountUsername string
 }
 
+type contextStats struct {
+	MemoryCount    int
+	MessageCount   int
+	ContentBytes   int
+	ReasoningBytes int
+	RoleCounts     map[string]int
+	SourceCounts   map[string]int
+	ToolCallCount  int
+}
+
 // NewMysis creates a new mysis from stored data.
 func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Mysis {
 	return &Mysis{
@@ -137,6 +169,36 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 		bus:       bus,
 		state:     MysisStateIdle,
 	}
+}
+
+func (a *Mysis) computeMemoryStats(memories []*store.Memory) contextStats {
+	stats := contextStats{
+		MemoryCount:  len(memories),
+		RoleCounts:   make(map[string]int),
+		SourceCounts: make(map[string]int),
+	}
+
+	for _, m := range memories {
+		stats.ContentBytes += len(m.Content)
+		stats.ReasoningBytes += len(m.Reasoning)
+		stats.RoleCounts[string(m.Role)]++
+		stats.SourceCounts[string(m.Source)]++
+	}
+
+	return stats
+}
+
+func (a *Mysis) computeMessageStats(messages []provider.Message) contextStats {
+	stats := contextStats{
+		MessageCount: len(messages),
+	}
+
+	for _, msg := range messages {
+		stats.ContentBytes += len(msg.Content)
+		stats.ToolCallCount += len(msg.ToolCalls)
+	}
+
+	return stats
 }
 
 // SetMCP sets the MCP proxy for tool calling.
@@ -378,8 +440,35 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 			return fmt.Errorf("get memories: %w", err)
 		}
 
+		memoryStats := a.computeMemoryStats(memories)
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "context_memories").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", 0).
+			Int("content_bytes", memoryStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", 0).
+			Msg("Context stats")
+
 		// Convert to provider messages
 		messages := a.memoriesToMessages(memories)
+		messageStats := a.computeMessageStats(messages)
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "messages_converted").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", messageStats.MessageCount).
+			Int("content_bytes", messageStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", messageStats.ToolCallCount).
+			Msg("Context stats")
 
 		// Signal LLM activity start
 		a.bus.Publish(Event{
@@ -388,6 +477,18 @@ func (a *Mysis) SendMessage(content string, source store.MemorySource) error {
 			MysisName: a.name,
 			Timestamp: time.Now(),
 		})
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "before_llm_call").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", messageStats.MessageCount).
+			Int("content_bytes", messageStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", messageStats.ToolCallCount).
+			Msg("Context stats")
 
 		// Get response from provider
 		var response *provider.ChatResponse
@@ -685,6 +786,7 @@ func (a *Mysis) setError(err error) {
 
 // getContextMemories returns memories for LLM context: system prompt + recent messages.
 // This keeps context small for faster inference while preserving essential information.
+// Compacts repeated snapshot tool results to prefer recent state.
 func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// Get recent memories (limited for performance)
 	recent, err := a.store.GetRecentMemories(a.id, MaxContextMessages)
@@ -692,23 +794,120 @@ func (a *Mysis) getContextMemories() ([]*store.Memory, error) {
 		return nil, err
 	}
 
+	// Apply compaction to remove redundant snapshot tool results
+	compacted := a.compactSnapshots(recent)
+
 	// Always try to fetch the system prompt and prepend it if not already first
 	system, err := a.store.GetSystemMemory(a.id)
 	if err != nil {
-		// No system prompt found - this is okay, just use recent memories
-		return recent, nil
+		// No system prompt found - this is okay, just use compacted memories
+		return compacted, nil
 	}
 
 	// Check if system prompt is already the first message
-	if len(recent) > 0 && recent[0].ID == system.ID {
-		return recent, nil
+	if len(compacted) > 0 && compacted[0].ID == system.ID {
+		return compacted, nil
 	}
 
-	// Prepend system prompt to recent memories
-	result := make([]*store.Memory, 0, len(recent)+1)
+	// Prepend system prompt to compacted memories
+	result := make([]*store.Memory, 0, len(compacted)+1)
 	result = append(result, system)
-	result = append(result, recent...)
+	result = append(result, compacted...)
 	return result, nil
+}
+
+// compactSnapshots removes redundant snapshot tool results, keeping only the most recent
+// result for each snapshot tool. This prevents state-heavy tools from crowding out
+// conversation history while ensuring the latest state is available.
+func (a *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
+	if len(memories) == 0 {
+		return memories
+	}
+
+	toolCallNames := a.toolCallNameIndex(memories)
+
+	// Track the most recent snapshot tool result for each tool
+	latestSnapshot := make(map[string]int) // tool name -> index in memories
+
+	// First pass: identify tool results and track latest for each snapshot tool
+	for i, m := range memories {
+		if m.Role != store.MemoryRoleTool {
+			continue
+		}
+
+		// Extract tool name from stored format: "tool_call_id:content"
+		toolName := a.extractToolNameFromResult(m.Content, toolCallNames)
+		if toolName == "" {
+			continue
+		}
+
+		// If this is a snapshot tool, track its position
+		if snapshotTools[toolName] {
+			latestSnapshot[toolName] = i
+		}
+	}
+
+	// Second pass: build result, skipping older snapshot tool results
+	result := make([]*store.Memory, 0, len(memories))
+	for i, m := range memories {
+		// Keep non-tool memories
+		if m.Role != store.MemoryRoleTool {
+			result = append(result, m)
+			continue
+		}
+
+		// Extract tool name
+		toolName := a.extractToolNameFromResult(m.Content, toolCallNames)
+		if toolName == "" {
+			result = append(result, m)
+			continue
+		}
+
+		// If this is a snapshot tool, only keep if it's the latest
+		if snapshotTools[toolName] {
+			if latestSnapshot[toolName] == i {
+				result = append(result, m)
+			}
+			// Skip older snapshots
+			continue
+		}
+
+		// Keep non-snapshot tool results
+		result = append(result, m)
+	}
+
+	return result
+}
+
+func (a *Mysis) extractToolNameFromResult(content string, toolCallNames map[string]string) string {
+	idx := strings.Index(content, ":")
+	if idx <= 0 {
+		return ""
+	}
+
+	callID := content[:idx]
+	return toolCallNames[callID]
+}
+
+func (a *Mysis) toolCallNameIndex(memories []*store.Memory) map[string]string {
+	index := make(map[string]string)
+	for _, m := range memories {
+		if m.Role != store.MemoryRoleAssistant {
+			continue
+		}
+		if !strings.HasPrefix(m.Content, "[TOOL_CALLS]") {
+			continue
+		}
+		calls := a.parseStoredToolCalls(m.Content)
+		for _, call := range calls {
+			if call.ID == "" || call.Name == "" {
+				continue
+			}
+			index[call.ID] = call.Name
+		}
+	}
+
+	return index
 }
 
 // run is the mysis main processing loop.

@@ -45,6 +45,19 @@ Without compression, Mysis context grows unbounded:
 // MaxContextMessages limits how many recent messages to include in LLM context.
 // Value chosen to cover ~2 server ticks worth of activity.
 const MaxContextMessages = 20
+
+// snapshotTools defines tools that return state snapshots.
+// When multiple results from the same snapshot tool appear in context,
+// only the most recent one is kept to prevent redundant state data.
+var snapshotTools = map[string]bool{
+    "get_ship":          true,
+    "get_system":        true,
+    "get_poi":           true,
+    "get_nearby":        true,
+    "get_cargo":         true,
+    "zoea_swarm_status": true,
+    "zoea_list_myses":   true,
+}
 ```
 
 ### Context Assembly
@@ -52,9 +65,10 @@ const MaxContextMessages = 20
 The `getContextMemories()` method assembles context for each LLM call:
 
 1. Fetch the N most recent memories from SQLite
-2. Fetch the system prompt (first system message for the Mysis)
-3. If system prompt isn't already in recent memories, prepend it
-4. Return the assembled context
+2. Apply snapshot compaction to remove redundant state tool results
+3. Fetch the system prompt (first system message for the Mysis)
+4. If system prompt isn't already in compacted memories, prepend it
+5. Return the assembled context
 
 ```go
 func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
@@ -63,24 +77,40 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
         return nil, err
     }
 
+    // Apply compaction to remove redundant snapshot tool results
+    compacted := m.compactSnapshots(recent)
+
     system, err := m.store.GetSystemMemory(m.id)
     if err != nil {
-        // No system prompt - use recent memories only
-        return recent, nil
+        // No system prompt - use compacted memories only
+        return compacted, nil
     }
 
     // Check if system prompt is already first
-    if len(recent) > 0 && recent[0].ID == system.ID {
-        return recent, nil
+    if len(compacted) > 0 && compacted[0].ID == system.ID {
+        return compacted, nil
     }
 
     // Prepend system prompt
-    result := make([]*store.Memory, 0, len(recent)+1)
+    result := make([]*store.Memory, 0, len(compacted)+1)
     result = append(result, system)
-    result = append(result, recent...)
+    result = append(result, compacted...)
     return result, nil
 }
 ```
+
+### Snapshot Compaction
+
+The `compactSnapshots()` method removes redundant state tool results:
+
+- Identifies tool results from snapshot tools (get_ship, get_system, etc.)
+- Keeps only the most recent result for each snapshot tool
+- Preserves all non-snapshot messages and tool results
+- Maintains chronological order
+
+Snapshot detection relies on tool call IDs recorded in assistant `[TOOL_CALLS]` memories. Tool results are compacted only when their tool call ID resolves to a snapshot tool name, which avoids misclassifying non-snapshot results that happen to include similar fields.
+
+This prevents state-heavy tools from crowding out conversation history while ensuring the latest state is always available.
 
 ### Store Methods
 
@@ -147,27 +177,31 @@ Returns matching reasoning entries with role, source, content, reasoning, and ti
 
 ## System Prompt Guidance
 
-The system prompt instructs Myses to use their captain's log for persistent memory:
+The system prompt instructs Myses to use their captain's log for persistent memory and search tools for older context:
 
 ```
 ## Memory
 Use captain's log to persist important information across sessions.
 
-SECURITY: Never store your password in captain's log or share it in any in-game tool calls or chat.
-
-CRITICAL: captains_log_add requires a non-empty entry field:
-CORRECT: captains_log_add({"entry": "Discovered iron ore at Sol-3. Coordinates: X:1234 Y:5678"})
-WRONG: captains_log_add({"entry": ""})
-WRONG: captains_log_add({})
-
-Remember in captain's log:
-- Discovered systems and their resources
-- Player encounters (friendly or hostile)
-- Current objectives and plans
-- Trade routes and profitable deals
+## Context & Memory Management
+Your context window is limited. Recent state snapshots are kept, but older messages are removed.
+If you need information from earlier in the conversation:
+- Use zoea_search_messages to find past messages by keyword
+- Use zoea_search_reasoning to find past reasoning by keyword
+- Use captain's log for persistent notes across sessions
 ```
 
-This encourages Myses to externalize important information to the game's built-in note system, which persists across context windows.
+The continue prompt also reminds Myses about search tools:
+
+```
+CRITICAL REMINDERS:
+- If you need past data, use zoea_search_messages or zoea_search_reasoning
+```
+
+This encourages Myses to:
+1. Externalize important information to the game's built-in note system
+2. Use search tools to retrieve older context when needed
+3. Understand that their context window is limited and compacted
 
 ## Tradeoffs
 

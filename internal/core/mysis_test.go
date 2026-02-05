@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -395,4 +396,296 @@ func TestFormatToolResult_Success(t *testing.T) {
 	if strings.Contains(got, "Error") {
 		t.Fatal("should not contain Error prefix for successful results")
 	}
+}
+
+func TestMysisContextCompaction(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("compaction-test", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Add system prompt
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+
+	// Add multiple get_ship tool results (should be compacted to keep only the latest)
+	for i := 0; i < 5; i++ {
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check ship", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:get_ship:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+			fmt.Sprintf(`call_1:{"ship_id":"ship_%d","hull":100}`, i), "")
+	}
+
+	// Add multiple get_system tool results (should also be compacted)
+	for i := 0; i < 3; i++ {
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check system", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_2:get_system:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+			fmt.Sprintf(`call_2:{"system_id":"sys_%d","police_level":1}`, i), "")
+	}
+
+	// Add a non-snapshot tool result (should be kept)
+	s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "mine ore", "")
+	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_3:mine:{}", "")
+	s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, `call_3:{"result":"mining"}`, "")
+
+	// Get context memories
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// First memory should be system prompt
+	if memories[0].Role != store.MemoryRoleSystem {
+		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
+	}
+
+	// Count get_ship tool results - should only have 1 (the latest)
+	shipResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
+			shipResults++
+		}
+	}
+	if shipResults != 1 {
+		t.Errorf("expected 1 get_ship result after compaction, got %d", shipResults)
+	}
+
+	// Count get_system tool results - should only have 1 (the latest)
+	systemResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"system_id"`) {
+			systemResults++
+		}
+	}
+	if systemResults != 1 {
+		t.Errorf("expected 1 get_system result after compaction, got %d", systemResults)
+	}
+
+	// Non-snapshot tool result should be kept
+	mineResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"result":"mining"`) {
+			mineResults++
+		}
+	}
+	if mineResults != 1 {
+		t.Errorf("expected 1 mine result (non-snapshot), got %d", mineResults)
+	}
+
+	// Verify the latest get_ship result is kept (ship_4, not ship_0)
+	foundLatestShip := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id":"ship_4"`) {
+			foundLatestShip = true
+		}
+	}
+	if !foundLatestShip {
+		t.Error("expected latest get_ship result (ship_4) to be kept")
+	}
+}
+
+func TestSystemPromptContainsSearchGuidance(t *testing.T) {
+	if !strings.Contains(SystemPrompt, "zoea_search_messages") {
+		t.Fatal("SystemPrompt missing zoea_search_messages reference")
+	}
+	if !strings.Contains(SystemPrompt, "zoea_search_reasoning") {
+		t.Fatal("SystemPrompt missing zoea_search_reasoning reference")
+	}
+	if !strings.Contains(SystemPrompt, "Context & Memory Management") {
+		t.Fatal("SystemPrompt missing Context & Memory Management section")
+	}
+}
+
+func TestContinuePromptContainsSearchReminder(t *testing.T) {
+	if !strings.Contains(ContinuePrompt, "zoea_search_messages") {
+		t.Fatal("ContinuePrompt missing zoea_search_messages reminder")
+	}
+	if !strings.Contains(ContinuePrompt, "zoea_search_reasoning") {
+		t.Fatal("ContinuePrompt missing zoea_search_reasoning reminder")
+	}
+}
+
+func TestZoeaListMysesCompaction(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("compaction-test", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Add system prompt
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+
+	// Add multiple zoea_list_myses tool results (should be compacted to keep only the latest)
+	for i := 0; i < 5; i++ {
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "list myses", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:zoea_list_myses:{}", "")
+		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+			fmt.Sprintf(`call_1:[{"id":"mysis-%d","name":"test-%d"}]`, i, i), "")
+	}
+
+	// Get context memories
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// Count zoea_list_myses tool results - should only have 1 (the latest)
+	listResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-`) {
+			listResults++
+		}
+	}
+	if listResults != 1 {
+		t.Errorf("expected 1 zoea_list_myses result after compaction, got %d", listResults)
+	}
+
+	// Verify the latest result is kept (mysis-4, not mysis-0)
+	foundLatest := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-4"`) {
+			foundLatest = true
+		}
+	}
+	if !foundLatest {
+		t.Error("expected latest zoea_list_myses result (mysis-4) to be kept")
+	}
+}
+
+func TestMysisContextCompactionNonSnapshot(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("compaction-non-snapshot", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "")
+
+	for i := 0; i < 2; i++ {
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "travel", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, fmt.Sprintf("[TOOL_CALLS]call_%d:travel:{}", i), "")
+		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, fmt.Sprintf(`call_%d:{"ship_id":"ship_%d"}`, i, i), "")
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	shipResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
+			shipResults++
+		}
+	}
+
+	if shipResults != 2 {
+		t.Fatalf("expected 2 travel results to be kept, got %d", shipResults)
+	}
+}
+
+func TestComputeMemoryStats(t *testing.T) {
+	m := &Mysis{}
+
+	t.Run("empty", func(t *testing.T) {
+		stats := m.computeMemoryStats(nil)
+		if stats.MemoryCount != 0 {
+			t.Fatalf("expected memory count 0, got %d", stats.MemoryCount)
+		}
+		if stats.ContentBytes != 0 {
+			t.Fatalf("expected content bytes 0, got %d", stats.ContentBytes)
+		}
+		if stats.ReasoningBytes != 0 {
+			t.Fatalf("expected reasoning bytes 0, got %d", stats.ReasoningBytes)
+		}
+		if len(stats.RoleCounts) != 0 {
+			t.Fatalf("expected empty role counts, got %v", stats.RoleCounts)
+		}
+		if len(stats.SourceCounts) != 0 {
+			t.Fatalf("expected empty source counts, got %v", stats.SourceCounts)
+		}
+	})
+
+	t.Run("mixed", func(t *testing.T) {
+		memories := []*store.Memory{
+			{Role: store.MemoryRoleSystem, Source: store.MemorySourceSystem, Content: "abc", Reasoning: "r"},
+			{Role: store.MemoryRoleUser, Source: store.MemorySourceDirect, Content: "", Reasoning: ""},
+			{Role: store.MemoryRoleAssistant, Source: store.MemorySourceLLM, Content: "done", Reasoning: "why"},
+			{Role: store.MemoryRoleTool, Source: store.MemorySourceTool, Content: "tool", Reasoning: ""},
+		}
+		stats := m.computeMemoryStats(memories)
+		if stats.MemoryCount != 4 {
+			t.Fatalf("expected memory count 4, got %d", stats.MemoryCount)
+		}
+		if stats.ContentBytes != 11 {
+			t.Fatalf("expected content bytes 11, got %d", stats.ContentBytes)
+		}
+		if stats.ReasoningBytes != 4 {
+			t.Fatalf("expected reasoning bytes 4, got %d", stats.ReasoningBytes)
+		}
+		if stats.RoleCounts[string(store.MemoryRoleSystem)] != 1 ||
+			stats.RoleCounts[string(store.MemoryRoleUser)] != 1 ||
+			stats.RoleCounts[string(store.MemoryRoleAssistant)] != 1 ||
+			stats.RoleCounts[string(store.MemoryRoleTool)] != 1 {
+			t.Fatalf("unexpected role counts: %v", stats.RoleCounts)
+		}
+		if stats.SourceCounts[string(store.MemorySourceSystem)] != 1 ||
+			stats.SourceCounts[string(store.MemorySourceDirect)] != 1 ||
+			stats.SourceCounts[string(store.MemorySourceLLM)] != 1 ||
+			stats.SourceCounts[string(store.MemorySourceTool)] != 1 {
+			t.Fatalf("unexpected source counts: %v", stats.SourceCounts)
+		}
+	})
+
+	t.Run("unicode", func(t *testing.T) {
+		memories := []*store.Memory{
+			{Role: store.MemoryRoleUser, Source: store.MemorySourceDirect, Content: "◈", Reasoning: "ä"},
+		}
+		stats := m.computeMemoryStats(memories)
+		if stats.ContentBytes != 3 {
+			t.Fatalf("expected content bytes 3, got %d", stats.ContentBytes)
+		}
+		if stats.ReasoningBytes != 2 {
+			t.Fatalf("expected reasoning bytes 2, got %d", stats.ReasoningBytes)
+		}
+	})
+}
+
+func TestComputeMessageStats(t *testing.T) {
+	m := &Mysis{}
+
+	t.Run("empty", func(t *testing.T) {
+		stats := m.computeMessageStats(nil)
+		if stats.MessageCount != 0 {
+			t.Fatalf("expected message count 0, got %d", stats.MessageCount)
+		}
+		if stats.ContentBytes != 0 {
+			t.Fatalf("expected content bytes 0, got %d", stats.ContentBytes)
+		}
+		if stats.ToolCallCount != 0 {
+			t.Fatalf("expected tool call count 0, got %d", stats.ToolCallCount)
+		}
+	})
+
+	t.Run("mixed", func(t *testing.T) {
+		messages := []provider.Message{
+			{Role: "user", Content: "abc"},
+			{Role: "assistant", Content: "◈", ToolCalls: []provider.ToolCall{{Name: "a"}, {Name: "b"}}},
+			{Role: "tool", Content: "ok"},
+		}
+		stats := m.computeMessageStats(messages)
+		if stats.MessageCount != 3 {
+			t.Fatalf("expected message count 3, got %d", stats.MessageCount)
+		}
+		if stats.ContentBytes != 8 {
+			t.Fatalf("expected content bytes 8, got %d", stats.ContentBytes)
+		}
+		if stats.ToolCallCount != 2 {
+			t.Fatalf("expected tool call count 2, got %d", stats.ToolCallCount)
+		}
+	})
 }

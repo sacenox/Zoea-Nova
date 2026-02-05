@@ -249,8 +249,6 @@ func (a *commanderAdapter) ListMyses() []mcp.MysisInfo {
 		result[i] = mcp.MysisInfo{
 			ID:        mysis.ID(),
 			Name:      mysis.Name(),
-			State:     string(mysis.State()),
-			Provider:  mysis.ProviderName(),
 			LastError: mysis.LastError(),
 		}
 	}
@@ -263,6 +261,10 @@ func (a *commanderAdapter) MysisCount() int {
 
 func (a *commanderAdapter) MaxMyses() int {
 	return a.commander.MaxMyses()
+}
+
+func (a *commanderAdapter) GetStateCounts() map[string]int {
+	return a.commander.GetStateCounts()
 }
 
 func (a *commanderAdapter) SendMessageAsync(mysisID, message string) error {
@@ -459,6 +461,15 @@ func (m *mockOrchestrator) MysisCount() int {
 
 func (m *mockOrchestrator) MaxMyses() int {
 	return 16
+}
+
+func (m *mockOrchestrator) GetStateCounts() map[string]int {
+	return map[string]int{
+		"running": 0,
+		"idle":    0,
+		"stopped": 0,
+		"errored": 0,
+	}
 }
 
 func (m *mockOrchestrator) SendMessageAsync(mysisID, message string) error {
