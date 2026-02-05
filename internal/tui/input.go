@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -180,7 +182,7 @@ func (m InputModel) View() string {
 }
 
 // ViewAlways renders the input bar, showing placeholder when not active.
-func (m InputModel) ViewAlways(width int) string {
+func (m InputModel) ViewAlways(width int, sending bool, sendingLabel, spinnerView string) string {
 	// Ensure minimum width to prevent negative or zero width
 	if width < 10 {
 		width = 10
@@ -189,6 +191,10 @@ func (m InputModel) ViewAlways(width int) string {
 	if m.mode != InputModeNone {
 		// Active - show the actual input
 		return inputStyle.Width(width - 2).Render(m.textInput.View())
+	}
+	if sending {
+		indicator := fmt.Sprintf("%s %s", spinnerView, sendingLabel)
+		return inputStyle.Width(width - 2).Render(indicator)
 	}
 	// Inactive - show placeholder prompt
 	placeholder := dimmedStyle.Render("Press 'm' to message, 'b' to broadcast...")

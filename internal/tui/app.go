@@ -47,8 +47,10 @@ type Model struct {
 	// Swarm broadcast history
 	swarmMessages []SwarmMessage
 
-	spinner    spinner.Model
-	loadingSet map[string]bool // mysisIDs currently loading
+	spinner     spinner.Model
+	loadingSet  map[string]bool // mysisIDs currently loading
+	sending     bool
+	sendingMode InputMode
 
 	// Conversation viewport
 	viewport           viewport.Model
@@ -58,8 +60,12 @@ type Model struct {
 	// Network activity indicator
 	netIndicator NetIndicator
 
+	providerErrorTimes []time.Time
+
 	err error
 }
+
+const providerErrorWindow = 10 * time.Minute
 
 // SwarmMessage represents a broadcast message for display.
 type SwarmMessage struct {
@@ -115,6 +121,8 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	m.pruneProviderErrors(time.Now())
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -197,6 +205,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if any loading is still active
 		if len(m.loadingSet) == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
+			m.sending = false
+			m.sendingMode = InputModeNone
 		}
 		if m.view == ViewFocus && msg.mysisID == m.focusID {
 			m.loadMysisLogs()
@@ -206,6 +216,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Broadcast finished - clear all loading states
 		m.loadingSet = make(map[string]bool)
 		m.netIndicator.SetActivity(NetActivityIdle)
+		m.sending = false
+		m.sendingMode = InputModeNone
 		if msg.err != nil {
 			m.err = msg.err
 		}
@@ -256,7 +268,18 @@ func (m Model) View() string {
 	}
 
 	// Always show message bar
-	content += "\n" + m.input.ViewAlways(m.width)
+	sendingLabel := ""
+	if m.sending {
+		switch m.sendingMode {
+		case InputModeBroadcast:
+			sendingLabel = "Broadcasting..."
+		case InputModeMessage:
+			sendingLabel = "Sending message..."
+		default:
+			sendingLabel = "Sending..."
+		}
+	}
+	content += "\n" + m.input.ViewAlways(m.width, m.sending, sendingLabel, m.spinner.View())
 
 	// Add error if present
 	if m.err != nil {
@@ -296,11 +319,22 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 	mysisStatus := fmt.Sprintf("Myses: %d/%d running", running, len(m.myses))
+	providerErrors := len(m.providerErrorTimes)
+
+	viewStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	mysisStyle := lipgloss.NewStyle().Foreground(colorSecondary)
 
 	// Calculate spacing
 	leftWidth := lipgloss.Width(netStatus)
-	rightWidth := lipgloss.Width(mysisStatus)
 	middleWidth := lipgloss.Width(viewName)
+
+	rightParts := []string{mysisStyle.Render(mysisStatus)}
+	if providerErrors > 0 {
+		errorText := fmt.Sprintf("LLM errs(10m): %d", providerErrors)
+		rightParts = append(rightParts, stateErroredStyle.Render(errorText))
+	}
+	rightSegment := strings.Join(rightParts, dimmedStyle.Render(" · "))
+	rightWidth := lipgloss.Width(rightSegment)
 	totalUsed := leftWidth + rightWidth + middleWidth
 	spacing := m.width - totalUsed - 4 // -4 for some padding
 
@@ -317,14 +351,11 @@ func (m Model) renderStatusBar() string {
 		Foreground(colorPrimary).
 		Width(m.width)
 
-	viewStyle := lipgloss.NewStyle().Foreground(colorMuted)
-	mysisStyle := lipgloss.NewStyle().Foreground(colorSecondary)
-
 	bar := netStatus +
 		strings.Repeat(" ", leftPad) +
 		viewStyle.Render(viewName) +
 		strings.Repeat(" ", rightPad) +
-		mysisStyle.Render(mysisStatus)
+		rightSegment
 
 	return barStyle.Render(bar)
 }
@@ -474,6 +505,8 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.netIndicator.SetActivity(NetActivityLLM)
+			m.sending = true
+			m.sendingMode = InputModeBroadcast
 			// Use Broadcast to properly set source='broadcast'
 			cmd = m.broadcastAsync(value)
 
@@ -483,6 +516,8 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			targetID := m.input.TargetID()
 			m.loadingSet[targetID] = true
 			m.netIndicator.SetActivity(NetActivityLLM)
+			m.sending = true
+			m.sendingMode = InputModeMessage
 			cmd = m.sendMessageAsync(targetID, value)
 			if m.view == ViewFocus {
 				m.loadMysisLogs()
@@ -571,10 +606,36 @@ func (m *Model) handleEvent(event core.Event) {
 		if len(m.loadingSet) == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
 		}
+
+	case core.EventMysisError:
+		if data, ok := event.Data.(core.ErrorData); ok {
+			if strings.Contains(strings.ToLower(data.Error), "provider chat") {
+				m.recordProviderError(event.Timestamp)
+			}
+		}
 	}
 
 	// Clear error on successful events
 	m.err = nil
+}
+
+func (m *Model) recordProviderError(ts time.Time) {
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	m.pruneProviderErrors(ts)
+	m.providerErrorTimes = append(m.providerErrorTimes, ts)
+}
+
+func (m *Model) pruneProviderErrors(now time.Time) {
+	cutoff := now.Add(-providerErrorWindow)
+	filtered := m.providerErrorTimes[:0]
+	for _, t := range m.providerErrorTimes {
+		if t.After(cutoff) {
+			filtered = append(filtered, t)
+		}
+	}
+	m.providerErrorTimes = filtered
 }
 
 func (m *Model) refreshMysisList() {
