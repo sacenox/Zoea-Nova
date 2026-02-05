@@ -133,7 +133,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -171,9 +171,33 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", scrollInfo, width)
 	sections = append(sections, logTitle)
 
-	// Viewport content (scrollable)
-	// Add horizontal padding (2 spaces each side) for content inside panel border
-	vpView := logStyle.Width(width-2).Padding(0, 2).Render(vp.View())
+	// Viewport content (scrollable) with scrollbar
+	// Render scrollbar based on viewport state
+	scrollOffset := vp.YOffset
+	scrollbarStr := renderScrollbar(vp.Height, totalLines, scrollOffset)
+	scrollbarLines := strings.Split(scrollbarStr, "\n")
+
+	// Get viewport content lines
+	vpContentLines := strings.Split(vp.View(), "\n")
+
+	// Combine each line with scrollbar
+	combinedLines := make([]string, vp.Height)
+	for i := 0; i < vp.Height; i++ {
+		var contentLine string
+		if i < len(vpContentLines) {
+			contentLine = vpContentLines[i]
+		}
+		var scrollLine string
+		if i < len(scrollbarLines) {
+			scrollLine = " " + scrollbarLines[i] // Space before scrollbar
+		} else {
+			scrollLine = "  " // Empty if no scrollbar line
+		}
+		combinedLines[i] = contentLine + scrollLine
+	}
+
+	combinedContent := strings.Join(combinedLines, "\n")
+	vpView := logStyle.Width(width-2).Padding(0, 2).Render(combinedContent)
 	sections = append(sections, vpView)
 
 	// Footer with scroll hints and verbose toggle

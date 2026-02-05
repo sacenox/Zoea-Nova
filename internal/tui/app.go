@@ -51,8 +51,9 @@ type Model struct {
 	loadingSet map[string]bool // mysisIDs currently loading
 
 	// Conversation viewport
-	viewport   viewport.Model
-	autoScroll bool // true if viewport should auto-scroll to bottom
+	viewport           viewport.Model
+	autoScroll         bool // true if viewport should auto-scroll to bottom
+	viewportTotalLines int  // total lines in viewport content
 
 	// Network activity indicator
 	netIndicator NetIndicator
@@ -127,7 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if vpHeight < 5 {
 			vpHeight = 5
 		}
-		m.viewport.Width = msg.Width - 6
+		m.viewport.Width = msg.Width - 6 - 1 // -6 for existing padding, -1 for scrollbar
 		m.viewport.Height = vpHeight
 
 		// Re-render content if in focus view
@@ -236,7 +237,7 @@ func (m Model) View() string {
 	if m.showHelp {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -650,6 +651,7 @@ func (m *Model) updateViewportContent() {
 
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
+	m.viewportTotalLines = len(lines) // Track total lines
 
 	// Auto-scroll to bottom if enabled
 	if m.autoScroll {

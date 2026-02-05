@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/xonecas/zoea-nova/internal/store"
@@ -140,5 +141,31 @@ func TestRenderLogEntryToolWithJSON(t *testing.T) {
 	// Should contain field names
 	if !strings.Contains(output, "ship_id") || !strings.Contains(output, "cargo") {
 		t.Error("Expected JSON field names in tree output")
+	}
+}
+func TestRenderFocusViewWithScrollbar(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	// Create viewport with content
+	vp := viewport.New(80, 10)
+	longContent := strings.Repeat("line\n", 50) // 50 lines
+	vp.SetContent(longContent)
+	vp.GotoTop()
+
+	mysis := MysisInfo{
+		ID:       "test-id",
+		Name:     "test-mysis",
+		State:    "running",
+		Provider: "ollama",
+	}
+
+	width := 100
+	totalLines := 50
+	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", true, false, totalLines)
+
+	// Should contain scrollbar characters
+	if !strings.Contains(output, "█") && !strings.Contains(output, "│") {
+		t.Error("Expected scrollbar characters in focus view output")
 	}
 }
