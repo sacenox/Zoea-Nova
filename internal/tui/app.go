@@ -641,7 +641,8 @@ func (m *Model) updateViewportContent() {
 	// Log entries must fill the panel content area exactly.
 	// Panel is rendered with logStyle.Width(m.width - 2).Padding(0, 2)
 	// Content width = m.width - 2, minus 4 for padding (2 each side) = m.width - 6
-	panelContentWidth := m.width - 6
+	// Scrollbar adds 2 chars (space + scrollbar char), so subtract that too
+	panelContentWidth := m.width - 6 - 2 // -2 for scrollbar
 
 	var lines []string
 	for _, entry := range m.logs {
