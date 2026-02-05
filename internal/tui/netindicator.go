@@ -111,11 +111,11 @@ func (n NetIndicator) View() string {
 
 	case NetActivityLLM:
 		style = lipgloss.NewStyle().Foreground(colorAssistant).Bold(true)
-		label = "◆ LLM "
+		label = " ◆ LLM "
 
 	case NetActivityMCP:
 		style = lipgloss.NewStyle().Foreground(colorTeal).Bold(true)
-		label = "◆ MCP "
+		label = " ◆ MCP "
 	}
 
 	// Build the bouncing bar

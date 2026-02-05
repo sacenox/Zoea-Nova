@@ -35,7 +35,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	if width < 20 {
 		width = 20
 	}
-	topLine := "◆" + strings.Repeat("═", width-2) + "◆"
+	topLine := " ◆" + strings.Repeat("═", width-3) + "◆"
 	titleText := " ⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
 	// Center the title and pad to full width - use lipgloss.Width() for Unicode
 	titleDisplayWidth := lipgloss.Width(titleText)
@@ -49,7 +49,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	if titleLineWidth < width {
 		titleLine += strings.Repeat(" ", width-titleLineWidth)
 	}
-	bottomLine := "◆" + strings.Repeat("═", width-2) + "◆"
+	bottomLine := " ◆" + strings.Repeat("═", width-3) + "◆"
 
 	headerText := topLine + "\n" + titleLine + "\n" + bottomLine
 	header := headerStyle.Width(width).Render(headerText)
@@ -71,7 +71,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		}
 	}
 	stats := fmt.Sprintf(
-		"%s %d  %s %d  %s %d  %s %d",
+		" %s %d  %s %d  %s %d  %s %d",
 		stateRunningStyle.Render("●"),
 		running,
 		stateIdleStyle.Render("○"),

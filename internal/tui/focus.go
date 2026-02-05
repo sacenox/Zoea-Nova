@@ -451,19 +451,19 @@ func LogEntryFromMemory(m *store.Memory, currentMysisID string) LogEntry {
 
 // renderFocusHeader renders the focus view header spanning full width.
 func renderFocusHeader(mysisName string, width int) string {
-	// Format: ◆─── ⬡ MYSIS: name ⬡ ───◆ with dashes filling the remaining space
+	// Format:  ◆─── ⬡ MYSIS: name ⬡ ───◆ with dashes filling the remaining space
 	// Use lipgloss.Width() for proper Unicode display width calculation
 	titleText := " ⬡ MYSIS: " + mysisName + " ⬡ "
 	titleDisplayWidth := lipgloss.Width(titleText)
-	// Total fixed chars: ◆ (1) on each side = 2
-	availableWidth := width - titleDisplayWidth - 2
+	// Total fixed chars: space (1) + ◆ (1) on left, ◆ (1) on right = 3
+	availableWidth := width - titleDisplayWidth - 3
 	if availableWidth < 4 {
 		availableWidth = 4
 	}
 	leftDashes := availableWidth / 2
 	rightDashes := availableWidth - leftDashes
 
-	line := "◆" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "◆"
+	line := " ◆" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "◆"
 	return headerStyle.Width(width).Render(line)
 }
 
