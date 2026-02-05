@@ -31,28 +31,34 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	var sections []string
 
 	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
-	// Build width-spanning lines (exactly `width` characters)
 	if width < 20 {
 		width = 20
 	}
-	topLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
-	titleText := " ⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
-	// Center the title and pad to full width - use lipgloss.Width() for Unicode
-	titleDisplayWidth := lipgloss.Width(titleText)
-	titlePadding := (width - titleDisplayWidth) / 2
-	if titlePadding < 0 {
-		titlePadding = 0
-	}
-	titleLine := strings.Repeat(" ", titlePadding) + titleText
-	// Pad right side to fill width
-	titleLineWidth := lipgloss.Width(titleLine)
-	if titleLineWidth < width {
-		titleLine += strings.Repeat(" ", width-titleLineWidth)
-	}
-	bottomLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
 
-	headerText := topLine + "\n" + titleLine + "\n" + bottomLine
-	header := headerStyle.Width(width).Render(headerText)
+	// Define custom border with empty sides but diamonds in corners
+	// We enable all borders to get the corners, but set sides to empty strings
+	headerBorder := lipgloss.Border{
+		Top:         "═",
+		Bottom:      "═",
+		Left:        " ",
+		Right:       " ",
+		TopLeft:     "⬥",
+		TopRight:    "⬥",
+		BottomLeft:  "⬥",
+		BottomRight: "⬥",
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(colorBrand).
+		Background(colorBgAlt).
+		Width(width-2). // Subtract 2 for the corner characters
+		Align(lipgloss.Center).
+		Border(headerBorder, true, true, true, true).
+		BorderForeground(colorBrand)
+
+	titleText := "⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
+	header := headerStyle.Render(titleText)
 	sections = append(sections, header)
 
 	// Swarm message history - always visible with fixed height
