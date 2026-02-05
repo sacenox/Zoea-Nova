@@ -119,7 +119,6 @@ var (
 	inputStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorTeal).
-			Background(colorBgPanel).
 			Padding(0, 1)
 
 	inputPromptStyle = lipgloss.NewStyle().
