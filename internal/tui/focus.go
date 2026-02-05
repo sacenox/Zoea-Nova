@@ -293,8 +293,14 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 	// Detect JSON content in tool messages and render as tree
 	var wrappedLines []string
 	if entry.Role == "tool" && isJSON(entry.Content) {
+		// Extract JSON content (strip tool call ID prefix if present)
+		jsonContent := entry.Content
+		if idx := strings.Index(jsonContent, ":"); idx > 0 && strings.HasPrefix(jsonContent, "call_") {
+			jsonContent = jsonContent[idx+1:]
+		}
+
 		// Render JSON as tree structure with width constraint
-		treeStr, err := renderJSONTree(entry.Content, verbose, contentWidth)
+		treeStr, err := renderJSONTree(jsonContent, verbose, contentWidth)
 		if err == nil {
 			// Tree rendering succeeded
 			wrappedLines = strings.Split(treeStr, "\n")
@@ -469,9 +475,17 @@ func renderFocusHeader(mysisName string, width int) string {
 	return headerStyle.Width(width).Render(line)
 }
 
-// isJSON checks if a string appears to be JSON
+// isJSON checks if a string appears to be JSON.
+// Handles tool result format: "tool_call_id:json_content"
 func isJSON(s string) bool {
 	s = strings.TrimSpace(s)
+
+	// Strip tool call ID prefix if present (format: "call_xxx:json")
+	if idx := strings.Index(s, ":"); idx > 0 && strings.HasPrefix(s, "call_") {
+		s = s[idx+1:]
+		s = strings.TrimSpace(s)
+	}
+
 	return (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) ||
 		(strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"))
 }

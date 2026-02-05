@@ -231,6 +231,41 @@ func TestRenderLogEntryToolWithJSON(t *testing.T) {
 		t.Error("Expected JSON field names in tree output")
 	}
 }
+
+func TestRenderLogEntryToolWithPrefixedJSON(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	// Tool result with call ID prefix (format from database)
+	toolResult := `call_59orhh05:{"max_myses": 16, "states": {"errored": 0, "idle": 0, "running": 1, "stopped": 0}, "total_myses": 1}`
+
+	entry := LogEntry{
+		Role:      "tool",
+		Source:    "tool",
+		Content:   toolResult,
+		Timestamp: time.Now(),
+	}
+
+	maxWidth := 80
+	lines := renderLogEntryImpl(entry, maxWidth, false)
+
+	output := strings.Join(lines, "\n")
+
+	// Should have tree structure (JSON should be detected despite prefix)
+	if !strings.Contains(output, "├─") && !strings.Contains(output, "└─") {
+		t.Error("Expected tree box characters in prefixed tool JSON output")
+	}
+
+	// Should contain field names from JSON
+	if !strings.Contains(output, "max_myses") || !strings.Contains(output, "states") {
+		t.Error("Expected JSON field names in tree output")
+	}
+
+	// Should NOT contain the call ID prefix in the tree
+	if strings.Contains(output, "call_59orhh05:") {
+		t.Error("Tool call ID prefix should be stripped from JSON tree")
+	}
+}
 func TestRenderFocusViewWithScrollbar(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)
