@@ -17,3 +17,7 @@
 
 - Make install command that places the binary in the user's zoea config folder
 - check ollama logs, llms are stopping the loop.
+
+- mysis are calculating tick wrong.
+│  │ AI:   Waiting for travel to sol_base to complete (arrival_tick: 38549). Will sell ore once arrived at base to conver│ │  │
+│  │       resources into credits.

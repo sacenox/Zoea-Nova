@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -75,7 +76,7 @@ func renderObject(obj map[string]interface{}, prefix string, isLast bool, verbos
 	for k := range obj {
 		keys = append(keys, k)
 	}
-	// Note: Not sorting to preserve JSON order, but could add sort.Strings(keys) here
+	sort.Strings(keys)
 
 	for i, key := range keys {
 		isLastField := i == len(keys)-1

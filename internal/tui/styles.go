@@ -57,12 +57,6 @@ var (
 			Bold(true).
 			Foreground(colorBrand)
 
-	// Status bar - teal on dark, command center vibe
-	statusBarStyle = lipgloss.NewStyle().
-			Foreground(colorTeal).
-			Background(colorBgAlt).
-			Padding(0, 1)
-
 	// Mysis list - double border for that 80s terminal aesthetic
 	mysisListStyle = lipgloss.NewStyle().
 			Border(lipgloss.DoubleBorder()).

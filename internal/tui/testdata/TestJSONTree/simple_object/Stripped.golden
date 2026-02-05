@@ -1,5 +1,5 @@
 {
+  ├─"id": abc123
   ├─"name": mysis-1
-  ├─"state": running
-  └─"id": abc123
+  └─"state": running
   }

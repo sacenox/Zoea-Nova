@@ -31,62 +31,35 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	var sections []string
 
 	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
-	// Build width-spanning lines (exactly `width` characters)
 	if width < 20 {
 		width = 20
 	}
-	topLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
-	titleText := " ⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
-	// Center the title and pad to full width - use lipgloss.Width() for Unicode
-	titleDisplayWidth := lipgloss.Width(titleText)
-	titlePadding := (width - titleDisplayWidth) / 2
-	if titlePadding < 0 {
-		titlePadding = 0
-	}
-	titleLine := strings.Repeat(" ", titlePadding) + titleText
-	// Pad right side to fill width
-	titleLineWidth := lipgloss.Width(titleLine)
-	if titleLineWidth < width {
-		titleLine += strings.Repeat(" ", width-titleLineWidth)
-	}
-	bottomLine := " ⬥" + strings.Repeat("═", width-3) + "⬥"
 
-	headerText := topLine + "\n" + titleLine + "\n" + bottomLine
-	header := headerStyle.Width(width).Render(headerText)
+	// Define custom border with empty sides but diamonds in corners
+	// We enable all borders to get the corners, but set sides to empty strings
+	headerBorder := lipgloss.Border{
+		Top:         "═",
+		Bottom:      "═",
+		Left:        " ",
+		Right:       " ",
+		TopLeft:     "⬥",
+		TopRight:    "⬥",
+		BottomLeft:  "⬥",
+		BottomRight: "⬥",
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(colorBrand).
+		Background(colorBgAlt).
+		Width(width-2). // Subtract 2 for the corner characters
+		Align(lipgloss.Center).
+		Border(headerBorder, true, true, true, true).
+		BorderForeground(colorBrand)
+
+	titleText := "⬡ Z O E A   N O V A ⬡   COMMAND CENTER"
+	header := headerStyle.Render(titleText)
 	sections = append(sections, header)
-
-	// Stats bar
-	var running, stopped, errored, loading int
-	for _, m := range myses {
-		if loadingSet[m.ID] {
-			loading++
-		}
-		switch m.State {
-		case "running":
-			running++
-		case "stopped":
-			stopped++
-		case "errored":
-			errored++
-		}
-	}
-	stats := fmt.Sprintf(
-		" %s  %d  %s  %d  %s  %d  %s  %d",
-		stateRunningStyle.Render("∙"),
-		running,
-		stateIdleStyle.Render("◦"),
-		len(myses)-running-stopped-errored,
-		stateStoppedStyle.Render("◌"),
-		stopped,
-		stateErroredStyle.Render("✖"),
-		errored,
-	)
-	// Add loading indicator if any myses are loading
-	if loading > 0 {
-		stats += fmt.Sprintf("  %s %d", spinnerView, loading)
-	}
-	statsBar := statusBarStyle.Width(width).Render(stats)
-	sections = append(sections, statsBar)
 
 	// Swarm message history - always visible with fixed height
 	swarmHeader := renderSectionTitle("SWARM BROADCAST", width)
@@ -126,8 +99,8 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	sections = append(sections, mysisHeader)
 
 	// Calculate height used by other elements to fill remaining space
-	// Header: 3 lines + margin, Stats: 1 line, Swarm: header + content, Mysis header: 1 line, Footer: 1 line
-	usedHeight := 6 // header (3 + margin) + stats (1) + mysis header (1) + footer (1)
+	// Header: 3 lines + margin, Swarm: header + content, Mysis header: 1 line, Footer: 1 line
+	usedHeight := 5 // header (3 + margin) + mysis header (1) + footer (1)
 	// Swarm section: header (1) + content lines (at least 1 for placeholder or messages)
 	usedHeight += 1 + len(msgLines)
 	// Account for panel borders (top + bottom = 2 lines)

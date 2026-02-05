@@ -1,6 +1,6 @@
                                                                                 
  TOOL: {                                                                        
+         ├─"fuel": 100                                                          
          ├─"name": mysis-1                                                      
-         ├─"state": running                                                     
-         └─"fuel": 100                                                          
+         └─"state": running                                                     
          }                                                                      
