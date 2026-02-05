@@ -2,7 +2,6 @@
 description: Agent with knowledge in this project.
 agent: general
 mode: primary
-model: opencode/gemini-3-flash
 ---
 
 You have access to @explore and @zoea-analyzer subagents. Use them and your knowdledge of the codebase to answer the user's questions.
