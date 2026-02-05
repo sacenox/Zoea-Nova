@@ -30,10 +30,10 @@ func TestGetSystemMemory(t *testing.T) {
 
 	// Add system memory
 	expected := "You are a test."
-	s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, expected, "")
+	s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, expected, "", "")
 
 	// Add other memories
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "", "")
 
 	system, err := s.GetSystemMemory(mysis.ID)
 	if err != nil {
@@ -50,9 +50,9 @@ func TestSearchMemories(t *testing.T) {
 
 	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "I like apples", "")
-	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great", "")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "I like apples", "", "")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Apples are great", "", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "What about oranges?", "", "")
 
 	// Search for "apples"
 	results, err := s.SearchMemories(mysis.ID, "apples", 10)
@@ -80,9 +80,9 @@ func TestSearchBroadcasts(t *testing.T) {
 	mysis1, _ := s.CreateMysis("mysis1", "mock", "model", 0.7)
 	mysis2, _ := s.CreateMysis("mysis2", "mock", "model", 0.7)
 
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1", "")
-	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2", "")
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message", "")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1", "", "")
+	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2", "", "")
+	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message", "", "")
 
 	// Search for "Broadcast"
 	results, err := s.SearchBroadcasts("Broadcast", 10)
@@ -111,9 +111,9 @@ func TestSearchReasoning(t *testing.T) {
 
 	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
-	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "I am thinking about mining")
-	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "Trading strategy")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "I am thinking about mining", "")
+	s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", "Trading strategy", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "hello", "", "")
 
 	results, err := s.SearchReasoning(mysis.ID, "mining", 10)
 	if err != nil {
@@ -130,10 +130,10 @@ func TestGetRecentBroadcasts(t *testing.T) {
 
 	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
 
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B1", "")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B2", "")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B3", "")
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "D1", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B1", "", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B2", "", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "B3", "", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "D1", "", "")
 
 	results, err := s.GetRecentBroadcasts(2)
 	if err != nil {
@@ -148,5 +148,31 @@ func TestGetRecentBroadcasts(t *testing.T) {
 	}
 	if results[1].Content != "B3" {
 		t.Errorf("expected B3, got %s", results[1].Content)
+	}
+}
+
+func TestMemoryWithSenderID(t *testing.T) {
+	s, cleanup := setupMemoriesTest(t)
+	defer cleanup()
+
+	mysis, _ := s.CreateMysis("test", "mock", "model", 0.7)
+	senderID := "sender-mysis"
+
+	err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceBroadcast, "test broadcast", "", senderID)
+	if err != nil {
+		t.Fatalf("AddMemory failed: %v", err)
+	}
+
+	memories, err := s.GetRecentMemories(mysis.ID, 10)
+	if err != nil {
+		t.Fatalf("GetRecentMemories failed: %v", err)
+	}
+
+	if len(memories) != 1 {
+		t.Fatalf("expected 1 memory, got %d", len(memories))
+	}
+
+	if memories[0].SenderID != senderID {
+		t.Errorf("expected sender_id %q, got %q", senderID, memories[0].SenderID)
 	}
 }

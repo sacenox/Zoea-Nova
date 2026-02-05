@@ -4,7 +4,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
-INSERT OR REPLACE INTO schema_version (version) VALUES (7);
+-- Schema v7 → v8 Migration:
+-- Added sender_id column to memories table for broadcast tracking.
+-- BREAKING CHANGE: Requires fresh database (make db-reset-accounts)
+INSERT OR REPLACE INTO schema_version (version) VALUES (8);
 
 CREATE TABLE IF NOT EXISTS myses (
     id TEXT PRIMARY KEY,
@@ -22,6 +25,7 @@ CREATE TABLE IF NOT EXISTS memories (
 	mysis_id TEXT NOT NULL,
 	role TEXT NOT NULL,
 	source TEXT NOT NULL DEFAULT 'direct',
+	sender_id TEXT,
 	content TEXT NOT NULL,
 	reasoning TEXT,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

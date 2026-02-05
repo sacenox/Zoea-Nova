@@ -123,21 +123,15 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Add memories
-	m1, err := s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.", "")
-	if err != nil {
-		t.Fatalf("AddMemory() error: %v", err)
-	}
-	if m1.ID == 0 {
-		t.Error("expected non-zero memory ID")
-	}
-
-	m2, err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "Hello!", "")
-	if err != nil {
+	if err := s.AddMemory(mysis.ID, MemoryRoleSystem, MemorySourceSystem, "You are a helpful assistant.", "", ""); err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
-	m3, err := s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!", "thinking...")
-	if err != nil {
+	if err := s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "Hello!", "", ""); err != nil {
+		t.Fatalf("AddMemory() error: %v", err)
+	}
+
+	if err := s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "Hi there!", "thinking...", ""); err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
 
@@ -148,6 +142,9 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 	if len(memories) != 3 {
 		t.Errorf("expected 3 memories, got %d", len(memories))
+	}
+	if memories[0].ID == 0 {
+		t.Error("expected non-zero memory ID")
 	}
 	if memories[2].Reasoning != "thinking..." {
 		t.Errorf("expected reasoning=thinking..., got %q", memories[2].Reasoning)
@@ -190,8 +187,8 @@ func TestMemoryCRUD(t *testing.T) {
 	}
 
 	// Verify IDs for coverage
-	_ = m2.ID
-	_ = m3.ID
+	_ = memories[1].ID
+	_ = memories[2].ID
 }
 
 func TestMemoryWithReasoning(t *testing.T) {
@@ -204,7 +201,7 @@ func TestMemoryWithReasoning(t *testing.T) {
 	}
 
 	reasoning := "Step by step thinking"
-	_, err = s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", reasoning)
+	err = s.AddMemory(mysis.ID, MemoryRoleAssistant, MemorySourceLLM, "", reasoning, "")
 	if err != nil {
 		t.Fatalf("AddMemory() error: %v", err)
 	}
@@ -226,7 +223,7 @@ func TestCascadeDelete(t *testing.T) {
 	defer cleanup()
 
 	mysis, _ := s.CreateMysis("cascade-test", "ollama", "llama3", 0.7)
-	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "test message", "")
+	s.AddMemory(mysis.ID, MemoryRoleUser, MemorySourceDirect, "test message", "", "")
 
 	// Delete mysis should cascade to memories
 	if err := s.DeleteMysis(mysis.ID); err != nil {

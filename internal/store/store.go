@@ -15,7 +15,7 @@ import (
 //go:embed schema.sql
 var schema string
 
-const currentSchemaVersion = 7
+const currentSchemaVersion = 8
 
 // Store provides access to the SQLite database.
 type Store struct {
