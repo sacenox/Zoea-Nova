@@ -77,8 +77,9 @@ func TestEventBusNonBlocking(t *testing.T) {
 	bus := NewEventBus(1)
 	ch := bus.Subscribe()
 
-	// Fill buffer
-	bus.Publish(Event{Type: EventMysisCreated})
+	for len(ch) < cap(ch) {
+		bus.Publish(Event{Type: EventMysisCreated})
+	}
 
 	// This should not block (event dropped)
 	done := make(chan bool)
@@ -95,6 +96,71 @@ func TestEventBusNonBlocking(t *testing.T) {
 	}
 
 	// Drain the buffer
+	<-ch
+	bus.Close()
+}
+
+func TestEventBusPublishBlockingDelivers(t *testing.T) {
+	bus := NewEventBus(1)
+	ch := bus.Subscribe()
+
+	for len(ch) < cap(ch) {
+		bus.Publish(Event{Type: EventMysisCreated})
+	}
+
+	resultCh := make(chan bool, 1)
+	go func() {
+		resultCh <- bus.PublishBlocking(Event{Type: EventMysisDeleted}, 100*time.Millisecond)
+	}()
+
+	select {
+	case <-resultCh:
+		t.Fatal("expected PublishBlocking to wait for buffer space")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	<-ch
+
+	select {
+	case delivered := <-resultCh:
+		if !delivered {
+			t.Fatal("expected PublishBlocking to deliver")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timeout waiting for PublishBlocking")
+	}
+
+	deletedFound := false
+	for i := 0; i < cap(ch); i++ {
+		received := <-ch
+		if received.Type == EventMysisDeleted {
+			deletedFound = true
+		}
+	}
+	if !deletedFound {
+		t.Fatal("expected to find blocking event")
+	}
+
+	bus.Close()
+}
+
+func TestEventBusPublishBlockingTimeout(t *testing.T) {
+	bus := NewEventBus(1)
+	ch := bus.Subscribe()
+
+	for len(ch) < cap(ch) {
+		bus.Publish(Event{Type: EventMysisCreated})
+	}
+
+	start := time.Now()
+	delivered := bus.PublishBlocking(Event{Type: EventMysisDeleted}, 20*time.Millisecond)
+	if delivered {
+		t.Fatal("expected PublishBlocking to timeout")
+	}
+	if time.Since(start) < 15*time.Millisecond {
+		t.Fatal("expected PublishBlocking to wait for timeout")
+	}
+
 	<-ch
 	bus.Close()
 }

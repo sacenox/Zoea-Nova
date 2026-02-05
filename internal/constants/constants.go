@@ -145,6 +145,9 @@ const FallbackLLMResponse = "(no response)"
 // MinEventBusBufferSize is the minimum buffer per subscriber channel.
 const MinEventBusBufferSize = 1000
 
+// EventBusPublishTimeout is the per-subscriber timeout for critical events.
+const EventBusPublishTimeout = 200 * time.Millisecond
+
 // SnapshotTools defines tools that return state snapshots for context compaction.
 var SnapshotTools = map[string]bool{
 	"get_ship":          true,

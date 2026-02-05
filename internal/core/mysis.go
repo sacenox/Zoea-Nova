@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +44,7 @@ type Mysis struct {
 	lastServerTick         int64
 	lastServerTickAt       time.Time
 	tickDuration           time.Duration
+	nudgeCh                chan struct{}
 }
 
 type contextStats struct {
@@ -66,6 +68,7 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 		bus:           bus,
 		state:         MysisStateIdle,
 		activityState: ActivityStateIdle,
+		nudgeCh:       make(chan struct{}, 1),
 	}
 }
 
@@ -212,7 +215,7 @@ func (a *Mysis) Stop() error {
 	a.mu.Lock()
 	if a.state != MysisStateRunning {
 		a.mu.Unlock()
-		return fmt.Errorf("mysis not running")
+		return nil
 	}
 
 	if a.cancel != nil {
@@ -225,6 +228,10 @@ func (a *Mysis) Stop() error {
 	defer a.turnMu.Unlock()
 
 	a.mu.Lock()
+	if a.state != MysisStateRunning {
+		a.mu.Unlock()
+		return nil
+	}
 	a.cancel = nil
 	a.ctx = nil
 
@@ -298,7 +305,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		mcpTools, err := mcpProxy.ListTools(ctx)
 		if err != nil {
 			// Log error but continue - mysis can still chat without tools
-			a.bus.Publish(Event{
+			a.publishCriticalEvent(Event{
 				Type:      EventMysisError,
 				MysisID:   a.id,
 				MysisName: a.name,
@@ -328,7 +335,7 @@ func (a *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			}
 		}
 	} else {
-		a.bus.Publish(Event{
+		a.publishCriticalEvent(Event{
 			Type:      EventMysisError,
 			MysisID:   a.id,
 			MysisName: a.name,
@@ -693,7 +700,7 @@ func (a *Mysis) setError(err error) {
 	a.lastError = err
 	a.mu.Unlock()
 
-	a.bus.Publish(Event{
+	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
 		MysisID:   a.id,
 		MysisName: a.name,
@@ -845,12 +852,17 @@ func (a *Mysis) run(ctx context.Context) {
 			a.mu.RUnlock()
 
 			if isRunning && a.shouldNudge(time.Now()) {
-				// Only nudge if not already in a turn
-				if a.turnMu.TryLock() {
-					a.turnMu.Unlock()
-					go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
+				select {
+				case a.nudgeCh <- struct{}{}:
+				default:
 				}
 			}
+		case <-a.nudgeCh:
+			if !a.turnMu.TryLock() {
+				continue
+			}
+			a.turnMu.Unlock()
+			go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
 		}
 	}
 }
@@ -964,7 +976,7 @@ func (a *Mysis) updateActivityFromToolResult(toolName string, result *mcp.ToolRe
 	var currentTick int64
 	var currentTickOK bool
 	if ok {
-		currentTick, currentTickOK = findIntField(payload, "current_tick", "tick")
+		currentTick, currentTickOK = findCurrentTick(payload)
 		if currentTickOK {
 			a.updateServerTick(now, currentTick)
 		}
@@ -1089,25 +1101,91 @@ func parseToolResultPayload(result *mcp.ToolResult) (interface{}, bool) {
 }
 
 func findIntField(payload interface{}, keys ...string) (int64, bool) {
-	switch value := payload.(type) {
-	case map[string]interface{}:
-		for _, key := range keys {
-			if raw, ok := value[key]; ok {
-				if number, ok := normalizeInt(raw); ok {
-					return number, true
+	queue := []interface{}{payload}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		switch value := current.(type) {
+		case map[string]interface{}:
+			for _, key := range keys {
+				if raw, ok := value[key]; ok {
+					if number, ok := normalizeInt(raw); ok {
+						return number, true
+					}
 				}
 			}
+
+			childKeys := make([]string, 0, len(value))
+			for key := range value {
+				childKeys = append(childKeys, key)
+			}
+			sort.Strings(childKeys)
+			for _, key := range childKeys {
+				queue = append(queue, value[key])
+			}
+		case []interface{}:
+			queue = append(queue, value...)
 		}
-		for _, child := range value {
-			if number, ok := findIntField(child, keys...); ok {
+	}
+
+	return 0, false
+}
+
+func findCurrentTick(payload interface{}) (int64, bool) {
+	if number, ok := findIntFieldAtKeys(payload, "current_tick"); ok {
+		return number, true
+	}
+	if number, ok := findIntFieldInWrappers(payload, "current_tick"); ok {
+		return number, true
+	}
+	if number, ok := findIntField(payload, "current_tick"); ok {
+		return number, true
+	}
+	if number, ok := findIntFieldAtKeys(payload, "tick"); ok {
+		return number, true
+	}
+	if number, ok := findIntFieldInWrappers(payload, "tick"); ok {
+		return number, true
+	}
+	if number, ok := findIntField(payload, "tick"); ok {
+		return number, true
+	}
+	return 0, false
+}
+
+func findIntFieldAtKeys(payload interface{}, keys ...string) (int64, bool) {
+	value, ok := payload.(map[string]interface{})
+	if !ok {
+		return 0, false
+	}
+
+	for _, key := range keys {
+		if raw, ok := value[key]; ok {
+			if number, ok := normalizeInt(raw); ok {
 				return number, true
 			}
 		}
-	case []interface{}:
-		for _, child := range value {
-			if number, ok := findIntField(child, keys...); ok {
-				return number, true
-			}
+	}
+
+	return 0, false
+}
+
+func findIntFieldInWrappers(payload interface{}, key string) (int64, bool) {
+	value, ok := payload.(map[string]interface{})
+	if !ok {
+		return 0, false
+	}
+
+	wrappers := []string{"data", "result", "payload", "response"}
+	for _, wrapper := range wrappers {
+		child, ok := value[wrapper]
+		if !ok {
+			continue
+		}
+		if number, ok := findIntField(child, key); ok {
+			return number, true
 		}
 	}
 
@@ -1140,7 +1218,7 @@ func normalizeInt(value interface{}) (int64, bool) {
 }
 
 func (a *Mysis) emitStateChange(oldState, newState MysisState) {
-	a.bus.Publish(Event{
+	a.publishCriticalEvent(Event{
 		Type:      EventMysisStateChanged,
 		MysisID:   a.id,
 		MysisName: a.name,
@@ -1159,14 +1237,32 @@ func (a *Mysis) setErrorState(err error) {
 	a.lastError = err
 	a.mu.Unlock()
 
-	a.store.UpdateMysisState(a.id, store.MysisStateErrored)
+	if err := a.store.UpdateMysisState(a.id, store.MysisStateErrored); err != nil {
+		log.Warn().
+			Err(err).
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Msg("failed to update mysis state to errored")
+	}
 	a.emitStateChange(oldState, MysisStateErrored)
 
-	a.bus.Publish(Event{
+	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
 		MysisID:   a.id,
 		MysisName: a.name,
 		Data:      ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
+}
+
+func (a *Mysis) publishCriticalEvent(event Event) {
+	if a.bus.PublishBlocking(event, constants.EventBusPublishTimeout) {
+		return
+	}
+
+	log.Warn().
+		Str("event_type", string(event.Type)).
+		Str("mysis_id", a.id).
+		Str("mysis_name", a.name).
+		Msg("event bus publish timeout")
 }

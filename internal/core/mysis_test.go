@@ -79,9 +79,46 @@ func TestMysisLifecycle(t *testing.T) {
 		t.Errorf("expected state=stopped, got %s", mysis.State())
 	}
 
-	// Stop again should error
-	if err := mysis.Stop(); err == nil {
-		t.Error("expected error stopping already stopped mysis")
+	// Stop again should be idempotent
+	if err := mysis.Stop(); err != nil {
+		t.Errorf("expected no error stopping already stopped mysis, got %v", err)
+	}
+}
+
+func TestMysisConcurrentStopDuringTurn(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("concurrent", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "ok").SetDelay(50 * time.Millisecond)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	go func() {
+		_ = mysis.SendMessage("ping", store.MemorySourceDirect)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- mysis.Stop()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Stop() error: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout waiting for Stop")
 	}
 }
 
@@ -816,5 +853,51 @@ func TestMysisActivityTravelArrivalTickReached(t *testing.T) {
 	}
 	if !m.activityUntil.IsZero() {
 		t.Fatal("expected activityUntil to be zero when arrival tick reached")
+	}
+}
+
+func TestFindCurrentTick(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload interface{}
+		want    int64
+		ok      bool
+	}{
+		{
+			name:    "top_level_current_tick",
+			payload: map[string]interface{}{"current_tick": int64(42)},
+			want:    42,
+			ok:      true,
+		},
+		{
+			name:    "wrapper_current_tick",
+			payload: map[string]interface{}{"data": map[string]interface{}{"current_tick": int64(88)}},
+			want:    88,
+			ok:      true,
+		},
+		{
+			name:    "wrapper_tick_fallback",
+			payload: map[string]interface{}{"result": map[string]interface{}{"tick": int64(9)}},
+			want:    9,
+			ok:      true,
+		},
+		{
+			name:    "missing_tick",
+			payload: map[string]interface{}{"status": "ok"},
+			want:    0,
+			ok:      false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := findCurrentTick(test.payload)
+			if ok != test.ok {
+				t.Fatalf("expected ok=%v, got %v", test.ok, ok)
+			}
+			if got != test.want {
+				t.Fatalf("expected tick %d, got %d", test.want, got)
+			}
+		})
 	}
 }
