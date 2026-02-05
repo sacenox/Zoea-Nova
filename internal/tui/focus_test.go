@@ -177,6 +177,32 @@ func TestRenderLogEntryWithReasoningTruncation(t *testing.T) {
 	}
 }
 
+func TestRenderLogEntryWithLongWord(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	// Simulate an AI message with a long unbreakable word (like a UUID)
+	longID := "4c8abe29-6e71-45f4-9809-b0fba48053d3-extra-long-identifier-continuation"
+
+	entry := LogEntry{
+		Role:      "assistant",
+		Source:    "llm",
+		Content:   "I found the ship with ID " + longID + " and it has valuable cargo.",
+		Timestamp: time.Now(),
+	}
+
+	maxWidth := 50
+	lines := renderLogEntryImpl(entry, maxWidth, false)
+
+	// Verify no line exceeds maxWidth
+	for i, line := range lines {
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			t.Errorf("Line %d exceeds maxWidth %d: got %d", i, maxWidth, width)
+		}
+	}
+}
+
 func TestRenderLogEntryToolWithJSON(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)

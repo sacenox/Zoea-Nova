@@ -303,13 +303,13 @@ func TestRenderFocusView(t *testing.T) {
 		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
 	}
 
-	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋")
+	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋", false)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
 
 	// Test with loading state
-	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋")
+	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋", false)
 	if viewLoading == "" {
 		t.Error("expected non-empty focus view with loading")
 	}
@@ -451,7 +451,7 @@ func TestRenderLogEntry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := LogEntry{Role: tt.role, Content: tt.content}
-			lines := renderLogEntry(entry, tt.maxWidth)
+			lines := renderLogEntryImpl(entry, tt.maxWidth, false)
 			if len(lines) == 0 {
 				t.Error("expected at least one line of output")
 			}
@@ -467,7 +467,7 @@ func TestRenderLogEntryPadding(t *testing.T) {
 	// Test that log entries have proper padding on all sides
 	entry := LogEntry{Role: "user", Content: "Test message"}
 	maxWidth := 80
-	lines := renderLogEntry(entry, maxWidth)
+	lines := renderLogEntryImpl(entry, maxWidth, false)
 
 	// Should have at least 2 lines: empty line (top padding) + content
 	if len(lines) < 2 {
@@ -506,7 +506,7 @@ func TestRenderLogEntryLineWidthConsistent(t *testing.T) {
 		Content: "First line\nSecond line\nThird line that is longer",
 	}
 	maxWidth := 60
-	lines := renderLogEntry(entry, maxWidth)
+	lines := renderLogEntryImpl(entry, maxWidth, false)
 
 	if len(lines) < 2 {
 		t.Fatalf("expected multiple lines, got %d", len(lines))
@@ -534,7 +534,7 @@ func TestRenderLogEntryBackgroundApplied(t *testing.T) {
 		Content: "First line\nSecond line\nThird line",
 	}
 	maxWidth := 60
-	lines := renderLogEntry(entry, maxWidth)
+	lines := renderLogEntryImpl(entry, maxWidth, false)
 
 	if len(lines) < 3 {
 		t.Fatalf("expected at least 3 lines, got %d", len(lines))
@@ -564,7 +564,7 @@ func TestRenderLogEntryPaddingAllRoles(t *testing.T) {
 	for _, role := range roles {
 		t.Run(role, func(t *testing.T) {
 			entry := LogEntry{Role: role, Content: "Test content"}
-			lines := renderLogEntry(entry, 80)
+			lines := renderLogEntryImpl(entry, 80, false)
 
 			if len(lines) < 2 {
 				t.Fatalf("expected at least 2 lines, got %d", len(lines))
@@ -728,7 +728,7 @@ func TestRenderFocusViewWithAllRoles(t *testing.T) {
 		{Role: "tool", Content: "Tool result"},
 	}
 
-	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋")
+	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋", false)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
@@ -754,6 +754,7 @@ func TestWrapText(t *testing.T) {
 		{"needs wrap", "Hello World", 6, 2},
 		{"multiple paragraphs", "Line one\n\nLine three", 80, 3},
 		{"zero width defaults", "Test", 0, 1},
+		{"long word hard wrap", strings.Repeat("a", 100), 50, 2}, // Should hard-wrap long words
 	}
 
 	for _, tt := range tests {
@@ -763,6 +764,28 @@ func TestWrapText(t *testing.T) {
 				t.Errorf("expected at least %d lines, got %d", tt.wantMin, len(lines))
 			}
 		})
+	}
+}
+
+func TestWrapTextLongWordNoOverflow(t *testing.T) {
+	// Test that long unbreakable words don't cause overflow
+	longWord := strings.Repeat("a", 200)
+	text := "Normal text " + longWord + " more text"
+	maxWidth := 50
+
+	lines := wrapText(text, maxWidth)
+
+	// Verify no line exceeds maxWidth
+	for i, line := range lines {
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			t.Errorf("Line %d exceeds maxWidth %d: got %d\nLine: %s", i, maxWidth, width, line)
+		}
+	}
+
+	// Should have multiple lines due to hard-wrapping
+	if len(lines) < 3 {
+		t.Errorf("Expected at least 3 lines for long word, got %d", len(lines))
 	}
 }
 
@@ -1091,7 +1114,7 @@ func TestLogPanelWidthWithStyledContent(t *testing.T) {
 
 	var lines []string
 	for _, entry := range entries {
-		entryLines := renderLogEntry(entry, panelContentWidth)
+		entryLines := renderLogEntryImpl(entry, panelContentWidth, false)
 		lines = append(lines, entryLines...)
 	}
 	viewportContent := strings.Join(lines, "\n")
@@ -1133,7 +1156,7 @@ func TestLogEntryWidthMatchesPanelContent(t *testing.T) {
 
 	// Log entries should be rendered at exactly panelInnerWidth
 	entry := LogEntry{Role: "assistant", Content: "Test message with enough content"}
-	lines := renderLogEntry(entry, panelInnerWidth)
+	lines := renderLogEntryImpl(entry, panelInnerWidth, false)
 
 	for i, line := range lines {
 		lineWidth := lipgloss.Width(line)
@@ -1156,7 +1179,7 @@ func TestFocusViewAllSectionsMatchWidth(t *testing.T) {
 	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", "", width)
 
 	entry := LogEntry{Role: "assistant", Content: "Test message content here"}
-	entryLines := renderLogEntry(entry, width-4)
+	entryLines := renderLogEntryImpl(entry, width-4, false)
 	viewportContent := strings.Join(entryLines, "\n")
 	vpView := logStyle.Width(width - 2).Render(viewportContent)
 

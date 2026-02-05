@@ -22,6 +22,7 @@ type LogEntry struct {
 
 // wrapText wraps text to fit within maxWidth display columns, preserving words.
 // Uses lipgloss.Width() for proper Unicode character width calculation.
+// Long words that exceed maxWidth are hard-wrapped to prevent overflow.
 func wrapText(text string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		maxWidth = 80
@@ -42,19 +43,49 @@ func wrapText(text string, maxWidth int) []string {
 			continue
 		}
 
-		currentLine := words[0]
-		for _, word := range words[1:] {
-			// Use lipgloss.Width() for proper Unicode width calculation
-			lineWidth := lipgloss.Width(currentLine)
+		currentLine := ""
+		for _, word := range words {
 			wordWidth := lipgloss.Width(word)
-			if lineWidth+1+wordWidth <= maxWidth {
-				currentLine += " " + word
-			} else {
-				lines = append(lines, currentLine)
+
+			// If word itself is too long, hard-wrap it
+			if wordWidth > maxWidth {
+				// Flush current line first
+				if currentLine != "" {
+					lines = append(lines, currentLine)
+					currentLine = ""
+				}
+				// Hard-wrap the long word
+				for len(word) > 0 {
+					chunk := truncateToWidth(word, maxWidth)
+					lines = append(lines, chunk)
+					// Remove the chunk from word
+					chunkRunes := []rune(chunk)
+					wordRunes := []rune(word)
+					if len(chunkRunes) < len(wordRunes) {
+						word = string(wordRunes[len(chunkRunes):])
+					} else {
+						word = ""
+					}
+				}
+				continue
+			}
+
+			// Normal word wrapping
+			if currentLine == "" {
 				currentLine = word
+			} else {
+				lineWidth := lipgloss.Width(currentLine)
+				if lineWidth+1+wordWidth <= maxWidth {
+					currentLine += " " + word
+				} else {
+					lines = append(lines, currentLine)
+					currentLine = word
+				}
 			}
 		}
-		lines = append(lines, currentLine)
+		if currentLine != "" {
+			lines = append(lines, currentLine)
+		}
 	}
 
 	return lines
