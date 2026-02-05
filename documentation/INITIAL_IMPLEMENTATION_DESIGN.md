@@ -88,12 +88,12 @@ upstream = "https://game.spacemolt.com/mcp"
 - **Migrations:** Schema managed via embedded SQL migrations (e.g., `golang-migrate` or manual versioning). Never support backwards, never write data migrations. If we change the schema we create a new db fresh.
 - **Backup:** Consider periodic WAL checkpoints; SQLite handles crash recovery.
 
-### Database Schema (v7)
+### Database Schema
 
 ```sql
 -- Myses table
 CREATE TABLE myses (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KY,
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     model TEXT NOT NULL,

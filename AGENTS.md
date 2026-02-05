@@ -15,7 +15,6 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Run `make fmt` before committing. Fix all warnings and linter errors.
 - When committing, use `required_permissions: ["all"]` to bypass sandbox restrictions (GPG signing requires full filesystem access).
 - Write unit tests for all modules. Target 80%+ coverage (currently ~61%).
-- Never write data migrations. Schema changes require a fresh database.
 - Use `zerolog` for logging. Never log to stdout/stderr (TUI owns the terminal).
 - Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
 - Follow the Bubble Tea Elm Architecture: Model → Update → View.

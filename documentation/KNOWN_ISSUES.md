@@ -4,49 +4,42 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## High Priority
 
-### Context & Memory Management
-- [x] **Remove internal fields from tool payloads** - Strip Zoea-only fields (`provider`, `state`) from orchestrator tool results to reduce token bloat for LLM context. **RESOLVED**: Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
-
 ### Prompt & Behavior
-- [ ] **Fix self-response to broadcasts** - Myses respond to their own broadcast messages instead of recognizing them as sent by themselves
-  - **Impact:** Creates unnecessary conversation loops
-  - **Root Cause:** Broadcast messages lack sender tracking
-  
-- [ ] **Reduce cognitive looping during waits** - ContinuePrompt fires every 30 seconds regardless of mysis state (travel, cooldown), causing redundant "waiting" responses
-  - **Current:** Fixed 30-second ticker with no state awareness
-  - **Proposed:** Suppress prompts during known wait states or extend interval dynamically
-  
-- [ ] **Reinforce critical rules in ContinuePrompt** - Important rules (collaboration, themed usernames) only appear in SystemPrompt, which may fall out of the 20-message context window
-  - **Impact:** Myses may forget critical behaviors during long sessions
-  - **Evidence:** ContinuePrompt includes limited reminders; enforcement depends on SystemPrompt being in context
+- [ ] **Track broadcast sender and suppress self-response**
+  - **Impact:** Eliminates unnecessary conversation loops and fixes focus view labels
+  - **Needs:** Sender ID stored with broadcast messages and used in behavior filtering and rendering
 
-### Provider Issues
+- [ ] **State-aware ContinuePrompt**
+  - **Impact:** Reduces redundant "waiting" responses during travel and cooldowns
+  - **Needs:** Suppress or extend prompt intervals for known wait states; allow non-movement actions during long travel
+
+- [ ] **Reinforce critical rules in ContinuePrompt**
+  - **Impact:** Prevents drift when the system prompt falls out of the context window
+  - **Needs:** Repeat collaboration rules, themed usernames, and memory search reminders
+
+- [ ] **Remove real-time awareness**
+  - **Impact:** Avoids references to real-world time; uses game tick time only
+
+- [ ] **Add explicit `captains_log_add` guidance in prompts**
+  - **Impact:** Prevents `empty_entry` errors
+  - **Needs:** Include concise examples and constraints in SystemPrompt and ContinuePrompt
+
+### Provider Reliability
 - [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
   - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
   - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
 
 ## Medium Priority
 
-### Gameplay Improvements
-- [ ] **Enable multi-tasking during travel** - Myses should use ticks for non-movement actions (checking cargo, planning routes) during long travel periods
-  - **Current:** ContinuePrompt fires but myses just report "waiting for travel"
-  - **Evidence:** ContinuePrompt always fires while running, even during travel or cooldown
-  
-- [ ] **Remove real-time awareness** - Myses reference real-world time instead of game tick time
-  - **Impact:** Breaks immersion, may cause confusion about game state timing
-
 ### TUI Enhancements
 - [ ] **Display reasoning in focus view** - Reasoning content is stored in database but not rendered in TUI
   - **Proposed:** Render reasoning messages using existing purple text color
   - **Location:** `internal/tui/focus.go`
-  
-- [ ] **Fix broadcast sender labels** - Broadcast messages show "YOU" in focus view regardless of actual sender
-  - **Needs:** Track sender ID in broadcast messages and render with consistent style
-  
+
 - [ ] **Show account status in views** - Surface which game account username each mysis is currently using
   - **Locations:** Focus view header, commander dashboard
   - **Evidence:** Focus labels based on role only; account fields not present in TUI models
-  
+
 - [ ] **Render JSON as tree view** - Tool results with large JSON payloads should use Unicode tree rendering with smart truncation
   - **Format:** Show first 3 items, `[x more]`, last 3 items
   - **Enhancement:** Add verbose toggle for full output
@@ -57,8 +50,6 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ## Low Priority
 
 ### Documentation & Tooling
-- [ ] **Document OpenCode Zen API key path** - Confirm and document the configuration path for OpenCode Zen API keys in user-facing documentation
-  - **Target:** README.md or new setup guide section
 
 - [ ] **Add plan enforcement command** - OpenCode slash command to require plan/todo creation before implementation
   - **Purpose:** Enforce workflow discipline for complex changes
