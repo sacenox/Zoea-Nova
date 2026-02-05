@@ -262,8 +262,8 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 	// Detect JSON content in tool messages and render as tree
 	var wrappedLines []string
 	if entry.Role == "tool" && isJSON(entry.Content) {
-		// Render JSON as tree structure
-		treeStr, err := renderJSONTree(entry.Content, verbose)
+		// Render JSON as tree structure with width constraint
+		treeStr, err := renderJSONTree(entry.Content, verbose, contentWidth)
 		if err == nil {
 			// Tree rendering succeeded
 			wrappedLines = strings.Split(treeStr, "\n")

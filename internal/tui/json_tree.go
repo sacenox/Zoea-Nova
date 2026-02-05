@@ -24,32 +24,45 @@ const (
 // renderJSONTree renders JSON as a Unicode tree structure with smart truncation.
 // If verbose is true, all items are shown. Otherwise, arrays with more than 6 items
 // show first 3, "[x more]", and last 3.
-func renderJSONTree(jsonStr string, verbose bool) (string, error) {
+// maxWidth constrains the width of rendered lines (0 = no limit).
+func renderJSONTree(jsonStr string, verbose bool, maxWidth int) (string, error) {
 	var data interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
 		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
 
 	var lines []string
-	renderValue(data, "", true, verbose, &lines)
+	renderValue(data, "", true, verbose, maxWidth, &lines)
 	return strings.Join(lines, "\n"), nil
 }
 
 // renderValue recursively renders a JSON value as tree lines
-func renderValue(value interface{}, prefix string, isLast bool, verbose bool, lines *[]string) {
+func renderValue(value interface{}, prefix string, isLast bool, verbose bool, maxWidth int, lines *[]string) {
 	switch v := value.(type) {
 	case map[string]interface{}:
-		renderObject(v, prefix, isLast, verbose, lines)
+		renderObject(v, prefix, isLast, verbose, maxWidth, lines)
 	case []interface{}:
-		renderArray(v, prefix, isLast, verbose, lines)
+		renderArray(v, prefix, isLast, verbose, maxWidth, lines)
 	default:
-		// Primitive value
-		*lines = append(*lines, prefix+fmt.Sprintf("%v", v))
+		// Primitive value - wrap if needed
+		valueStr := fmt.Sprintf("%v", v)
+		if maxWidth > 0 {
+			prefixWidth := lipgloss.Width(prefix)
+			availableWidth := maxWidth - prefixWidth
+			if availableWidth < 10 {
+				availableWidth = 10
+			}
+			if lipgloss.Width(valueStr) > availableWidth {
+				// Truncate long values
+				valueStr = truncateToWidth(valueStr, availableWidth-3) + "..."
+			}
+		}
+		*lines = append(*lines, prefix+valueStr)
 	}
 }
 
 // renderObject renders a JSON object
-func renderObject(obj map[string]interface{}, prefix string, isLast bool, verbose bool, lines *[]string) {
+func renderObject(obj map[string]interface{}, prefix string, isLast bool, verbose bool, maxWidth int, lines *[]string) {
 	if len(obj) == 0 {
 		*lines = append(*lines, prefix+"{}")
 		return
@@ -87,12 +100,25 @@ func renderObject(obj map[string]interface{}, prefix string, isLast bool, verbos
 		switch v := val.(type) {
 		case map[string]interface{}:
 			*lines = append(*lines, valuePrefix)
-			renderObject(v, fieldPrefix+treeSpace, isLastField, verbose, lines)
+			renderObject(v, fieldPrefix+treeSpace, isLastField, verbose, maxWidth, lines)
 		case []interface{}:
 			*lines = append(*lines, valuePrefix)
-			renderArray(v, fieldPrefix+treeSpace, isLastField, verbose, lines)
+			renderArray(v, fieldPrefix+treeSpace, isLastField, verbose, maxWidth, lines)
 		default:
-			*lines = append(*lines, valuePrefix+fmt.Sprintf("%v", v))
+			// Primitive value - wrap if needed
+			valueStr := fmt.Sprintf("%v", v)
+			if maxWidth > 0 {
+				prefixWidth := lipgloss.Width(valuePrefix)
+				availableWidth := maxWidth - prefixWidth
+				if availableWidth < 10 {
+					availableWidth = 10
+				}
+				if lipgloss.Width(valueStr) > availableWidth {
+					// Truncate long values
+					valueStr = truncateToWidth(valueStr, availableWidth-3) + "..."
+				}
+			}
+			*lines = append(*lines, valuePrefix+valueStr)
 		}
 	}
 
@@ -106,7 +132,7 @@ func renderObject(obj map[string]interface{}, prefix string, isLast bool, verbos
 }
 
 // renderArray renders a JSON array with smart truncation
-func renderArray(arr []interface{}, prefix string, isLast bool, verbose bool, lines *[]string) {
+func renderArray(arr []interface{}, prefix string, isLast bool, verbose bool, maxWidth int, lines *[]string) {
 	if len(arr) == 0 {
 		*lines = append(*lines, prefix+"[]")
 		return
@@ -176,12 +202,25 @@ func renderArray(arr []interface{}, prefix string, isLast bool, verbose bool, li
 		switch v := val.(type) {
 		case map[string]interface{}:
 			*lines = append(*lines, itemLine)
-			renderObject(v, itemPrefix+treeSpace, isLastItem, verbose, lines)
+			renderObject(v, itemPrefix+treeSpace, isLastItem, verbose, maxWidth, lines)
 		case []interface{}:
 			*lines = append(*lines, itemLine)
-			renderArray(v, itemPrefix+treeSpace, isLastItem, verbose, lines)
+			renderArray(v, itemPrefix+treeSpace, isLastItem, verbose, maxWidth, lines)
 		default:
-			*lines = append(*lines, itemLine+fmt.Sprintf("%v", v))
+			// Primitive value - wrap if needed
+			valueStr := fmt.Sprintf("%v", v)
+			if maxWidth > 0 {
+				prefixWidth := lipgloss.Width(itemLine)
+				availableWidth := maxWidth - prefixWidth
+				if availableWidth < 10 {
+					availableWidth = 10
+				}
+				if lipgloss.Width(valueStr) > availableWidth {
+					// Truncate long values
+					valueStr = truncateToWidth(valueStr, availableWidth-3) + "..."
+				}
+			}
+			*lines = append(*lines, itemLine+valueStr)
 		}
 	}
 

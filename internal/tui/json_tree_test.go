@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestRenderJSONTree_SimpleObject(t *testing.T) {
 	jsonStr := `{"name": "mysis-1", "state": "running", "id": "abc123"}`
 
-	tree, err := renderJSONTree(jsonStr, false)
+	tree, err := renderJSONTree(jsonStr, false, 80)
 	if err != nil {
 		t.Fatalf("Failed to render JSON tree: %v", err)
 	}
@@ -32,7 +34,7 @@ func TestRenderJSONTree_ArrayTruncation(t *testing.T) {
 	}
 	jsonBytes, _ := json.Marshal(items)
 
-	tree, err := renderJSONTree(string(jsonBytes), false)
+	tree, err := renderJSONTree(string(jsonBytes), false, 80)
 	if err != nil {
 		t.Fatalf("Failed to render JSON tree: %v", err)
 	}
@@ -65,7 +67,7 @@ func TestRenderJSONTree_VerboseMode(t *testing.T) {
 	}
 	jsonBytes, _ := json.Marshal(items)
 
-	tree, err := renderJSONTree(string(jsonBytes), true)
+	tree, err := renderJSONTree(string(jsonBytes), true, 80)
 	if err != nil {
 		t.Fatalf("Failed to render JSON tree: %v", err)
 	}
@@ -87,8 +89,34 @@ func TestRenderJSONTree_VerboseMode(t *testing.T) {
 func TestRenderJSONTree_InvalidJSON(t *testing.T) {
 	jsonStr := `{invalid json`
 
-	_, err := renderJSONTree(jsonStr, false)
+	_, err := renderJSONTree(jsonStr, false, 80)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
+	}
+}
+
+func TestRenderJSONTree_LongValueTruncation(t *testing.T) {
+	// Create JSON with a very long string value
+	longValue := strings.Repeat("a", 200)
+	jsonStr := `{"id": "` + longValue + `", "name": "test"}`
+
+	maxWidth := 50
+	tree, err := renderJSONTree(jsonStr, false, maxWidth)
+	if err != nil {
+		t.Fatalf("Failed to render JSON tree: %v", err)
+	}
+
+	lines := strings.Split(tree, "\n")
+	for i, line := range lines {
+		// Use lipgloss.Width for proper Unicode display width
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			t.Errorf("Line %d exceeds maxWidth %d: got %d display width\nLine: %s", i, maxWidth, width, stripANSI(line))
+		}
+	}
+
+	// Should contain truncation indicator
+	if !strings.Contains(tree, "...") {
+		t.Error("Expected truncation indicator '...' for long value")
 	}
 }
