@@ -5,10 +5,6 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ## High Priority
 
 ### Prompt & Behavior
-- [ ] **Track broadcast sender and suppress self-response**
-  - **Impact:** Eliminates unnecessary conversation loops and fixes focus view labels
-  - **Needs:** Sender ID stored with broadcast messages and used in behavior filtering and rendering
-
 - [ ] **State-aware ContinuePrompt**
   - **Impact:** Reduces redundant "waiting" responses during travel and cooldowns
   - **Needs:** Suppress or extend prompt intervals for known wait states; allow non-movement actions during long travel
@@ -24,14 +20,12 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
   - **Impact:** Prevents `empty_entry` errors
   - **Needs:** Include concise examples and constraints in SystemPrompt and ContinuePrompt
 
-### Provider Reliability
-- [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
-  - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
-  - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
-
 ## Medium Priority
 
 ### TUI Enhancements
+
+Ensure all changes stay consistent with the project's design rules.
+
 - [ ] **Display reasoning in focus view** - Reasoning content is stored in database but not rendered in TUI
   - **Proposed:** Render reasoning messages using existing purple text color
   - **Location:** `internal/tui/focus.go`
@@ -49,6 +43,12 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## Low Priority
 
+### Provider Reliability
+- [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
+  - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
+  - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
+
+
 ### Documentation & Tooling
 
 - [ ] **Add plan enforcement command** - OpenCode slash command to require plan/todo creation before implementation
@@ -65,6 +65,8 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ---
 
 ## Recently Resolved
+
+- [x] **Track broadcast sender and suppress self-response** (2026-02-05) - Added sender_id to memories (schema v8), excluded sender from broadcast recipients, and updated focus view labels to distinguish swarm broadcasts from self broadcasts.
 
 - [x] **Tool payload bloat removal** (2026-02-04) - Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
 

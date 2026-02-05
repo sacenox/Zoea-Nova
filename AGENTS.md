@@ -67,6 +67,7 @@ The application uses SQLite for persistence.
 - **Mysis**: An AI-controlled player instance with its own provider, memory, and state.
 - **Commander**: The swarm orchestrator that owns Mysis lifecycles and routes messages.
 - **Swarm**: The collection of all Myses managed by the Commander.
+- **Broadcast**: A message sent to all running myses except the sender. Stored with sender_id for tracking.
 - **Provider**: An LLM backend (Ollama local or OpenCode Zen remote).
 - **MCP**: Model Context Protocol—the interface to SpaceMolt game actions.
 - **Event Bus**: Channel-based pub/sub for TUI updates from core goroutines.
