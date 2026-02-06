@@ -197,3 +197,8 @@ func (p *MockProvider) waitDelay(ctx context.Context) error {
 		return nil
 	}
 }
+
+// Close is a no-op for mock provider (no resources to clean up).
+func (p *MockProvider) Close() error {
+	return nil
+}

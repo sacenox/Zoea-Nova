@@ -17,6 +17,7 @@ import (
 // Commander orchestrates the swarm of myses.
 type Commander struct {
 	mu sync.RWMutex
+	wg sync.WaitGroup // Tracks running mysis goroutines
 
 	myses    map[string]*Mysis
 	store    *store.Store
@@ -68,7 +69,7 @@ func (c *Commander) LoadMyses() error {
 			continue
 		}
 
-		mysis := NewMysis(sm.ID, sm.Name, sm.CreatedAt, p, c.store, c.bus)
+		mysis := NewMysis(sm.ID, sm.Name, sm.CreatedAt, p, c.store, c.bus, c)
 		if c.mcp != nil {
 			mysis.SetMCP(c.mcp)
 		}
@@ -106,7 +107,7 @@ func (c *Commander) CreateMysis(name, providerName string) (*Mysis, error) {
 	}
 
 	// Create runtime mysis
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus, c)
 	if c.mcp != nil {
 		mysis.SetMCP(c.mcp)
 	}
@@ -187,7 +188,13 @@ func (c *Commander) StartMysis(id string) error {
 	if err != nil {
 		return err
 	}
-	return mysis.Start()
+
+	c.wg.Add(1) // Track this goroutine
+	if err := mysis.Start(); err != nil {
+		c.wg.Done() // Failed to start, don't track
+		return err
+	}
+	return nil
 }
 
 // StopMysis stops a mysis by ID.
@@ -368,6 +375,7 @@ func (c *Commander) StopAll() {
 
 	done := make(chan struct{})
 	go func() {
+		// Stop all running myses
 		for _, m := range myses {
 			if m.State() == MysisStateRunning {
 				if err := m.Stop(); err != nil {
@@ -375,6 +383,8 @@ func (c *Commander) StopAll() {
 				}
 			}
 		}
+		// Wait for all mysis goroutines to complete
+		c.wg.Wait()
 		close(done)
 	}()
 

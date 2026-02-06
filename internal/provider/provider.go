@@ -52,6 +52,9 @@ type Provider interface {
 
 	// Stream sends messages and returns a channel that streams response chunks.
 	Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error)
+
+	// Close closes idle HTTP connections and cleans up resources.
+	Close() error
 }
 
 type ProviderFactory interface {

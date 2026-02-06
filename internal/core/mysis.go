@@ -28,6 +28,7 @@ type Mysis struct {
 	store     *store.Store
 	bus       *EventBus
 	mcp       *mcp.Proxy
+	commander *Commander // Reference to parent commander for WaitGroup
 
 	state  MysisState
 	ctx    context.Context
@@ -58,7 +59,11 @@ type contextStats struct {
 }
 
 // NewMysis creates a new mysis from stored data.
-func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus) *Mysis {
+func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus, cmd ...*Commander) *Mysis {
+	var commander *Commander
+	if len(cmd) > 0 {
+		commander = cmd[0]
+	}
 	return &Mysis{
 		id:            id,
 		name:          name,
@@ -66,6 +71,7 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 		provider:      p,
 		store:         s,
 		bus:           bus,
+		commander:     commander,
 		state:         MysisStateIdle,
 		activityState: ActivityStateIdle,
 		nudgeCh:       make(chan struct{}, 1),
@@ -282,6 +288,13 @@ func (m *Mysis) Stop() error {
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateStopped)
 	a.releaseCurrentAccount()
+
+	// Close provider HTTP client
+	if a.provider != nil {
+		if err := a.provider.Close(); err != nil {
+			log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to close provider")
+		}
+	}
 
 	return nil
 }
@@ -961,6 +974,11 @@ func (m *Mysis) isSnapshotTool(toolName string) bool {
 // run is the mysis main processing loop.
 func (m *Mysis) run(ctx context.Context) {
 	a := m
+	// Signal goroutine completion when exiting
+	if a.commander != nil {
+		defer a.commander.wg.Done()
+	}
+
 	// Ticker to nudge the mysis if it's idle
 	ticker := time.NewTicker(constants.IdleNudgeInterval)
 	defer ticker.Stop()

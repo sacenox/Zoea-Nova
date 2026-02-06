@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -147,6 +148,9 @@ func main() {
 
 	log.Debug().Bool("upstream", mcpProxy.HasUpstream()).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP proxy initialized")
 
+	// Log goroutine count at startup for leak detection
+	log.Info().Int("goroutines", runtime.NumGoroutine()).Msg("Application started")
+
 	// Set up signal handling for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -168,7 +172,8 @@ func main() {
 	go func() {
 		<-sigCh
 		log.Info().Msg("Received shutdown signal")
-		commander.StopAll()
+		// Don't call StopAll here - let main cleanup handle it after program.Run()
+		// This avoids stopping myses twice
 		bus.Close() // Close event bus to unblock TUI event listener
 		program.Quit()
 	}()
@@ -179,14 +184,18 @@ func main() {
 	}
 
 	// Clean shutdown
+	log.Info().Int("goroutines", runtime.NumGoroutine()).Msg("Shutdown initiated")
 	commander.StopAll()
+
+	// Close bus (idempotent if already closed by onQuit or signal handler)
+	bus.Close()
 
 	// Release all accounts
 	if err := s.ReleaseAllAccounts(); err != nil {
 		log.Warn().Err(err).Msg("Failed to release accounts on shutdown")
 	}
 
-	log.Info().Msg("Zoea Nova shutdown complete")
+	log.Info().Int("goroutines", runtime.NumGoroutine()).Msg("Zoea Nova shutdown complete")
 }
 
 func initLogging(debug bool) error {
