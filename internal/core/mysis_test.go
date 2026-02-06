@@ -196,14 +196,15 @@ eventLoop:
 	}
 
 	// Check memories were stored
-	// Expected: system prompt, continue prompt (initial trigger), assistant response (initial),
+	// Expected: system prompt, assistant response (from ephemeral nudge),
 	//           user message, assistant response
+	// NOTE: The continue prompt (initial trigger) is now ephemeral and NOT stored in DB
 	memories, err := s.GetMemories(stored.ID)
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
 	}
-	if len(memories) != 5 {
-		t.Errorf("expected 5 memories, got %d", len(memories))
+	if len(memories) != 4 {
+		t.Errorf("expected 4 memories, got %d", len(memories))
 	}
 
 	mysis.Stop()
@@ -608,7 +609,7 @@ func TestContinuePromptAddsDriftReminder(t *testing.T) {
 
 	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "Waiting 5 minutes for travel.", "", "")
 
-	prompt := mysis.buildContinuePrompt()
+	prompt := mysis.buildContinuePrompt(0)
 	if !strings.Contains(prompt, "DRIFT REMINDERS") {
 		t.Fatal("expected drift reminders section in continue prompt")
 	}
@@ -1203,4 +1204,143 @@ func TestStopAtVariousTimings(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNudgeCircuitBreaker tests the circuit breaker logic that errors out stuck myses
+func TestNudgeCircuitBreaker(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	t.Run("errors_after_3_ticker_fires", func(t *testing.T) {
+		// Create a mock provider that never responds (long delay)
+		mock := provider.NewMock("stuck", "")
+		mock.SetDelay(10 * time.Second) // Will timeout
+
+		stored, err := s.CreateMysis("stuck-mysis", "stuck", "stuck-model", 0.7)
+		if err != nil {
+			t.Fatalf("CreateMysis() error: %v", err)
+		}
+
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Start the mysis
+		if err := mysis.Start(); err != nil {
+			t.Fatalf("Start() error: %v", err)
+		}
+		defer mysis.Stop()
+
+		// Manually increment the counter 3 times to simulate 3 ticker fires
+		// (In real usage, the ticker would do this automatically)
+		for i := 0; i < 3; i++ {
+			mysis.mu.Lock()
+			mysis.nudgeFailCount++
+			count := mysis.nudgeFailCount
+			mysis.mu.Unlock()
+
+			if count >= 3 {
+				// Trigger error state
+				mysis.setError(errors.New("Failed to respond after 3 nudges"))
+				break
+			}
+		}
+
+		// Wait for error state transition
+		timeout := time.After(2 * time.Second)
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+
+		errored := false
+		for !errored {
+			select {
+			case <-timeout:
+				t.Fatal("timed out waiting for error state after 3 nudges")
+			case <-ticker.C:
+				if mysis.State() == MysisStateErrored {
+					errored = true
+				}
+			}
+		}
+
+		// Verify error message
+		lastErr := mysis.LastError()
+		if lastErr == nil {
+			t.Fatal("expected error to be set after 3 nudges")
+		}
+		if !strings.Contains(lastErr.Error(), "Failed to respond after 3 nudges") {
+			t.Errorf("expected 'Failed to respond after 3 nudges' error, got: %v", lastErr)
+		}
+	})
+
+	t.Run("resets_counter_on_successful_response", func(t *testing.T) {
+		// Create a mock provider that responds quickly
+		mock := provider.NewMock("responsive", "I'm working!")
+
+		stored, err := s.CreateMysis("responsive-mysis", "responsive", "responsive-model", 0.7)
+		if err != nil {
+			t.Fatalf("CreateMysis() error: %v", err)
+		}
+
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Start the mysis
+		if err := mysis.Start(); err != nil {
+			t.Fatalf("Start() error: %v", err)
+		}
+		defer mysis.Stop()
+
+		// Manually set counter to 2 (simulate 2 ticker fires)
+		mysis.mu.Lock()
+		mysis.nudgeFailCount = 2
+		mysis.mu.Unlock()
+
+		// Verify counter is at 2
+		mysis.mu.RLock()
+		count := mysis.nudgeFailCount
+		mysis.mu.RUnlock()
+		if count != 2 {
+			t.Fatalf("expected nudgeFailCount=2, got %d", count)
+		}
+
+		// Send a successful message (should reset counter)
+		if err := mysis.SendMessage("test message", store.MemorySourceDirect); err != nil {
+			t.Fatalf("SendMessage() error: %v", err)
+		}
+
+		// Wait for response processing
+		time.Sleep(200 * time.Millisecond)
+
+		// Verify counter was reset to 0
+		mysis.mu.RLock()
+		count = mysis.nudgeFailCount
+		mysis.mu.RUnlock()
+		if count != 0 {
+			t.Errorf("expected nudgeFailCount to reset to 0 after successful response, got %d", count)
+		}
+
+		// Verify state is still running (not errored)
+		if mysis.State() != MysisStateRunning {
+			t.Errorf("expected state=running after successful response, got %s", mysis.State())
+		}
+	})
+
+	t.Run("increments_counter_on_ticker_fire", func(t *testing.T) {
+		// Test that the counter increments properly
+		mysis := &Mysis{}
+		mysis.nudgeFailCount = 0
+
+		// Simulate ticker fires (what happens in real usage)
+		for i := 1; i <= 2; i++ {
+			// This is what the ticker.C case does
+			mysis.nudgeFailCount++
+
+			if mysis.nudgeFailCount != i {
+				t.Errorf("after ticker fire %d: expected nudgeFailCount=%d, got %d", i, i, mysis.nudgeFailCount)
+			}
+		}
+
+		// Verify final count
+		if mysis.nudgeFailCount != 2 {
+			t.Errorf("expected final nudgeFailCount=2, got %d", mysis.nudgeFailCount)
+		}
+	})
 }

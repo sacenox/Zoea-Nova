@@ -21,9 +21,10 @@ func TestMergeSystemMessagesOpenAI_MultipleSystemMessages(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 merged system + 2 non-system = 3 messages
-	if len(result) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(result))
+	// Should have: 1 merged system + 2 non-system + 1 continuation = 4 messages
+	// (Continuation added because conversation ends with assistant message)
+	if len(result) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(result))
 	}
 
 	// First message should be merged system message
@@ -41,6 +42,11 @@ func TestMergeSystemMessagesOpenAI_MultipleSystemMessages(t *testing.T) {
 	}
 	if result[2].Role != "assistant" || result[2].Content != "Hi!" {
 		t.Errorf("expected assistant message 'Hi!', got role=%s content=%q", result[2].Role, result[2].Content)
+	}
+
+	// Last should be continuation prompt added by workaround
+	if result[3].Role != "user" || result[3].Content != "Continue." {
+		t.Errorf("expected continuation prompt, got role=%s content=%q", result[3].Role, result[3].Content)
 	}
 }
 
@@ -87,15 +93,21 @@ func TestMergeSystemMessagesOpenAI_NoSystemMessages(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should be unchanged
-	if len(result) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result))
+	// Should have: 2 messages + 1 continuation = 3 messages
+	// (Continuation added because conversation ends with assistant message)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(result))
 	}
 	if result[0].Role != "user" || result[0].Content != "Hello" {
 		t.Errorf("expected user message unchanged, got role=%s content=%q", result[0].Role, result[0].Content)
 	}
 	if result[1].Role != "assistant" || result[1].Content != "Hi!" {
 		t.Errorf("expected assistant message unchanged, got role=%s content=%q", result[1].Role, result[1].Content)
+	}
+
+	// Last should be continuation prompt added by workaround
+	if result[2].Role != "user" || result[2].Content != "Continue." {
+		t.Errorf("expected continuation prompt, got role=%s content=%q", result[2].Role, result[2].Content)
 	}
 }
 
@@ -113,9 +125,10 @@ func TestMergeSystemMessagesOpenAI_PreservesConversation(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 system (merged) + 4 conversation messages = 5 total
-	if len(result) != 5 {
-		t.Errorf("expected 5 messages, got %d", len(result))
+	// Should have: 1 system (merged) + 4 conversation messages + 1 continuation = 6 total
+	// (Continuation added because conversation ends with assistant message)
+	if len(result) != 6 {
+		t.Errorf("expected 6 messages, got %d", len(result))
 	}
 
 	// First should be merged system
@@ -139,6 +152,11 @@ func TestMergeSystemMessagesOpenAI_PreservesConversation(t *testing.T) {
 	}
 	if result[4].Role != "assistant" || result[4].Content != "I'm good" {
 		t.Errorf("assistant message 2 not preserved, got role=%s content=%q", result[4].Role, result[4].Content)
+	}
+
+	// Last should be continuation prompt added by workaround
+	if result[5].Role != "user" || result[5].Content != "Continue." {
+		t.Errorf("expected continuation prompt, got role=%s content=%q", result[5].Role, result[5].Content)
 	}
 }
 
@@ -164,9 +182,10 @@ func TestMergeSystemMessagesOpenAI_SystemFirst(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 system + 2 non-system = 3 messages
-	if len(result) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(result))
+	// Should have: 1 system + 2 non-system + 1 continuation = 4 messages
+	// (Continuation added because conversation ends with assistant message)
+	if len(result) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(result))
 	}
 
 	// System should be first
@@ -183,6 +202,11 @@ func TestMergeSystemMessagesOpenAI_SystemFirst(t *testing.T) {
 	}
 	if result[2].Role != "assistant" {
 		t.Errorf("expected third role=assistant, got %s", result[2].Role)
+	}
+
+	// Last should be continuation prompt added by workaround
+	if result[3].Role != "user" || result[3].Content != "Continue." {
+		t.Errorf("expected continuation prompt, got role=%s content=%q", result[3].Role, result[3].Content)
 	}
 }
 

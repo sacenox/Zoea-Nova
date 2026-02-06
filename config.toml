@@ -10,10 +10,10 @@ rate_burst = 3
 
 [providers.opencode_zen]
 endpoint = "https://opencode.ai/zen/v1"
-model = "glm-4.7-free"
+model = "big-pickle"
 temperature = 0.7
-rate_limit = 10.0
-rate_burst = 5
+rate_limit = 1.0
+rate_burst = 2
 
 [mcp]
 upstream = "https://game.spacemolt.com/mcp"

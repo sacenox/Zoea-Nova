@@ -38,8 +38,18 @@ Context is limited - use search tools for older information.
 
 Make your own decisions. Adapt. Support the swarm.`
 
-// ContinuePrompt is sent to myses when they finish a turn to encourage autonomy.
+// ContinuePrompt is sent to myses when they finish a turn to encourage autonomy (Level 1 - gentle).
 const ContinuePrompt = `What's your next move?
+
+Remember: Always call get_notifications at the end of every turn.`
+
+// ContinuePromptFirm is sent on the second nudge attempt (Level 2 - firmer).
+const ContinuePromptFirm = `You need to respond. What action will you take?
+
+Remember: Always call get_notifications at the end of every turn.`
+
+// ContinuePromptUrgent is sent on the third+ nudge attempt (Level 3 - urgent).
+const ContinuePromptUrgent = `URGENT: Respond immediately or you will be stopped.
 
 Remember: Always call get_notifications at the end of every turn.`
 

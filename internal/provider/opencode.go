@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	openai "github.com/sashabaranov/go-openai"
@@ -167,72 +168,126 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 	}
 
 	url := p.baseURL + "/chat/completions"
-	log.Debug().
-		Str("provider", "opencode_zen").
-		Str("url", url).
-		Str("model", req.Model).
-		Bool("has_api_key", p.apiKey != "").
-		Int("message_count", len(req.Messages)).
-		Int("tool_count", len(req.Tools)).
-		Str("request_body", string(body)).
-		Msg("OpenCode chat completion request")
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if p.apiKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
 
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	// Retry logic for transient errors (rate limits, server outages)
+	maxRetries := 3
+	baseDelay := 1 * time.Second
 
-	log.Debug().
-		Str("provider", "opencode_zen").
-		Str("url", url).
-		Int("status", resp.StatusCode).
-		Msg("OpenCode chat completion response")
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s
+			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			log.Warn().
+				Str("provider", "opencode_zen").
+				Int("attempt", attempt).
+				Dur("delay", delay).
+				Msg("Retrying OpenCode request after transient error")
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		payload, _ := io.ReadAll(resp.Body)
-		log.Error().
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		log.Debug().
 			Str("provider", "opencode_zen").
+			Str("url", url).
+			Str("model", req.Model).
+			Bool("has_api_key", p.apiKey != "").
+			Int("message_count", len(req.Messages)).
+			Int("tool_count", len(req.Tools)).
+			Int("attempt", attempt+1).
+			Str("request_body", string(body)).
+			Msg("OpenCode chat completion request")
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if p.apiKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+		}
+
+		resp, err := p.httpClient.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue // Network error - retry
+		}
+		defer resp.Body.Close()
+
+		log.Debug().
+			Str("provider", "opencode_zen").
+			Str("url", url).
 			Int("status", resp.StatusCode).
-			Str("body", string(payload)).
-			Msg("OpenCode non-2xx response")
-		return nil, fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
-	}
+			Int("attempt", attempt+1).
+			Msg("OpenCode chat completion response")
 
-	// Read body for logging
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Error().
+		// Check for retryable status codes
+		if resp.StatusCode == 429 || resp.StatusCode == 500 || resp.StatusCode == 502 ||
+			resp.StatusCode == 503 || resp.StatusCode == 504 {
+			payload, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+
+			log.Warn().
+				Str("provider", "opencode_zen").
+				Int("status", resp.StatusCode).
+				Int("attempt", attempt+1).
+				Str("body", string(payload)).
+				Msg("OpenCode retryable error")
+
+			resp.Body.Close()
+			continue // Retry on transient server errors and rate limits
+		}
+
+		// Non-retryable client error (4xx except 429)
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			payload, _ := io.ReadAll(resp.Body)
+			log.Error().
+				Str("provider", "opencode_zen").
+				Int("status", resp.StatusCode).
+				Str("body", string(payload)).
+				Msg("OpenCode non-2xx response")
+			return nil, fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+		}
+
+		// Success - read and decode body
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Error().
+				Str("provider", "opencode_zen").
+				Err(err).
+				Msg("OpenCode failed to read response body")
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		var decoded openaiChatResponse
+		if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
+			log.Error().
+				Str("provider", "opencode_zen").
+				Err(err).
+				Str("body", string(bodyBytes)).
+				Msg("OpenCode JSON decode failed")
+			return nil, fmt.Errorf("decode response: %w", err)
+		}
+
+		log.Debug().
 			Str("provider", "opencode_zen").
-			Err(err).
-			Msg("OpenCode failed to read response body")
-		return nil, fmt.Errorf("read response body: %w", err)
+			Int("choice_count", len(decoded.Choices)).
+			Msg("OpenCode response decoded")
+
+		return &decoded, nil
 	}
 
-	var decoded openaiChatResponse
-	if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
-		log.Error().
-			Str("provider", "opencode_zen").
-			Err(err).
-			Str("body", string(bodyBytes)).
-			Msg("OpenCode JSON decode failed")
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-
-	log.Debug().
+	// All retries exhausted
+	log.Error().
 		Str("provider", "opencode_zen").
-		Int("choice_count", len(decoded.Choices)).
-		Msg("OpenCode response decoded")
-
-	return &decoded, nil
+		Int("max_retries", maxRetries).
+		Err(lastErr).
+		Msg("OpenCode request failed after all retries")
+	return nil, fmt.Errorf("request failed after %d retries: %w", maxRetries, lastErr)
 }
 
 // Stream sends messages and returns a channel that streams response chunks.

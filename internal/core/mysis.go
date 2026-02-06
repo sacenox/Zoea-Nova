@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -46,6 +47,7 @@ type Mysis struct {
 	lastServerTickAt       time.Time
 	tickDuration           time.Duration
 	nudgeCh                chan struct{}
+	nudgeFailCount         int // Circuit breaker: consecutive nudge failures
 }
 
 type contextStats struct {
@@ -597,6 +599,11 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			return fmt.Errorf("store response: %w", err)
 		}
 
+		// Reset nudge failure counter on successful response
+		a.mu.Lock()
+		a.nudgeFailCount = 0
+		a.mu.Unlock()
+
 		// Signal network idle
 		a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
@@ -622,6 +629,277 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 func (m *Mysis) SendMessage(content string, source store.MemorySource) error {
 	a := m
 	return a.SendMessageFrom(content, source, "")
+}
+
+// SendEphemeralMessage sends a message to the mysis that is NOT persisted to the database.
+// The LLM response to the message IS still persisted. Used for nudges/automation scaffolding.
+func (m *Mysis) SendEphemeralMessage(content string, source store.MemorySource) error {
+	a := m
+	a.turnMu.Lock()
+	defer a.turnMu.Unlock()
+
+	a.mu.RLock()
+	state := a.state
+	p := a.provider
+	mcpProxy := a.mcp
+	a.mu.RUnlock()
+
+	if state != MysisStateRunning {
+		return fmt.Errorf("mysis not running")
+	}
+
+	// NOTE: We skip storing the ephemeral message to the database
+	// Unlike SendMessageFrom, we don't call store.AddMemory here
+
+	// Create context for the entire conversation turn
+	a.mu.RLock()
+	parentCtx := a.ctx
+	a.mu.RUnlock()
+
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, constants.LLMRequestTimeout)
+	defer cancel()
+
+	// Get available tools from MCP proxy
+	var tools []provider.Tool
+	if mcpProxy != nil {
+		mcpTools, err := mcpProxy.ListTools(ctx)
+		if err != nil {
+			// Log error but continue - mysis can still chat without tools
+			a.publishCriticalEvent(Event{
+				Type:      EventMysisError,
+				MysisID:   a.id,
+				MysisName: a.name,
+				Error:     &ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
+				Timestamp: time.Now(),
+			})
+		} else {
+			tools = make([]provider.Tool, len(mcpTools))
+			for i, t := range mcpTools {
+				tools[i] = provider.Tool{
+					Name:        t.Name,
+					Description: t.Description,
+					Parameters:  t.InputSchema,
+				}
+			}
+		}
+	} else {
+		a.publishCriticalEvent(Event{
+			Type:      EventMysisError,
+			MysisID:   a.id,
+			MysisName: a.name,
+			Error:     &ErrorData{Error: "MCP proxy not configured - no tools available"},
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Loop: keep calling LLM until we get a final text response
+	for iteration := 0; iteration < constants.MaxToolIterations; iteration++ {
+		// Get recent conversation history (keeps context small for faster inference)
+		memories, err := a.getContextMemories()
+		if err != nil {
+			a.setError(err)
+			return fmt.Errorf("get memories: %w", err)
+		}
+
+		memoryStats := a.computeMemoryStats(memories)
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "context_memories").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", 0).
+			Int("content_bytes", memoryStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", 0).
+			Msg("Context stats (ephemeral)")
+
+		// Convert to provider messages
+		messages := a.memoriesToMessages(memories)
+
+		// Add ephemeral message to the end (in-memory only, not persisted)
+		role := store.MemoryRoleUser
+		if source == store.MemorySourceSystem {
+			role = store.MemoryRoleSystem
+		}
+		messages = append(messages, provider.Message{
+			Role:    string(role),
+			Content: content,
+		})
+
+		messageStats := a.computeMessageStats(messages)
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "messages_converted").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", messageStats.MessageCount).
+			Int("content_bytes", messageStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", messageStats.ToolCallCount).
+			Msg("Context stats (ephemeral)")
+
+		// Signal LLM activity start
+		a.bus.Publish(Event{
+			Type:      EventNetworkLLM,
+			MysisID:   a.id,
+			MysisName: a.name,
+			Timestamp: time.Now(),
+		})
+		log.Debug().
+			Str("mysis_id", a.id).
+			Str("mysis_name", a.name).
+			Str("stage", "before_llm_call").
+			Int("memory_count", memoryStats.MemoryCount).
+			Int("message_count", messageStats.MessageCount).
+			Int("content_bytes", messageStats.ContentBytes).
+			Int("reasoning_bytes", memoryStats.ReasoningBytes).
+			Interface("role_counts", memoryStats.RoleCounts).
+			Interface("source_counts", memoryStats.SourceCounts).
+			Int("tool_call_count", messageStats.ToolCallCount).
+			Msg("Context stats (ephemeral)")
+
+		// Set activity state to indicate LLM call in progress
+		a.setActivity(ActivityStateLLMCall, time.Time{})
+
+		// Get response from provider
+		var response *provider.ChatResponse
+		if len(tools) > 0 {
+			response, err = p.ChatWithTools(ctx, messages, tools)
+		} else {
+			// No tools available, use simple chat
+			text, chatErr := p.Chat(ctx, messages)
+			if chatErr != nil {
+				err = chatErr
+			} else {
+				response = &provider.ChatResponse{Content: text}
+			}
+		}
+
+		// Clear LLM activity state after call completes (success or failure)
+		a.setActivity(ActivityStateIdle, time.Time{})
+
+		if err != nil {
+			log.Error().
+				Str("mysis", a.name).
+				Str("provider", p.Name()).
+				Err(err).
+				Msg("Provider returned error (ephemeral)")
+			a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+			a.setError(err)
+			return fmt.Errorf("provider chat: %w", err)
+		}
+
+		if response.Reasoning != "" {
+			log.Debug().Str("mysis", a.name).Int("reasoning_len", len(response.Reasoning)).Msg("LLM reasoning captured (ephemeral)")
+		}
+
+		// If we have tool calls, execute them
+		if len(response.ToolCalls) > 0 {
+			// Store the assistant's tool call request
+			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
+			if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON, response.Reasoning, ""); err != nil {
+				a.setError(err)
+				return fmt.Errorf("store tool call: %w", err)
+			}
+
+			// Emit event showing which tools are being called
+			toolNames := make([]string, len(response.ToolCalls))
+			for i, tc := range response.ToolCalls {
+				toolNames[i] = tc.Name
+			}
+			a.bus.Publish(Event{
+				Type:      EventMysisMessage,
+				MysisID:   a.id,
+				MysisName: a.name,
+				Message:   &MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
+				Timestamp: time.Now(),
+			})
+
+			// Execute each tool call
+			for _, tc := range response.ToolCalls {
+				// Signal MCP activity
+				a.bus.Publish(Event{
+					Type:      EventNetworkMCP,
+					MysisID:   a.id,
+					MysisName: a.name,
+					Timestamp: time.Now(),
+				})
+
+				// Set activity state to indicate MCP call in progress
+				a.setActivity(ActivityStateMCPCall, time.Time{})
+
+				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
+
+				// Clear MCP activity state after call completes
+				a.setActivity(ActivityStateIdle, time.Time{})
+
+				a.updateActivityFromToolResult(result, execErr)
+
+				// Store the tool result
+				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
+				if err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, "", ""); err != nil {
+					a.setError(err)
+					return fmt.Errorf("store tool result: %w", err)
+				}
+
+				// Emit tool result event
+				a.bus.Publish(Event{
+					Type:      EventMysisMessage,
+					MysisID:   a.id,
+					MysisName: a.name,
+					Message:   &MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
+					Timestamp: time.Now(),
+				})
+			}
+
+			// Continue loop to get next LLM response
+			continue
+		}
+
+		// No tool calls - we have a final response
+		finalResponse := response.Content
+		if finalResponse == "" && response.Reasoning == "" {
+			finalResponse = constants.FallbackLLMResponse
+		}
+
+		// Store the assistant response
+		if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse, response.Reasoning, ""); err != nil {
+			a.setError(err)
+			return fmt.Errorf("store response: %w", err)
+		}
+
+		// Reset nudge failure counter on successful response
+		a.mu.Lock()
+		a.nudgeFailCount = 0
+		a.mu.Unlock()
+
+		// Signal network idle
+		a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+
+		// Emit response event
+		a.bus.Publish(Event{
+			Type:      EventMysisResponse,
+			MysisID:   a.id,
+			MysisName: a.name,
+			Message:   &MessageData{Role: "assistant", Content: finalResponse},
+			Timestamp: time.Now(),
+		})
+
+		return nil
+	}
+
+	// Signal network idle on max iterations
+	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+
+	return fmt.Errorf("max tool iterations (%d) exceeded", constants.MaxToolIterations)
 }
 
 // QueueBroadcast stores a broadcast message and triggers async processing.
@@ -932,6 +1210,10 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// This ensures OpenAI Chat Completions API compliance
 	compacted = a.removeOrphanedToolMessages(compacted)
 
+	// Remove orphaned tool calls (assistant tool calls without corresponding tool results)
+	// This prevents OpenCode Zen API crashes when context window cuts off tool results
+	compacted = a.removeOrphanedToolCalls(compacted)
+
 	// Always try to fetch the system prompt and prepend it if not already first
 	system, err := a.store.GetSystemMemory(a.id)
 	if err != nil {
@@ -1015,6 +1297,68 @@ func (m *Mysis) compactSnapshots(memories []*store.Memory) []*store.Memory {
 	return result
 }
 
+// collectValidToolResultIDs extracts all tool call IDs from tool result messages.
+// Used to validate that assistant tool calls have corresponding tool results.
+func (m *Mysis) collectValidToolResultIDs(memories []*store.Memory) map[string]bool {
+	validToolResults := make(map[string]bool)
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			idx := strings.Index(mem.Content, constants.ToolCallStorageFieldDelimiter)
+			if idx > 0 {
+				toolCallID := mem.Content[:idx]
+				validToolResults[toolCallID] = true
+			}
+		}
+	}
+
+	return validToolResults
+}
+
+// removeOrphanedToolCalls removes assistant messages with tool calls that don't have
+// corresponding tool result messages. This can happen due to:
+// 1. Context window cutting off tool results but keeping tool calls
+// 2. Context compaction removing tool result messages
+//
+// OpenAI Chat Completions API may crash if assistant tool calls don't have matching results.
+func (m *Mysis) removeOrphanedToolCalls(memories []*store.Memory) []*store.Memory {
+	validToolResults := m.collectValidToolResultIDs(memories)
+
+	result := make([]*store.Memory, 0, len(memories))
+	for _, mem := range memories {
+		// Check if this is an assistant message with tool calls
+		if mem.Role == store.MemoryRoleAssistant &&
+			strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			calls := m.parseStoredToolCalls(mem.Content)
+			allCallsHaveResults := true
+			for _, call := range calls {
+				if !validToolResults[call.ID] {
+					log.Debug().
+						Str("tool_call_id", call.ID).
+						Str("tool_name", call.Name).
+						Msg("Removing orphaned assistant tool call - no matching tool result")
+					allCallsHaveResults = false
+					break
+				}
+			}
+			if !allCallsHaveResults {
+				continue // Skip assistant message with orphaned tool calls
+			}
+		}
+		result = append(result, mem)
+	}
+
+	if len(result) < len(memories) {
+		log.Debug().
+			Int("removed", len(memories)-len(result)).
+			Int("original", len(memories)).
+			Int("final", len(result)).
+			Msg("Removed orphaned assistant tool calls for OpenAI compliance")
+	}
+
+	return result
+}
+
 func (m *Mysis) extractToolNameFromResult(content string, toolCallNames map[string]string) string {
 	idx := strings.Index(content, constants.ToolCallStorageFieldDelimiter)
 	if idx <= 0 {
@@ -1091,17 +1435,45 @@ func (m *Mysis) run(ctx context.Context) {
 			a.mu.RUnlock()
 
 			if isRunning && a.shouldNudge(time.Now()) {
-				select {
-				case a.nudgeCh <- struct{}{}:
-				default:
+				// Only increment nudge counter if no turn is currently in progress
+				// This prevents counting nudges while the LLM is still processing a previous nudge
+				if a.turnMu.TryLock() {
+					a.turnMu.Unlock()
+
+					// Circuit breaker: increment failure count before sending nudge
+					// This counts how many times the ticker has fired while mysis appears idle
+					a.mu.Lock()
+					a.nudgeFailCount++
+					failCount := a.nudgeFailCount
+					a.mu.Unlock()
+
+					// If we've failed 3 times, transition to error state
+					if failCount >= 3 {
+						a.setError(errors.New("Failed to respond after 3 nudges"))
+						return
+					}
+
+					select {
+					case a.nudgeCh <- struct{}{}:
+					default:
+					}
 				}
+				// If turn is in progress, skip this nudge tick (LLM is still working)
 			}
 		case <-a.nudgeCh:
 			if !a.turnMu.TryLock() {
 				continue
 			}
 			a.turnMu.Unlock()
-			go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
+
+			// Get current nudge attempt count for escalation
+			a.mu.RLock()
+			attemptCount := a.nudgeFailCount
+			a.mu.RUnlock()
+
+			// Send nudge as ephemeral user message (not persisted to DB, only sent to LLM)
+			// Nudges are automation scaffolding, not conversation history
+			go a.SendEphemeralMessage(a.buildContinuePrompt(attemptCount), store.MemorySourceDirect)
 		}
 	}
 }
@@ -1142,9 +1514,20 @@ Follow swarm directives. Coordinate your actions with the swarm's goals.`,
 	return strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
 }
 
-func (m *Mysis) buildContinuePrompt() string {
+func (m *Mysis) buildContinuePrompt(attemptCount int) string {
 	a := m
-	base := constants.ContinuePrompt
+
+	// Select base message based on escalation level
+	var base string
+	switch {
+	case attemptCount >= 2:
+		base = constants.ContinuePromptUrgent
+	case attemptCount == 1:
+		base = constants.ContinuePromptFirm
+	default:
+		base = constants.ContinuePrompt
+	}
+
 	reminders := a.detectDriftReminders()
 	if len(reminders) == 0 {
 		return base
