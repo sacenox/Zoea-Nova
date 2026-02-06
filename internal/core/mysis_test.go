@@ -918,3 +918,38 @@ func TestFindCurrentTick(t *testing.T) {
 		})
 	}
 }
+
+// TestMysisStopDoesNotOverrideWithError tests that stopping a mysis
+// doesn't allow concurrent error to override Stopped state.
+func TestMysisStopDoesNotOverrideWithError(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("stop-test", "mock", "test-model", 0.7)
+
+	mock := provider.NewMock("mock", "test response")
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start the mysis
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Give it a moment to stabilize
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop the mysis
+	if err := m.Stop(); err != nil {
+		t.Fatalf("Stop() error: %v", err)
+	}
+
+	// Verify state is Stopped (not Errored)
+	if m.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped, got %s (lastError: %v)", m.State(), m.LastError())
+	}
+
+	// Verify no error is set
+	if m.LastError() != nil {
+		t.Errorf("expected no lastError after clean stop, got: %v", m.LastError())
+	}
+}

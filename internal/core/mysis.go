@@ -838,6 +838,16 @@ func (m *Mysis) setError(err error) {
 	a := m
 	a.mu.Lock()
 	oldState := a.state
+
+	// If mysis was intentionally stopped, don't override with error state
+	// This prevents race where Stop() cancels context, causing in-flight turn
+	// to error with "context canceled" and override the Stopped state
+	if oldState == MysisStateStopped {
+		a.mu.Unlock()
+		log.Debug().Str("mysis", a.name).Err(err).Msg("Ignoring error - mysis was intentionally stopped")
+		return
+	}
+
 	a.lastError = err
 	a.state = MysisStateErrored
 	a.mu.Unlock()
@@ -1502,6 +1512,14 @@ func (m *Mysis) setErrorState(err error) {
 	a := m
 	a.mu.Lock()
 	oldState := a.state
+
+	// If mysis was intentionally stopped, don't override with error state
+	if oldState == MysisStateStopped {
+		a.mu.Unlock()
+		log.Debug().Str("mysis", a.name).Err(err).Msg("Ignoring error - mysis was intentionally stopped")
+		return
+	}
+
 	a.state = MysisStateErrored
 	a.lastError = err
 	a.mu.Unlock()
