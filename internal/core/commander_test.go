@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -206,6 +207,49 @@ func TestCommanderStartStopMysis(t *testing.T) {
 	if err := cmd.StopMysis("nonexistent"); err == nil {
 		t.Error("expected error stopping non-existent mysis")
 	}
+}
+
+func TestCommanderRestartErroredMysis(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	mysis, _ := cmd.CreateMysis("restart-test", "mock")
+	id := mysis.ID()
+
+	// Start mysis
+	if err := cmd.StartMysis(id); err != nil {
+		t.Fatalf("StartMysis() error: %v", err)
+	}
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running, got %s", mysis.State())
+	}
+
+	// Simulate error by calling setError
+	mysis.SetErrorState(fmt.Errorf("simulated error"))
+	if mysis.State() != MysisStateErrored {
+		t.Errorf("expected state=errored after SetErrorState, got %s", mysis.State())
+	}
+
+	// Wait a moment for any pending operations
+	time.Sleep(100 * time.Millisecond)
+
+	// Restart the errored mysis
+	if err := cmd.StartMysis(id); err != nil {
+		t.Fatalf("Restart errored mysis failed: %v", err)
+	}
+
+	// Should now be running
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running after restart, got %s (lastError: %v)", mysis.State(), mysis.LastError())
+	}
+
+	// Verify lastError was cleared
+	if mysis.LastError() != nil {
+		t.Errorf("expected lastError to be cleared, got: %v", mysis.LastError())
+	}
+
+	// Clean stop
+	cmd.StopMysis(id)
 }
 
 func TestCommanderConfigureMysis(t *testing.T) {

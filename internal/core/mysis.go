@@ -187,6 +187,12 @@ func (m *Mysis) SetProvider(p provider.Provider) {
 	a.provider = p
 }
 
+// SetErrorState sets the mysis to errored state with the given error.
+// Used for testing error recovery scenarios.
+func (m *Mysis) SetErrorState(err error) {
+	m.setErrorState(err)
+}
+
 // Start begins the mysis processing loop.
 func (m *Mysis) Start() error {
 	a := m
@@ -197,6 +203,27 @@ func (m *Mysis) Start() error {
 	}
 
 	oldState := a.state
+
+	// If restarting from errored state, cleanup any existing context/goroutine
+	if oldState == MysisStateErrored && a.cancel != nil {
+		a.cancel() // Cancel old context
+		a.mu.Unlock()
+		// Wait for old goroutine to exit
+		done := make(chan struct{})
+		go func() {
+			a.turnMu.Lock()
+			close(done)
+			a.turnMu.Unlock()
+		}()
+		select {
+		case <-done:
+			// Old goroutine exited
+		case <-time.After(2 * time.Second):
+			log.Warn().Str("mysis", a.name).Msg("Timeout waiting for errored goroutine to exit")
+		}
+		a.mu.Lock()
+	}
+
 	a.mu.Unlock()
 
 	// Create context first (before any state changes)
