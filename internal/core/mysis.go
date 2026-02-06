@@ -256,6 +256,11 @@ func (m *Mysis) Start() error {
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateRunning)
 
+	// Track goroutine in WaitGroup (only after state change succeeded)
+	if a.commander != nil {
+		a.commander.wg.Add(1)
+	}
+
 	// Start the processing goroutine (only after all setup succeeded)
 	go a.run(ctx)
 

@@ -189,12 +189,9 @@ func (c *Commander) StartMysis(id string) error {
 		return err
 	}
 
-	c.wg.Add(1) // Track this goroutine
-	if err := mysis.Start(); err != nil {
-		c.wg.Done() // Failed to start, don't track
-		return err
-	}
-	return nil
+	// Don't increment WaitGroup here - mysis.Start() will do it
+	// This avoids double-counting when restarting errored myses
+	return mysis.Start()
 }
 
 // StopMysis stops a mysis by ID.
