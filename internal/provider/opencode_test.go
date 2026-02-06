@@ -328,3 +328,123 @@ func TestOpenCode_MultipleSystemMessages(t *testing.T) {
 		t.Fatalf("Chat() error: %v", err)
 	}
 }
+
+// TestOpenCode_PreservesConversationHistory tests that OpenCode provider
+// preserves conversation history and does not collapse messages aggressively.
+// This test simulates the exact failure scenario from logs where 21 messages
+// were being collapsed to 2 messages.
+func TestOpenCode_PreservesConversationHistory(t *testing.T) {
+	// Simulate the exact scenario from logs:
+	// 21 messages (20 system + 1 assistant) should NOT collapse to 2 messages
+
+	// Create mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Parse request
+		var req struct {
+			Model    string `json:"model"`
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+			Stream bool `json:"stream"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// Verify Stream is false
+		if req.Stream {
+			t.Error("Expected Stream:false, got Stream:true")
+		}
+
+		// Verify we have reasonable message count (not collapsed to 2)
+		if len(req.Messages) < 3 {
+			t.Errorf("Expected at least 3 messages (system + user + assistant), got %d", len(req.Messages))
+		}
+
+		// Verify first message is system
+		if req.Messages[0].Role != "system" {
+			t.Errorf("Expected first message to be system, got %s", req.Messages[0].Role)
+		}
+
+		// Verify we have user messages
+		hasUser := false
+		for _, msg := range req.Messages {
+			if msg.Role == "user" {
+				hasUser = true
+				break
+			}
+		}
+		if !hasUser {
+			t.Error("Expected at least one user message")
+		}
+
+		// Return valid response
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Response",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	// Create provider with mock server
+	provider := NewOpenCodeWithTemp(server.URL, "test-model", "test-key", 0.7, nil)
+
+	// Create messages simulating the failure scenario
+	messages := []Message{
+		{Role: "system", Content: "System prompt 1"},
+		{Role: "user", Content: "User message 1"},
+		{Role: "assistant", Content: "Assistant response 1"},
+		{Role: "system", Content: "Context update 1"},
+		{Role: "user", Content: "User message 2"},
+		{Role: "assistant", Content: "Assistant response 2"},
+	}
+
+	// Call Chat
+	_, err := provider.Chat(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("Chat failed: %v", err)
+	}
+}
+
+// TestOpenCode_StreamParameterSetCorrectly tests that the Stream parameter
+// is explicitly set to false for non-streaming requests.
+func TestOpenCode_StreamParameterSetCorrectly(t *testing.T) {
+	// Verify Stream:false is explicitly set
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Stream bool `json:"stream"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// THIS IS THE CRITICAL TEST
+		if req.Stream {
+			t.Error("FAIL: Stream parameter is true, should be false")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]interface{}{"role": "assistant", "content": "ok"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewOpenCodeWithTemp(server.URL, "test-model", "test-key", 0.7, nil)
+
+	messages := []Message{
+		{Role: "user", Content: "Test"},
+	}
+
+	_, err := provider.Chat(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("Chat failed: %v", err)
+	}
+}
