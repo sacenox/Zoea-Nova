@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	openai "github.com/sashabaranov/go-openai"
@@ -98,8 +99,51 @@ func TestMergeSystemMessagesOpenAI_NoSystemMessages(t *testing.T) {
 	}
 }
 
-// TestMergeSystemMessagesOpenAI_Empty tests empty input.
-func TestMergeSystemMessagesOpenAI_Empty(t *testing.T) {
+// TestMergeSystemMessagesOpenAI_PreservesConversation tests that conversation
+// messages are preserved when system messages are merged.
+func TestMergeSystemMessagesOpenAI_PreservesConversation(t *testing.T) {
+	messages := []openai.ChatCompletionMessage{
+		{Role: "system", Content: "System 1"},
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi there"},
+		{Role: "system", Content: "System 2"},
+		{Role: "user", Content: "How are you?"},
+		{Role: "assistant", Content: "I'm good"},
+	}
+
+	result := mergeSystemMessagesOpenAI(messages)
+
+	// Should have: 1 system (merged) + 4 conversation messages = 5 total
+	if len(result) != 5 {
+		t.Errorf("expected 5 messages, got %d", len(result))
+	}
+
+	// First should be merged system
+	if result[0].Role != "system" {
+		t.Errorf("expected first message to be system, got %s", result[0].Role)
+	}
+	expected := "System 1\n\nSystem 2"
+	if result[0].Content != expected {
+		t.Errorf("expected content=%q, got %q", expected, result[0].Content)
+	}
+
+	// Rest should be conversation in order
+	if result[1].Role != "user" || result[1].Content != "Hello" {
+		t.Errorf("user message 1 not preserved, got role=%s content=%q", result[1].Role, result[1].Content)
+	}
+	if result[2].Role != "assistant" || result[2].Content != "Hi there" {
+		t.Errorf("assistant message 1 not preserved, got role=%s content=%q", result[2].Role, result[2].Content)
+	}
+	if result[3].Role != "user" || result[3].Content != "How are you?" {
+		t.Errorf("user message 2 not preserved, got role=%s content=%q", result[3].Role, result[3].Content)
+	}
+	if result[4].Role != "assistant" || result[4].Content != "I'm good" {
+		t.Errorf("assistant message 2 not preserved, got role=%s content=%q", result[4].Role, result[4].Content)
+	}
+}
+
+// TestMergeSystemMessagesOpenAI_EmptyInput tests empty input.
+func TestMergeSystemMessagesOpenAI_EmptyInput(t *testing.T) {
 	messages := []openai.ChatCompletionMessage{}
 
 	result := mergeSystemMessagesOpenAI(messages)
@@ -501,5 +545,62 @@ func TestToOpenAITools_ComplexSchema(t *testing.T) {
 
 	if tagsProp["type"] != "array" {
 		t.Errorf("expected tags type=array, got %v", tagsProp["type"])
+	}
+}
+
+// TestValidateOpenAIMessages_Valid tests validation passes for valid conversation.
+func TestValidateOpenAIMessages_Valid(t *testing.T) {
+	messages := []openai.ChatCompletionMessage{
+		{Role: "system", Content: "System"},
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi"},
+	}
+
+	err := validateOpenAIMessages(messages)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+}
+
+// TestValidateOpenAIMessages_EmptyArray tests validation fails for empty messages array.
+func TestValidateOpenAIMessages_EmptyArray(t *testing.T) {
+	messages := []openai.ChatCompletionMessage{}
+
+	err := validateOpenAIMessages(messages)
+	if err == nil {
+		t.Error("Expected error for empty messages array")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("Expected 'empty' error, got: %v", err)
+	}
+}
+
+// TestValidateOpenAIMessages_AssistantWithoutUser tests validation fails for assistant without user message.
+func TestValidateOpenAIMessages_AssistantWithoutUser(t *testing.T) {
+	messages := []openai.ChatCompletionMessage{
+		{Role: "system", Content: "System"},
+		{Role: "assistant", Content: "Hi"},
+	}
+
+	err := validateOpenAIMessages(messages)
+	if err == nil {
+		t.Error("Expected error for assistant without user message")
+	}
+	if !strings.Contains(err.Error(), "assistant") || !strings.Contains(err.Error(), "user") {
+		t.Errorf("Expected assistant/user error, got: %v", err)
+	}
+}
+
+// TestValidateOpenAIMessages_OnlySystemMessages tests validation passes for only system messages.
+func TestValidateOpenAIMessages_OnlySystemMessages(t *testing.T) {
+	messages := []openai.ChatCompletionMessage{
+		{Role: "system", Content: "System 1"},
+		{Role: "system", Content: "System 2"},
+	}
+
+	// Only system messages is valid (but will trigger fallback user message in merging)
+	err := validateOpenAIMessages(messages)
+	if err != nil {
+		t.Errorf("Expected no error for only system messages, got: %v", err)
 	}
 }
