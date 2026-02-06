@@ -52,8 +52,7 @@ var (
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorBrand).
-			Background(colorBgAlt).
-			MarginBottom(1)
+			Background(colorBgAlt)
 
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -92,10 +91,8 @@ var (
 
 	// Logs/Messages - conversation styling per design doc
 	// No padding here - padding is added to content lines directly
-	logStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBrandDim) // Was: colorBorder (#2A2A55, contrast 1.48:1)
-		// Now: colorBrandDim (#6B00B3, contrast ~3.0:1)
+	// No border around viewport - clean look
+	logStyle = lipgloss.NewStyle()
 
 	// Role colors per design doc: user=green, assistant=magenta, system=cyan, tool=yellow
 	logUserStyle = lipgloss.NewStyle().

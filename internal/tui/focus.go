@@ -255,7 +255,7 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	}
 
 	combinedContent := strings.Join(combinedLines, "\n")
-	vpView := logStyle.Width(width-2).Padding(0, 2).Render(combinedContent)
+	vpView := logStyle.Width(width - 2).Render(combinedContent)
 	sections = append(sections, vpView)
 
 	// Footer with scroll hints and verbose toggle
