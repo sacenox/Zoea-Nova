@@ -64,6 +64,7 @@ func (p *OpenCodeProvider) Chat(ctx context.Context, messages []Message) (string
 		Model:       p.model,
 		Messages:    mergeSystemMessagesOpenAI(toOpenAIMessages(messages)),
 		Temperature: float32(p.temperature),
+		Stream:      false,
 	})
 	if err != nil {
 		return "", err
@@ -95,6 +96,7 @@ func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message
 		Messages:    mergeSystemMessagesOpenAI(toOpenAIMessages(messages)),
 		Tools:       openaiTools,
 		Temperature: float32(p.temperature),
+		Stream:      false,
 	})
 	if err != nil {
 		return nil, err
