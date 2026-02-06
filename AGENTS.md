@@ -8,8 +8,8 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 
 **YOU MUST**:
 
-- **NEVER edit `documentation/TODO.md`** - This file is managed exclusively by the user. If you believe items should be added or removed, ask the user to update it. This rule has no exceptions.
-- Not change the game servers api, if we detect an issue with the api, document it in `documentation/KNOWN_SERVER_ISSUES.md`
+- **NEVER edit `documentation/current/TODO.md`** - This file is managed exclusively by the user. If you believe items should be added or removed, ask the user to update it. This rule has no exceptions.
+- Not change the game servers api, if we detect an issue with the api, document it in `documentation/current/KNOWN_SERVER_ISSUES.md`
 - Use Go 1.22+ idioms. No CGO dependencies.
 - Keep all application code in `internal/` packages. Only `cmd/zoea/main.go` is public.
 - Use interfaces for external dependencies (LLM providers, MCP, store).
@@ -20,7 +20,7 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 - Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
 - Follow the Bubble Tea Elm Architecture: Model → Update → View.
 - No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
-- Keep track of known issues in `documentation/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
+- Keep track of known issues in `documentation/current/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
 - Not duplicate information between README.md and AGENTS.md files. Use AGENTS for technical information, and README for user facing information. Keep README minimal and concise.
 - Follow the versioning rules. See bellow
 - Never open interactive editors when using git. use the `-m` or appropriate parameter to supply messages.
@@ -44,7 +44,7 @@ To run Zoea Nova without connecting to the SpaceMolt MCP server, use the `--offl
 
 This uses a stub MCP client that returns mock data for essential tools (`get_status`, `get_system`, etc.), allowing TUI development and testing without an active game session.
 
-See `documentation/OFFLINE_MODE.md` for supported tools and limitations.
+See `documentation/architecture/OFFLINE_MODE.md` for supported tools and limitations.
 
 ## Terminal Requirements:
 
@@ -67,7 +67,7 @@ Zoea Nova enforces minimum terminal dimensions at startup. If the terminal is to
 - Unicode fonts: Cascadia Code, Ubuntu Mono, Inconsolata
 - Fallback: DejaVu Sans Mono (decent Unicode coverage)
 
-See `documentation/TERMINAL_COMPATIBILITY.md` for detailed terminal testing results and `documentation/TUI_TESTING.md` for testing guidelines.
+See `documentation/guides/TERMINAL_COMPATIBILITY.md` for detailed terminal testing results and `documentation/guides/TUI_TESTING.md` for testing guidelines.
 
 ## TUI Testing:
 
@@ -200,7 +200,7 @@ The application uses SQLite for persistence.
 - **Dashboard**: TUI view showing swarm status, broadcast history, and Mysis list.
 - **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
 - **Source**: Origin of a memory—`direct` (single Mysis), `broadcast` (swarm), `system`, `llm`, or `tool`.
-- **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/CONTEXT_COMPRESSION.md](documentation/CONTEXT_COMPRESSION.md).
+- **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/architecture/CONTEXT_COMPRESSION.md](documentation/architecture/CONTEXT_COMPRESSION.md).
 
 ## Architecture
 
@@ -219,7 +219,7 @@ flowchart LR
 
 ## State Machine
 
-See `documentation/MYSIS_STATE_MACHINE.md` for valid Mysis transitions and triggers.
+See `documentation/architecture/MYSIS_STATE_MACHINE.md` for valid Mysis transitions and triggers.
 
 ## Workflow:
 

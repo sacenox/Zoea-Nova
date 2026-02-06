@@ -41,7 +41,7 @@ Zoea Nova uses a small set of in-app terms (Mysis, Commander, Swarm, Provider, M
 - Alacritty, Kitty, WezTerm, Ghostty (best compatibility)
 - iTerm2 (macOS), Windows Terminal (with Nerd Font)
 
-See `documentation/TERMINAL_COMPATIBILITY.md` for detailed compatibility information.
+See `documentation/guides/TERMINAL_COMPATIBILITY.md` for detailed compatibility information.
 
 ## Try it
 
@@ -75,4 +75,4 @@ or
 
 ## Known Issues
 
-For a list of current bugs, technical debt, and planned improvements, see [KNOWN_ISSUES.md](documentation/KNOWN_ISSUES.md).
+For a list of current bugs, technical debt, and planned improvements, see [KNOWN_ISSUES.md](documentation/current/KNOWN_ISSUES.md).
