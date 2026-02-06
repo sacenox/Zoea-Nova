@@ -149,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if vpHeight < 5 {
 			vpHeight = 5
 		}
-		m.viewport.Width = msg.Width - 6 - 2 // -6 for panel padding, -2 for scrollbar (space + char)
+		m.viewport.Width = msg.Width - 4 // -2 for borders, -2 for scrollbar (space + char)
 		m.viewport.Height = vpHeight
 
 		// Re-render content if in focus view
@@ -799,11 +799,17 @@ func (m *Model) loadMysisLogs() {
 		return
 	}
 
-	m.logs = make([]LogEntry, len(memories))
-	for i, mem := range memories {
+	// Filter out broadcast messages from conversation log
+	var filteredLogs []LogEntry
+	for _, mem := range memories {
+		// Skip broadcast messages (both sent and received)
+		if mem.Source == store.MemorySourceBroadcast {
+			continue
+		}
 		senderName := m.mysisNameByID(mem.SenderID)
-		m.logs[i] = LogEntryFromMemory(mem, m.focusID, senderName)
+		filteredLogs = append(filteredLogs, LogEntryFromMemory(mem, m.focusID, senderName))
 	}
+	m.logs = filteredLogs
 
 	m.updateViewportContent()
 }
@@ -816,10 +822,9 @@ func (m *Model) updateViewportContent() {
 	}
 
 	// Log entries must fill the panel content area exactly.
-	// Panel is rendered with logStyle.Width(m.width - 2).Padding(0, 2)
-	// Content width = m.width - 2, minus 4 for padding (2 each side) = m.width - 6
-	// Scrollbar adds 2 chars (space + scrollbar char), so subtract that too
-	panelContentWidth := m.width - 6 - 2 // -2 for scrollbar
+	// Panel is rendered with logStyle.Width(m.width - 2) without padding (commit d023227)
+	// Content width = m.width - 2 (borders), minus 2 (scrollbar) = m.width - 4
+	panelContentWidth := m.width - 4 // -2 for borders, -2 for scrollbar
 
 	var lines []string
 	for _, entry := range m.logs {

@@ -318,12 +318,12 @@ Account: prawn_trader  Created: 2026-02-05 20:29
 
 **Entry types:**
 - **System messages:** Cyan color, `SYS:` prefix
-- **User messages:** Green color, `YOU:` prefix
-- **Broadcast (self):** Green color, `YOU (BROADCAST):` prefix - NEW in v1
-- **Broadcast (swarm):** Orange color, `SWARM (sender_name):` prefix - NEW in v1
+- **User messages:** Green color, `YOU:` prefix (direct messages only)
 - **Assistant messages:** Magenta color, `AI:` prefix
 - **Tool calls:** Yellow color, `TOOL:` prefix
 - **Tool results:** Yellow color, `TOOL:` prefix
+
+**Note:** Broadcast messages are NOT shown in the conversation log. They are only visible in the dashboard's Swarm Broadcast section.
 
 **Reasoning display:**
 - When verbose mode enabled (`v` key)

@@ -258,6 +258,10 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	vpView := logStyle.Width(width - 2).Render(combinedContent)
 	sections = append(sections, vpView)
 
+	// Bottom border for conversation log - matches top border style
+	logBottomBorder := renderSectionTitle("", width)
+	sections = append(sections, logBottomBorder)
+
 	// Footer with scroll hints and verbose toggle
 	verboseHint := ""
 	if verbose {

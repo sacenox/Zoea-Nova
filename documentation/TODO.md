@@ -13,8 +13,4 @@
 
 ---
 
-- stopping a mysis shows "errored" and the mysis is stuck forever in this state. Investigate with two subagents, ensure we test all variants.
-
-- Add a bottom border to match the top one to the conversation log.
-
-- Conversation log should not show broadcast messages.
+- Remove auto scrolling code in focus coversation log
