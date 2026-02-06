@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	openai "github.com/sashabaranov/go-openai"
 	"golang.org/x/time/rate"
 )
@@ -60,7 +61,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, messages []Message) (string, 
 
 	resp, err := p.createChatCompletion(ctx, ollamaChatRequest{
 		Model:       p.model,
-		Messages:    toOllamaMessages(messages),
+		Messages:    mergeConsecutiveSystemMessagesOllama(toOllamaMessages(messages)),
 		Temperature: float32(p.temperature),
 	})
 	if err != nil {
@@ -84,7 +85,7 @@ func (p *OllamaProvider) ChatWithTools(ctx context.Context, messages []Message, 
 
 	resp, err := p.createChatCompletion(ctx, ollamaChatRequest{
 		Model:       p.model,
-		Messages:    toOllamaMessages(messages),
+		Messages:    mergeConsecutiveSystemMessagesOllama(toOllamaMessages(messages)),
 		Tools:       toOllamaTools(tools),
 		Temperature: float32(p.temperature),
 	})
@@ -261,39 +262,6 @@ func (p *OllamaProvider) Stream(ctx context.Context, messages []Message) (<-chan
 	return ch, nil
 }
 
-func toOpenAIMessages(messages []Message) []openai.ChatCompletionMessage {
-	result := make([]openai.ChatCompletionMessage, len(messages))
-	for i, m := range messages {
-		msg := openai.ChatCompletionMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		}
-
-		// Handle tool call results
-		if m.ToolCallID != "" {
-			msg.ToolCallID = m.ToolCallID
-		}
-
-		// Handle assistant messages with tool calls
-		if len(m.ToolCalls) > 0 {
-			msg.ToolCalls = make([]openai.ToolCall, len(m.ToolCalls))
-			for j, tc := range m.ToolCalls {
-				msg.ToolCalls[j] = openai.ToolCall{
-					ID:   tc.ID,
-					Type: openai.ToolTypeFunction,
-					Function: openai.FunctionCall{
-						Name:      tc.Name,
-						Arguments: string(tc.Arguments),
-					},
-				}
-			}
-		}
-
-		result[i] = msg
-	}
-	return result
-}
-
 func toOllamaMessages(messages []Message) []ollamaReqMessage {
 	result := make([]ollamaReqMessage, len(messages))
 	for i, m := range messages {
@@ -353,6 +321,58 @@ func toOllamaTools(tools []Tool) []ollamaReqTool {
 			},
 		}
 	}
+	return result
+}
+
+// mergeConsecutiveSystemMessagesOllama merges consecutive system messages into a single message.
+// This prevents API errors from providers that don't support multiple system messages,
+// and reduces context waste by deduplicating repeated system prompts.
+func mergeConsecutiveSystemMessagesOllama(messages []ollamaReqMessage) []ollamaReqMessage {
+	if len(messages) == 0 {
+		return messages
+	}
+
+	result := make([]ollamaReqMessage, 0, len(messages))
+	var systemBuffer strings.Builder
+	inSystemRun := false
+
+	for i, msg := range messages {
+		if msg.Role == "system" {
+			// Start or continue system message accumulation
+			if inSystemRun {
+				systemBuffer.WriteString("\n\n")
+			} else {
+				inSystemRun = true
+			}
+			systemBuffer.WriteString(msg.Content)
+		} else {
+			// Flush accumulated system messages if any
+			if inSystemRun {
+				result = append(result, ollamaReqMessage{
+					Role:    "system",
+					Content: systemBuffer.String(),
+				})
+				systemBuffer.Reset()
+				inSystemRun = false
+			}
+			// Add non-system message
+			result = append(result, msg)
+		}
+
+		// Flush at end of array
+		if i == len(messages)-1 && inSystemRun {
+			result = append(result, ollamaReqMessage{
+				Role:    "system",
+				Content: systemBuffer.String(),
+			})
+		}
+	}
+
+	log.Debug().
+		Int("original_count", len(messages)).
+		Int("merged_count", len(result)).
+		Msg("Ollama: Merged consecutive system messages")
+
 	return result
 }
 
