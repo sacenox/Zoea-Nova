@@ -58,6 +58,9 @@ Active tracking documents (frequently updated).
 Completed implementation and analysis reports.
 
 **Recent (2026-02-06):**
+- **[Restart Errored Mysis Investigation](reports/RESTART_ERRORED_MYSIS_INVESTIGATION_2026-02-06.md)** - 10-agent async race fix
+- **[Production Stop Failure Tests](reports/PRODUCTION_STOP_FAILURE_TESTS_2026-02-06.md)** - Long-running stability tests
+- **[Context Cancellation Review](reports/REVIEW_AGENT_4_CONTEXT_CANCELLATION_REPORT.md)** - Context chain verification
 - **[Code Quality Review](reports/CODE_QUALITY_REVIEW_2026-02-06.md)** - 5-agent review of recent changes
 - **[Goroutine Cleanup Security](reports/GOROUTINE_CLEANUP_SECURITY_REVIEW.md)** - Shutdown safety analysis
 - **[Smart Auto-Scroll](reports/SMART_AUTO_SCROLL_IMPLEMENTATION.md)** - Stateless auto-scroll design
