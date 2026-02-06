@@ -98,18 +98,17 @@ func wrapText(text string, maxWidth int) []string {
 func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int, currentTick int64) string {
 	var sections []string
 
-	// Header with mysis name - spans full width
-	header := renderFocusHeader(mysis.Name, focusIndex, totalMyses, width)
+	// Header with mysis name - spans full width (2 lines)
+	header := renderFocusHeader(mysis, focusIndex, totalMyses, width, spinnerView)
 	sections = append(sections, header)
 
-	// Mysis info panel
+	// Mysis info panel (State, Provider, Account only - ID/Created/Error moved to header)
 	stateDisplay := StateStyle(mysis.State).Render(mysis.State)
 	if isLoading {
 		stateDisplay += " " + spinnerView + " thinking..."
 	}
 
 	infoLines := []string{
-		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(mysis.ID)),
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
@@ -119,16 +118,6 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), valueStyle.Render(mysis.AccountUsername)))
 	} else {
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
-	}
-
-	createdText := dimmedStyle.Render("(unknown)")
-	if !mysis.CreatedAt.IsZero() {
-		createdText = valueStyle.Render(mysis.CreatedAt.Local().Format("2006-01-02 15:04"))
-	}
-	infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Created:"), createdText))
-
-	if mysis.State == "errored" && mysis.LastError != "" {
-		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Error:"), stateErroredStyle.Render(mysis.LastError)))
 	}
 
 	infoContent := strings.Join(infoLines, "  ")
@@ -180,18 +169,17 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64) string {
 	var sections []string
 
-	// Header with mysis name - spans full width
-	header := renderFocusHeader(mysis.Name, focusIndex, totalMyses, width)
+	// Header with mysis name - spans full width (2 lines)
+	header := renderFocusHeader(mysis, focusIndex, totalMyses, width, spinnerView)
 	sections = append(sections, header)
 
-	// Mysis info panel
+	// Mysis info panel (State, Provider, Account only - ID/Created/Error moved to header)
 	stateDisplay := StateStyle(mysis.State).Render(mysis.State)
 	if isLoading {
 		stateDisplay += " " + spinnerView + " thinking..."
 	}
 
 	infoLines := []string{
-		fmt.Sprintf("%s %s", labelStyle.Render("ID:"), valueStyle.Render(mysis.ID)),
 		fmt.Sprintf("%s %s", labelStyle.Render("State:"), stateDisplay),
 		fmt.Sprintf("%s %s", labelStyle.Render("Provider:"), valueStyle.Render(mysis.Provider)),
 	}
@@ -201,16 +189,6 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), valueStyle.Render(mysis.AccountUsername)))
 	} else {
 		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Account:"), dimmedStyle.Render("(not logged in)")))
-	}
-
-	createdText := dimmedStyle.Render("(unknown)")
-	if !mysis.CreatedAt.IsZero() {
-		createdText = valueStyle.Render(mysis.CreatedAt.Local().Format("2006-01-02 15:04"))
-	}
-	infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Created:"), createdText))
-
-	if mysis.State == "errored" && mysis.LastError != "" {
-		infoLines = append(infoLines, fmt.Sprintf("%s %s", labelStyle.Render("Error:"), stateErroredStyle.Render(mysis.LastError)))
 	}
 
 	infoContent := strings.Join(infoLines, "  ")
@@ -621,15 +599,16 @@ func LogEntryFromMemory(m *store.Memory, currentMysisID, senderName string) LogE
 	}
 }
 
-// renderFocusHeader renders the focus view header spanning full width.
-func renderFocusHeader(mysisName string, focusIndex, totalMyses int, width int) string {
-	// Format:  ⬥─── ⬡ MYSIS: name ⬡ ───⬥ with dashes filling the remaining space
-	// Build title with spaces
+// renderFocusHeader renders the focus view header spanning full width (2 lines).
+// Line 1: Mysis name and position
+// Line 2: ID and Created timestamp
+func renderFocusHeader(mysis MysisInfo, focusIndex, totalMyses int, width int, spinnerView string) string {
+	// Line 1: Mysis name with position
 	countText := ""
 	if totalMyses > 0 && focusIndex > 0 {
 		countText = fmt.Sprintf(" (%d/%d)", focusIndex, totalMyses)
 	}
-	titleText := " ⬡ MYSIS: " + mysisName + countText + " ⬡ "
+	titleText := " ⬡ MYSIS: " + mysis.Name + countText + " ⬡ "
 	titleDisplayWidth := lipgloss.Width(titleText)
 	// Total fixed chars: space (1) + ⬥ (1) on left, ⬥ (1) on right = 3
 	availableWidth := width - titleDisplayWidth - 3
@@ -639,8 +618,28 @@ func renderFocusHeader(mysisName string, focusIndex, totalMyses int, width int) 
 	leftDashes := availableWidth / 2
 	rightDashes := availableWidth - leftDashes
 
-	line := " ⬥" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "⬥"
-	return headerStyle.Width(width).Render(line)
+	line1 := " ⬥" + strings.Repeat("─", leftDashes) + titleText + strings.Repeat("─", rightDashes) + "⬥"
+
+	// Line 2: ID and Created (or error)
+	var line2 string
+	if mysis.State == "errored" && mysis.LastError != "" {
+		// Show simplified error with animated red icon
+		errorIcon := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(spinnerView)
+		line2 = "  " + labelStyle.Render("ERROR") + " " + errorIcon
+	} else {
+		// Show ID and Created
+		idText := fmt.Sprintf("%s %s", labelStyle.Render("ID:"), dimmedStyle.Render(mysis.ID))
+		createdText := dimmedStyle.Render("(unknown)")
+		if !mysis.CreatedAt.IsZero() {
+			createdText = dimmedStyle.Render(mysis.CreatedAt.Local().Format("2006-01-02 15:04"))
+		}
+		createdDisplay := fmt.Sprintf("%s %s", labelStyle.Render("Created:"), createdText)
+		line2 = "  " + idText + "    " + createdDisplay
+	}
+
+	// Combine both lines
+	header := line1 + "\n" + line2
+	return headerStyle.Width(width).Render(header)
 }
 
 // isJSON checks if a string appears to be JSON.

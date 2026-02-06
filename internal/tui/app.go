@@ -71,7 +71,10 @@ type Model struct {
 	err    error
 }
 
-const providerErrorWindow = 10 * time.Minute
+const (
+	providerErrorWindow    = 10 * time.Minute
+	maxConversationEntries = 200 // Maximum conversation log entries to load for performance
+)
 
 // SwarmMessage represents a broadcast message for display.
 type SwarmMessage struct {
@@ -141,7 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetWidth(msg.Width - 4)
 
 		// Update viewport size (account for header, info panel, title, footer)
-		headerHeight := 6 // approximate height used by header/info/title
+		headerHeight := 7 // 2 for header + 3 for info panel + 1 for conversation title + 1 margin
 		footerHeight := 2
 		vpHeight := msg.Height - headerHeight - footerHeight - 3
 		if vpHeight < 5 {
@@ -471,6 +474,8 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focusID = m.myses[m.selectedIdx].ID
 			m.view = ViewFocus
 			m.loadMysisLogs()
+			// Start at bottom when entering focus view
+			m.viewport.GotoBottom()
 		}
 
 	case key.Matches(msg, keys.NewMysis):
@@ -779,7 +784,7 @@ func (m *Model) loadMysisLogs() {
 		return
 	}
 
-	memories, err := m.store.GetRecentMemories(m.focusID, 50)
+	memories, err := m.store.GetRecentMemories(m.focusID, maxConversationEntries)
 	if err != nil {
 		m.err = err
 		return
@@ -801,11 +806,15 @@ func (m *Model) loadMysisLogs() {
 }
 
 // updateViewportContent renders log entries and sets viewport content.
+// Smart auto-scroll: if user is at bottom when content updates, stay at bottom.
 func (m *Model) updateViewportContent() {
 	if len(m.logs) == 0 {
 		m.viewport.SetContent(dimmedStyle.Render("No conversation history."))
 		return
 	}
+
+	// Remember if user was at bottom before updating content
+	wasAtBottom := m.viewport.AtBottom()
 
 	// Log entries must fill the panel content area exactly.
 	// Panel is rendered with logStyle.Width(m.width - 2) without padding (commit d023227)
@@ -821,6 +830,12 @@ func (m *Model) updateViewportContent() {
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
 	m.viewportTotalLines = len(lines) // Track total lines
+
+	// Smart auto-scroll: if user was at bottom, keep them at bottom after content update
+	// This prevents jarring jumps when user has manually scrolled up to read history
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m Model) mysisByID(id string) MysisInfo {

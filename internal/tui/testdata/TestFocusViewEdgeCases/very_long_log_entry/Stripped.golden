@@ -1,6 +1,7 @@
  ⬥──────────────────────────────────────────── ⬡ MYSIS: long-test (1/1) ⬡ ─────────────────────────────────────────────⬥
+  ID: long-mysis    Created: 2026-01-15 10:00                                                                           
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ID: long-mysis  State: running  Provider: ollama  Account: (not logged in)  Created: 2026-01-15 10:00                │
+│ State: running  Provider: ollama  Account: (not logged in)                                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
                                                                                                                         
@@ -14,7 +15,6 @@
    a very long message that will need to be wrapped across multiple lines. This is a very long                          
    message that will need to be wrapped across multiple lines. This is a very long message that                         
    will need to be wrapped across multiple lines.                                                                       
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

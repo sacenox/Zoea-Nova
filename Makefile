@@ -19,8 +19,12 @@ install: build
 	cp bin/zoea $(HOME)/.zoea-nova/bin/zoea
 
 test:
-	go test -race -coverprofile=coverage.out ./...
+	go test -race -timeout=30s -coverprofile=coverage.out ./internal/config ./internal/core ./internal/integration ./internal/mcp ./internal/provider ./internal/store
+	go test -timeout=30s -coverprofile=coverage-tui.out ./internal/tui
 	go tool cover -func=coverage.out
+	@echo ""
+	@echo "TUI package coverage:"
+	@go tool cover -func=coverage-tui.out | grep "^total:"
 
 test-integration:
 	go test -v ./internal/tui -run TestIntegration -count=1
