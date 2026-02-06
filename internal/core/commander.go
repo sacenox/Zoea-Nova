@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
@@ -402,4 +403,26 @@ func (c *Commander) GetStateCounts() map[string]int {
 // Store returns the store for direct access (e.g., for testing).
 func (c *Commander) Store() *store.Store {
 	return c.store
+}
+
+// AggregateTick returns the maximum lastServerTick across all myses.
+// Returns 0 if no myses exist or if no mysis has received tick data.
+func (c *Commander) AggregateTick() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var maxTick int64
+	mysisCount := len(c.myses)
+	for _, m := range c.myses {
+		m.mu.RLock()
+		tick := m.lastServerTick
+		m.mu.RUnlock()
+
+		if tick > maxTick {
+			maxTick = tick
+		}
+	}
+
+	log.Debug().Int("mysis_count", mysisCount).Int64("max_tick", maxTick).Msg("[TICK DEBUG] AggregateTick called")
+	return maxTick
 }

@@ -31,7 +31,7 @@ type SwarmMessageInfo struct {
 }
 
 // RenderDashboard renders the main dashboard view.
-func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string) string {
+func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string, currentTick int64) string {
 	var sections []string
 
 	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
@@ -82,7 +82,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		}
 		for i := 0; i < displayCount; i++ {
 			msg := swarmMessages[i]
-			timeStr := msg.CreatedAt.Local().Format("15:04:05")
+			timeStr := formatTickTimestamp(currentTick, msg.CreatedAt)
 			senderLabel := formatSenderLabel(msg.SenderID, msg.SenderName)
 			senderText := ""
 			if senderLabel != "" {
@@ -138,7 +138,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		var mysisLines []string
 		for i, m := range myses {
 			isLoading := loadingSet[m.ID]
-			line := renderMysisLine(m, i == selectedIdx, isLoading, spinnerView, contentWidth)
+			line := renderMysisLine(m, i == selectedIdx, isLoading, spinnerView, contentWidth, currentTick)
 			mysisLines = append(mysisLines, line)
 		}
 		content := strings.Join(mysisLines, "\n")
@@ -153,7 +153,7 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int) string {
+func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int, currentTick int64) string {
 	// State indicator: animated for running/loading, static for others
 	var stateIndicator string
 	if isLoading {
@@ -216,7 +216,7 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 		msg := strings.ReplaceAll(messageContent, "\n", " ")
 		msgPrefix := ""
 		if !m.LastMessageAt.IsZero() {
-			msgPrefix = m.LastMessageAt.Local().Format("15:04:05") + " "
+			msgPrefix = formatTickTimestamp(currentTick, m.LastMessageAt) + " "
 		}
 		prefixWidth := lipgloss.Width(msgPrefix)
 		availableWidth := msgWidth - prefixWidth

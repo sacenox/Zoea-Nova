@@ -673,3 +673,77 @@ func (f *customMockFactory) Name() string { return f.name }
 func (f *customMockFactory) Create(model string, temperature float64) provider.Provider {
 	return f.provider
 }
+
+// TestAggregateTick_MaxAcrossMyses verifies that AggregateTick returns the maximum
+// lastServerTick across all myses in the swarm.
+func TestAggregateTick_MaxAcrossMyses(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	// Empty swarm should return 0
+	if tick := cmd.AggregateTick(); tick != 0 {
+		t.Errorf("empty swarm: expected tick=0, got %d", tick)
+	}
+
+	// Create myses
+	m1, _ := cmd.CreateMysis("mysis-1", "mock")
+	m2, _ := cmd.CreateMysis("mysis-2", "mock")
+	m3, _ := cmd.CreateMysis("mysis-3", "mock")
+
+	// Set lastServerTick directly for testing
+	m1.mu.Lock()
+	m1.lastServerTick = 98
+	m1.mu.Unlock()
+
+	m2.mu.Lock()
+	m2.lastServerTick = 120
+	m2.mu.Unlock()
+
+	m3.mu.Lock()
+	m3.lastServerTick = 0 // No tick data yet
+	m3.mu.Unlock()
+
+	// Should return max tick (120)
+	if tick := cmd.AggregateTick(); tick != 120 {
+		t.Errorf("expected aggregate tick=120, got %d", tick)
+	}
+}
+
+// TestAggregateTick_EdgeCases verifies edge cases for aggregate tick calculation.
+func TestAggregateTick_EdgeCases(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	t.Run("all myses with zero tick", func(t *testing.T) {
+		m1, _ := cmd.CreateMysis("zero-1", "mock")
+		m2, _ := cmd.CreateMysis("zero-2", "mock")
+
+		m1.mu.Lock()
+		m1.lastServerTick = 0
+		m1.mu.Unlock()
+
+		m2.mu.Lock()
+		m2.lastServerTick = 0
+		m2.mu.Unlock()
+
+		if tick := cmd.AggregateTick(); tick != 0 {
+			t.Errorf("expected tick=0 when all myses have zero tick, got %d", tick)
+		}
+	})
+
+	t.Run("single mysis", func(t *testing.T) {
+		// Clean up previous myses
+		for _, m := range cmd.ListMyses() {
+			cmd.DeleteMysis(m.ID(), false)
+		}
+
+		m, _ := cmd.CreateMysis("single", "mock")
+		m.mu.Lock()
+		m.lastServerTick = 42
+		m.mu.Unlock()
+
+		if tick := cmd.AggregateTick(); tick != 42 {
+			t.Errorf("expected tick=42 for single mysis, got %d", tick)
+		}
+	})
+}

@@ -160,7 +160,7 @@ func TestDashboardEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋")
+			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋", 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -394,7 +394,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1)
+			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

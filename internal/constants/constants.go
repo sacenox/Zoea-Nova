@@ -35,6 +35,23 @@ Before each action, consider:
 - **See a pilotless ship?** Opportunity to attack without retaliation
 - **Low on options?** Check missions (get_missions) for direction
 
+## Notifications & Tick Tracking
+
+CRITICAL: You MUST call get_notifications after EVERY action.
+
+This is the ONLY way to track game progression and stay aware:
+- Provides arrival_tick from recent events (used to estimate current tick)
+- Delivers chat messages from other players (respond to them!)
+- Alerts you to combat, trade offers, faction events
+- Keeps you synchronized with game state
+
+When to call:
+- After EVERY game action (mine, travel, trade, attack, etc.)
+- Every 30-60 seconds when idle
+- Before making important decisions
+
+Example: mine() then get_notifications(), travel() then get_notifications()
+
 ## Memory
 Use captain's log to persist important information across sessions.
 
@@ -92,6 +109,7 @@ No hand-holding. Figure it out. Adapt or die.`
 const ContinuePrompt = `Turn complete. What is your next move?
 
 CRITICAL REMINDERS:
+- ALWAYS call get_notifications after EVERY action (mine, travel, trade, etc.) - this is the ONLY way to track game tick
 - ALWAYS try zoea_claim_account before registering; if registering, use a Crustacean-themed username
 - When using captains_log_add, entry field must be non-empty
 - Captain's log limits: 20 entries max, 100KB per entry (oldest evicted when full)

@@ -243,21 +243,21 @@ func TestRenderDashboard(t *testing.T) {
 
 	loadingSet := make(map[string]bool)
 	swarmMsgs := []SwarmMessageInfo{}
-	dashboard := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard")
 	}
 
 	// Test with loading state
 	loadingSet["1"] = true
-	dashboardWithLoading := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋")
+	dashboardWithLoading := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0)
 	if dashboardWithLoading == "" {
 		t.Error("expected non-empty dashboard with loading")
 	}
 }
 
 func TestRenderDashboardEmpty(t *testing.T) {
-	dashboard := RenderDashboard([]MysisInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋")
+	dashboard := RenderDashboard([]MysisInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋", 0)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard even with no myses")
 	}
@@ -270,13 +270,13 @@ func TestRenderFocusView(t *testing.T) {
 		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
 	}
 
-	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋", false, 1, 1)
+	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋", false, 1, 1, 0)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
 
 	// Test with loading state
-	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋", false, 1, 1)
+	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋", false, 1, 1, 0)
 	if viewLoading == "" {
 		t.Error("expected non-empty focus view with loading")
 	}
@@ -338,7 +338,7 @@ func TestRenderLogEntry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := LogEntry{Role: tt.role, Content: tt.content}
-			lines := renderLogEntryImpl(entry, tt.maxWidth, false)
+			lines := renderLogEntryImpl(entry, tt.maxWidth, false, 0)
 			if len(lines) == 0 {
 				t.Error("expected at least one line of output")
 			}
@@ -509,7 +509,7 @@ func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 		{SenderID: "mysis-2", SenderName: "beta", Content: "Do the thing", CreatedAt: time.Now()},
 	}
 
-	dashboard := RenderDashboard(myses, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋")
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋", 0)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard with swarm messages")
 	}
@@ -529,7 +529,7 @@ func TestRenderFocusViewWithAllRoles(t *testing.T) {
 		{Role: "tool", Content: "Tool result"},
 	}
 
-	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋", false, 1, 1)
+	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋", false, 1, 1, 0)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
@@ -605,12 +605,12 @@ func TestRenderMysisLineStates(t *testing.T) {
 			}
 
 			// Test both selected and unselected
-			line := renderMysisLine(mysis, false, tt.isLoading, spinnerView, 80)
+			line := renderMysisLine(mysis, false, tt.isLoading, spinnerView, 80, 0)
 			if line == "" {
 				t.Error("expected non-empty mysis line")
 			}
 
-			selectedLine := renderMysisLine(mysis, true, tt.isLoading, spinnerView, 80)
+			selectedLine := renderMysisLine(mysis, true, tt.isLoading, spinnerView, 80, 0)
 			if selectedLine == "" {
 				t.Error("expected non-empty selected mysis line")
 			}
@@ -628,7 +628,7 @@ func TestMysisLineWidthFill(t *testing.T) {
 	}
 
 	width := 80
-	line := renderMysisLine(mysis, false, false, "⠋", width)
+	line := renderMysisLine(mysis, false, false, "⠋", width, 0)
 
 	// The line should be rendered (non-empty)
 	if line == "" {
@@ -636,7 +636,7 @@ func TestMysisLineWidthFill(t *testing.T) {
 	}
 
 	// Selected line should also be rendered
-	selectedLine := renderMysisLine(mysis, true, false, "⠋", width)
+	selectedLine := renderMysisLine(mysis, true, false, "⠋", width, 0)
 	if selectedLine == "" {
 		t.Error("expected non-empty selected mysis line")
 	}
@@ -798,5 +798,26 @@ func TestUnicodeAmbiguousWidthSafety(t *testing.T) {
 					char, r, narrowWidth)
 			}
 		})
+	}
+}
+
+// TestModelRefreshTick verifies that the Model refreshes its currentTick field
+// from the Commander's aggregate tick.
+func TestModelRefreshTick(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Initial tick should be 0 (no myses)
+	if m.currentTick != 0 {
+		t.Errorf("initial currentTick should be 0, got %d", m.currentTick)
+	}
+
+	// Call refreshTick (method to be implemented)
+	m.refreshTick()
+
+	// Should update currentTick to match commander.AggregateTick()
+	expectedTick := m.commander.AggregateTick()
+	if m.currentTick != expectedTick {
+		t.Errorf("expected currentTick=%d after refresh, got %d", expectedTick, m.currentTick)
 	}
 }

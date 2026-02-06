@@ -5,11 +5,11 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ◦ alpha            idle     [ollama] @crab_warrior │ 10:00:00 Mining asteroid belt                                   ║
-║ ◦ beta             idle     [opencode_zen] @crab_trader │ 10:01:00 Traveling to sector 7                             ║
-║ ◦ gamma            idle     [ollama] @crab_explorer │ 10:02:00 Trading at station                                    ║
-║ ◦ delta            idle     [opencode_zen] @crab_miner │ 10:03:00 Scanning for targets                               ║
-║ ◦ epsilon          idle     [ollama] @crab_scout │ 10:04:00 Docked at base                                           ║
+║ ◦ alpha            idle     [ollama] @crab_warrior │ T0 ⬡ [10:00] Mining asteroid belt                               ║
+║ ◦ beta             idle     [opencode_zen] @crab_trader │ T0 ⬡ [10:01] Traveling to sector 7                         ║
+║ ◦ gamma            idle     [ollama] @crab_explorer │ T0 ⬡ [10:02] Trading at station                                ║
+║ ◦ delta            idle     [opencode_zen] @crab_miner │ T0 ⬡ [10:03] Scanning for targets                           ║
+║ ◦ epsilon          idle     [ollama] @crab_scout │ T0 ⬡ [10:04] Docked at base                                       ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

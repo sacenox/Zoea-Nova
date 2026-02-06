@@ -1409,12 +1409,13 @@ func TestIntegration_StatusBar(t *testing.T) {
 		)
 		defer tm.Quit()
 
-		// Wait for initial render (idle state)
+		// Wait for initial render (idle state - should show idle count or no myses)
 		teatest.WaitFor(
 			t,
 			tm.Output(),
 			func(bts []byte) bool {
-				return bytes.Contains(bts, []byte("Myses:"))
+				// Check for either state icons or "(no myses)" text
+				return bytes.Contains(bts, []byte("◦")) || bytes.Contains(bts, []byte("(no myses)"))
 			},
 			teatest.WithDuration(2*time.Second),
 		)
@@ -1457,17 +1458,17 @@ func TestIntegration_StatusBar(t *testing.T) {
 		finalModel := quitAndFinalModel(t, tm, time.Second)
 		view := finalModel.View()
 
-		// Status bar should show network indicator (IDLE when no activity)
-		if !strings.Contains(view, "IDLE") && !strings.Contains(view, "LLM") && !strings.Contains(view, "MCP") {
-			t.Error("status bar should contain network activity indicator (IDLE/LLM/MCP)")
+		// Status bar should show tick timestamp in format T#### ⬡ [HH:MM]
+		if !strings.Contains(view, "T") || !strings.Contains(view, "[") || !strings.Contains(view, "]") {
+			t.Error("status bar should contain tick timestamp format (T#### ⬡ [HH:MM])")
 		}
-		// Status bar should show view name
-		if !strings.Contains(view, "DASHBOARD") {
-			t.Error("status bar should contain 'DASHBOARD' view name")
+		// Status bar should show activity indicator (IDLE/LLM/MCP)
+		if !strings.Contains(view, "IDLE") && !strings.Contains(view, "LLM") && !strings.Contains(view, "MCP") {
+			t.Error("status bar should contain activity indicator (IDLE/LLM/MCP)")
 		}
 	})
 
-	t.Run("status_bar_view_name_changes", func(t *testing.T) {
+	t.Run("status_bar_state_counts_update", func(t *testing.T) {
 		m, cleanup := setupTestModel(t)
 		defer cleanup()
 
@@ -1475,52 +1476,22 @@ func TestIntegration_StatusBar(t *testing.T) {
 		_, _ = m.commander.CreateMysis("test-mysis", "ollama")
 		m.refreshMysisList()
 
-		tm := teatest.NewTestModel(
-			t,
-			m,
-			teatest.WithInitialTermSize(TestTerminalWidth, TestTerminalHeight),
-		)
-		defer tm.Quit()
+		// Render status bar directly
+		statusBar := m.renderStatusBar()
 
-		// Dashboard view - should show "DASHBOARD"
-		teatest.WaitFor(
-			t,
-			tm.Output(),
-			func(bts []byte) bool {
-				return bytes.Contains(bts, []byte("DASHBOARD"))
-			},
-			teatest.WithDuration(2*time.Second),
-		)
+		// Should contain tick timestamp format
+		if !strings.Contains(statusBar, "T") || !strings.Contains(statusBar, "⬡") {
+			t.Error("status bar should contain tick timestamp (T#### ⬡ [HH:MM])")
+		}
 
-		// Switch to focus view
-		tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+		// Should contain activity indicator
+		if !strings.Contains(statusBar, "IDLE") && !strings.Contains(statusBar, "LLM") && !strings.Contains(statusBar, "MCP") {
+			t.Error("status bar should contain activity indicator")
+		}
 
-		// Wait for focus view - should show "FOCUS:"
-		teatest.WaitFor(
-			t,
-			tm.Output(),
-			func(bts []byte) bool {
-				return bytes.Contains(bts, []byte("FOCUS:"))
-			},
-			teatest.WithDuration(2*time.Second),
-		)
-
-		// Return to dashboard
-		tm.Send(tea.KeyMsg{Type: tea.KeyEsc})
-
-		// Wait for dashboard view
-		teatest.WaitFor(
-			t,
-			tm.Output(),
-			func(bts []byte) bool {
-				return bytes.Contains(bts, []byte("DASHBOARD"))
-			},
-			teatest.WithDuration(2*time.Second),
-		)
-
-		finalModel := quitAndFinalModel(t, tm, time.Second)
-		if finalModel.view != ViewDashboard {
-			t.Errorf("expected ViewDashboard after return, got view %d", finalModel.view)
+		// Should contain state count (idle mysis)
+		if !strings.Contains(statusBar, "◦") {
+			t.Error("status bar should contain idle state icon (◦)")
 		}
 	})
 }

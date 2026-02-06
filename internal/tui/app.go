@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -46,6 +47,9 @@ type Model struct {
 
 	// Swarm broadcast history
 	swarmMessages []SwarmMessage
+
+	// Current swarm aggregate tick
+	currentTick int64
 
 	spinner     spinner.Model
 	loadingSet  map[string]bool // mysisIDs currently loading
@@ -190,6 +194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshMysesMsg:
 		m.refreshMysisList()
 		m.refreshSwarmMessages()
+		m.refreshTick()
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -263,7 +268,7 @@ func (m Model) View() string {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
 		focusIndex, totalMyses := m.focusPosition(m.focusID)
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -276,7 +281,7 @@ func (m Model) View() string {
 				CreatedAt:  msg.CreatedAt,
 			}
 		}
-		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View())
+		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View(), m.currentTick)
 	}
 
 	// Always show message bar
@@ -305,57 +310,45 @@ func (m Model) View() string {
 	return content + "\n" + statusBar
 }
 
-// renderStatusBar renders the bottom status bar with network indicator.
+// renderStatusBar renders the bottom status bar with activity indicator, tick, and state counts.
+// Layout: [activity indicator]  |  T#### ⬡ [HH:MM]  |  [state icons + counts]
 func (m Model) renderStatusBar() string {
-	// Network indicator on the left
-	netStatus := m.netIndicator.View()
+	// Left segment: Activity indicator (LLM/MCP/IDLE)
+	leftSegment := m.netIndicator.View()
 
-	// View indicator in the middle
-	var viewName string
-	switch m.view {
-	case ViewDashboard:
-		viewName = "DASHBOARD"
-	case ViewFocus:
-		idPreview := m.focusID
-		if len(idPreview) > 8 {
-			idPreview = idPreview[:8]
-		}
-		viewName = "FOCUS: " + idPreview
-	}
+	// Middle segment: Tick + timestamp
+	middleSegment := m.renderTickTimestamp()
 
-	// Mysis count on the right
-	running := 0
-	for _, mysis := range m.myses {
-		if mysis.State == "running" {
-			running++
-		}
-	}
-	mysisStatus := fmt.Sprintf("Myses: %d/%d running", running, len(m.myses))
-	providerErrors := len(m.providerErrorTimes)
+	// Right segment: State counts with animated icons
+	rightSegment := m.renderStateCounts()
 
-	viewStyle := lipgloss.NewStyle().Foreground(colorMuted)
-	mysisStyle := lipgloss.NewStyle().Foreground(colorSecondary)
-
-	// Calculate spacing
-	leftWidth := lipgloss.Width(netStatus)
-	middleWidth := lipgloss.Width(viewName)
-
-	rightParts := []string{mysisStyle.Render(mysisStatus)}
-	if providerErrors > 0 {
-		errorText := fmt.Sprintf("LLM errs(10m): %d", providerErrors)
-		rightParts = append(rightParts, stateErroredStyle.Render(errorText))
-	}
-	rightSegment := strings.Join(rightParts, dimmedStyle.Render(" · "))
+	// Calculate widths
+	leftWidth := lipgloss.Width(leftSegment)
+	middleWidth := lipgloss.Width(middleSegment)
 	rightWidth := lipgloss.Width(rightSegment)
-	totalUsed := leftWidth + rightWidth + middleWidth
-	spacing := m.width - totalUsed - 4 // -4 for some padding
 
-	if spacing < 2 {
-		spacing = 2
+	// Separator style
+	separators := lipgloss.NewStyle().Foreground(colorMuted).Render(" | ")
+	sepWidth := lipgloss.Width(separators)
+
+	// Calculate center position for middle segment
+	centerPos := m.width / 2
+	middleStart := centerPos - (middleWidth / 2)
+
+	// Calculate padding to center the middle segment
+	// Left side: leftSegment + separator + padding
+	leftSideWidth := leftWidth + sepWidth
+	leftPad := middleStart - leftSideWidth
+	if leftPad < 1 {
+		leftPad = 1
 	}
 
-	leftPad := spacing / 2
-	rightPad := spacing - leftPad
+	// Right side: padding + separator + rightSegment
+	rightSideStart := middleStart + middleWidth
+	rightPad := m.width - rightSideStart - sepWidth - rightWidth
+	if rightPad < 1 {
+		rightPad = 1
+	}
 
 	// Style the status bar
 	barStyle := lipgloss.NewStyle().
@@ -363,13 +356,81 @@ func (m Model) renderStatusBar() string {
 		Foreground(colorPrimary).
 		Width(m.width)
 
-	bar := netStatus +
+	bar := leftSegment +
+		separators +
 		strings.Repeat(" ", leftPad) +
-		viewStyle.Render(viewName) +
+		middleSegment +
 		strings.Repeat(" ", rightPad) +
+		separators +
 		rightSegment
 
 	return barStyle.Render(bar)
+}
+
+// renderStateCounts renders the state counts with animated icons.
+// Format: ⬡ 3  ◦ 2  ◌ 1  ✖ 0
+func (m Model) renderStateCounts() string {
+	// Count states
+	counts := map[string]int{
+		"running": 0,
+		"idle":    0,
+		"stopped": 0,
+		"errored": 0,
+	}
+
+	for _, mysis := range m.myses {
+		counts[mysis.State]++
+	}
+
+	// Get spinner frame for running/loading states
+	spinnerFrame := m.spinner.View()
+
+	// Build state count segments
+	var parts []string
+
+	// Running: animated spinner
+	if counts["running"] > 0 {
+		icon := lipgloss.NewStyle().Foreground(colorBrand).Render(spinnerFrame)
+		count := fmt.Sprintf("%d", counts["running"])
+		parts = append(parts, icon+" "+count)
+	}
+
+	// Idle: ◦
+	if counts["idle"] > 0 {
+		icon := stateIdleStyle.Render("◦")
+		count := fmt.Sprintf("%d", counts["idle"])
+		parts = append(parts, icon+" "+count)
+	}
+
+	// Stopped: ◌
+	if counts["stopped"] > 0 {
+		icon := stateStoppedStyle.Render("◌")
+		count := fmt.Sprintf("%d", counts["stopped"])
+		parts = append(parts, icon+" "+count)
+	}
+
+	// Errored: ✖
+	if counts["errored"] > 0 {
+		icon := stateErroredStyle.Render("✖")
+		count := fmt.Sprintf("%d", counts["errored"])
+		parts = append(parts, icon+" "+count)
+	}
+
+	if len(parts) == 0 {
+		return dimmedStyle.Render("(no myses)")
+	}
+
+	return strings.Join(parts, "  ")
+}
+
+// renderTickTimestamp renders the tick + timestamp in format: T#### ⬡ [HH:MM]
+func (m Model) renderTickTimestamp() string {
+	// Get current time
+	now := time.Now()
+
+	// Use the shared formatter from styles.go
+	// formatTickTimestamp returns pre-styled string with colors
+	return formatTickTimestamp(m.currentTick, now)
 }
 
 func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -599,6 +660,8 @@ func (m *Model) handleEvent(event core.Event) {
 	case core.EventMysisResponse, core.EventMysisMessage:
 		// Refresh dashboard to update last message
 		m.refreshMysisList()
+		// Refresh tick in case tool results updated server tick
+		m.refreshTick()
 		if m.view == ViewFocus && event.MysisID == m.focusID {
 			m.loadMysisLogs()
 		}
@@ -618,6 +681,8 @@ func (m *Model) handleEvent(event core.Event) {
 		if len(m.loadingSet) == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
 		}
+		// Refresh tick when network goes idle (tool calls completed)
+		m.refreshTick()
 
 	case core.EventMysisError:
 		if event.Error != nil {
@@ -689,6 +754,15 @@ func (m *Model) refreshSwarmMessages() {
 	}
 }
 
+// refreshTick updates the currentTick field from the Commander's aggregate tick.
+func (m *Model) refreshTick() {
+	oldTick := m.currentTick
+	m.currentTick = m.commander.AggregateTick()
+	if oldTick != m.currentTick {
+		log.Debug().Int64("old_tick", oldTick).Int64("new_tick", m.currentTick).Msg("[TICK DEBUG] TUI tick updated")
+	}
+}
+
 func (m *Model) loadMysisLogs() {
 	if m.focusID == "" {
 		m.logs = nil
@@ -726,7 +800,7 @@ func (m *Model) updateViewportContent() {
 
 	var lines []string
 	for _, entry := range m.logs {
-		entryLines := renderLogEntryImpl(entry, panelContentWidth, m.verboseJSON)
+		entryLines := renderLogEntryImpl(entry, panelContentWidth, m.verboseJSON, m.currentTick)
 		lines = append(lines, entryLines...)
 	}
 

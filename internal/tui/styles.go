@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -284,4 +286,22 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 		return truncateToWidth(s, maxWidth)
 	}
 	return truncateToWidth(s, maxWidth-3) + "..."
+}
+
+// formatTickTimestamp formats a tick number and timestamp as "T#### ⬡ [HH:MM]" with colors.
+// The timestamp is converted to local time.
+// Colors: tick (teal), hexagon (brand purple), brackets+time (dimmed)
+func formatTickTimestamp(tick int64, ts time.Time) string {
+	timeStr := ts.Local().Format("15:04")
+
+	// Style components
+	tickStyle := lipgloss.NewStyle().Foreground(colorSecondary) // Teal
+	hexStyle := lipgloss.NewStyle().Foreground(colorBrand)      // Brand purple
+	timeStyle := lipgloss.NewStyle().Foreground(colorMuted)     // Dimmed
+
+	tickPart := tickStyle.Render(fmt.Sprintf("T%d", tick))
+	hexPart := hexStyle.Render("⬡")
+	timePart := timeStyle.Render(fmt.Sprintf("[%s]", timeStr))
+
+	return tickPart + " " + hexPart + " " + timePart
 }

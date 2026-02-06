@@ -99,7 +99,7 @@ func TestRenderLogEntryWithReasoning(t *testing.T) {
 	}
 
 	maxWidth := 80
-	lines := renderLogEntryImpl(entry, maxWidth, false)
+	lines := renderLogEntryImpl(entry, maxWidth, false, 0)
 
 	// Should have content lines + reasoning section
 	if len(lines) < 4 {
@@ -144,7 +144,7 @@ func TestRenderLogEntryWithReasoningTruncation(t *testing.T) {
 	maxWidth := 80
 
 	// Test with verbose=false (should truncate)
-	linesTruncated := renderLogEntryImpl(entry, maxWidth, false)
+	linesTruncated := renderLogEntryImpl(entry, maxWidth, false, 0)
 	outputTruncated := strings.Join(linesTruncated, "\n")
 
 	// Should contain truncation indicator
@@ -163,7 +163,7 @@ func TestRenderLogEntryWithReasoningTruncation(t *testing.T) {
 	}
 
 	// Test with verbose=true (should show all)
-	linesVerbose := renderLogEntryImpl(entry, maxWidth, true)
+	linesVerbose := renderLogEntryImpl(entry, maxWidth, true, 0)
 	outputVerbose := strings.Join(linesVerbose, "\n")
 
 	// Should NOT contain truncation indicator
@@ -197,7 +197,7 @@ func TestRenderLogEntryToolWithJSON(t *testing.T) {
 	}
 
 	maxWidth := 80
-	lines := renderLogEntryImpl(entry, maxWidth, false)
+	lines := renderLogEntryImpl(entry, maxWidth, false, 0)
 
 	output := strings.Join(lines, "\n")
 
@@ -227,7 +227,7 @@ func TestRenderLogEntryToolWithPrefixedJSON(t *testing.T) {
 	}
 
 	maxWidth := 80
-	lines := renderLogEntryImpl(entry, maxWidth, false)
+	lines := renderLogEntryImpl(entry, maxWidth, false, 0)
 
 	output := strings.Join(lines, "\n")
 
@@ -265,7 +265,7 @@ func TestRenderFocusViewWithScrollbar(t *testing.T) {
 
 	width := 100
 	totalLines := 50
-	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", true, false, totalLines, 1, 1)
+	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", true, false, totalLines, 1, 1, 0)
 
 	// Should contain scrollbar characters
 	if !strings.Contains(output, "█") && !strings.Contains(output, "│") {

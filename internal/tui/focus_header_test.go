@@ -66,14 +66,14 @@ func TestFocusViewHeaderPresence(t *testing.T) {
 			}
 			var contentLines []string
 			for _, log := range logs {
-				lines := renderLogEntryImpl(log, tt.termWidth-4, false)
+				lines := renderLogEntryImpl(log, tt.termWidth-4, false, 0)
 				contentLines = append(contentLines, lines...)
 			}
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
 			// Render focus view
-			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", true, false, len(contentLines), 1, 1)
+			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", true, false, len(contentLines), 1, 1, 0)
 
 			// Split into lines
 			lines := strings.Split(output, "\n")

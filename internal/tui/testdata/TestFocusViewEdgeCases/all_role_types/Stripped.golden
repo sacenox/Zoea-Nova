@@ -6,19 +6,19 @@
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                                      │
-│   10:00:00 SYS: System initialization message                                                                        │
+│   T0 ⬡ [10:00] SYS: System initialization message                                                                    │
 │                                                                                                                      │
-│   10:01:00 YOU: Direct user message                                                                                  │
+│   T0 ⬡ [10:01] YOU: Direct user message                                                                              │
 │                                                                                                                      │
-│   10:02:00 SWARM: Broadcast from swarm                                                                               │
+│   T0 ⬡ [10:02] SWARM: Broadcast from swarm                                                                           │
 │                                                                                                                      │
-│   10:03:00 AI: AI response                                                                                           │
+│   T0 ⬡ [10:03] AI: AI response                                                                                       │
 │                                                                                                                      │
 │   REASONING: Because reasons                                                                                         │
 │                                                                                                                      │
-│   10:04:00 TOOL: {                                                                                                   │
-│                    └─"result": success                                                                               │
-│                    }                                                                                                 │
+│   T0 ⬡ [10:04] TOOL: {                                                                                               │
+│                        └─"result": success                                                                           │
+│                        }                                                                                             │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

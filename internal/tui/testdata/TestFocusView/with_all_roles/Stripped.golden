@@ -6,18 +6,18 @@
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                                      │
-│   10:00:00 SYS: You are a space exploration AI controlling a ship in the Crustacean Cosmos.                          │
+│   T0 ⬡ [10:00] SYS: You are a space exploration AI controlling a ship in the Crustacean Cosmos.                      │
 │                                                                                                                      │
-│   10:01:00 YOU: What is your current status?                                                                         │
+│   T0 ⬡ [10:01] YOU: What is your current status?                                                                     │
 │                                                                                                                      │
-│   10:01:30 AI: I am currently orbiting planet Crabulous Prime. All systems nominal.                                  │
+│   T0 ⬡ [10:01] AI: I am currently orbiting planet Crabulous Prime. All systems nominal.                              │
 │                                                                                                                      │
 │   REASONING: The ship sensors show stable orbit. Fuel at 75%. Cargo hold empty.                                      │
 │                                                                                                                      │
-│   10:01:35 TOOL: {                                                                                                   │
-│                    ├─"fuel": 75                                                                                      │
-│                    └─"name": alpha                                                                                   │
-│                    }                                                                                                 │
+│   T0 ⬡ [10:01] TOOL: {                                                                                               │
+│                        ├─"fuel": 75                                                                                  │
+│                        └─"name": alpha                                                                               │
+│                        }                                                                                             │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

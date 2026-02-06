@@ -198,7 +198,7 @@ func TestStateIndicators(t *testing.T) {
 				CreatedAt:       time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC),
 			}
 
-			output := renderMysisLine(mysis, false, tt.isLoading, tt.spinnerView, 100)
+			output := renderMysisLine(mysis, false, tt.isLoading, tt.spinnerView, 100, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -249,7 +249,7 @@ func TestStateIndicatorAlignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := renderMysisLine(mysis, false, false, tt.frame, 100)
+			output := renderMysisLine(mysis, false, false, tt.frame, 100, 0)
 			stripped := stripANSIForGolden(output)
 
 			// Check width consistency
@@ -318,7 +318,7 @@ func TestSpinnerInDashboard(t *testing.T) {
 				},
 			}
 
-			output := RenderDashboard(myses, []SwarmMessageInfo{}, 0, TestTerminalWidth, TestTerminalHeight, map[string]bool{}, tt.spinnerView)
+			output := RenderDashboard(myses, []SwarmMessageInfo{}, 0, TestTerminalWidth, TestTerminalHeight, map[string]bool{}, tt.spinnerView, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

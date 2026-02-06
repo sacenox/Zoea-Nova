@@ -53,6 +53,11 @@ func (c *StubClient) ListTools(ctx context.Context) ([]Tool, error) {
 			Description: "Get POI info (stub)",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"session_id": {"type": "string"}}}`),
 		},
+		{
+			Name:        "get_notifications",
+			Description: "Get queued game events (stub)",
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
+		},
 	}, nil
 }
 
@@ -60,9 +65,14 @@ func (c *StubClient) ListTools(ctx context.Context) ([]Tool, error) {
 func (c *StubClient) CallTool(ctx context.Context, name string, arguments interface{}) (*ToolResult, error) {
 	var content string
 
+	// Use a simple incrementing tick counter for offline mode
+	// In a real implementation, this would come from the game server
+	stubTick := 42
+
 	switch name {
 	case "get_status":
 		content = `{
+			"current_tick": 42,
 			"player": {
 				"id": "stub_player",
 				"username": "offline_cmdr",
@@ -78,6 +88,7 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 		}`
 	case "get_system":
 		content = `{
+			"current_tick": 42,
 			"id": "stub_system",
 			"name": "Stub System",
 			"sector": "0,0",
@@ -85,6 +96,7 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 		}`
 	case "get_ship":
 		content = `{
+			"current_tick": 42,
 			"id": "stub_ship",
 			"name": "Stub Ship",
 			"class": "scout",
@@ -93,10 +105,16 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 		}`
 	case "get_poi":
 		content = `{
+			"current_tick": 42,
 			"id": "stub_poi",
 			"name": "Stub Station",
 			"type": "station",
 			"system_id": "stub_system"
+		}`
+	case "get_notifications":
+		content = `{
+			"tick": 42,
+			"notifications": []
 		}`
 	default:
 		return &ToolResult{
@@ -104,6 +122,8 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 			IsError: true,
 		}, nil
 	}
+
+	_ = stubTick // Reserved for future use (incrementing tick counter)
 
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: content}},

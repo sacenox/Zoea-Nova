@@ -5,11 +5,11 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ⠋ alpha            running  [ollama] @crab_1 │ 10:00:00 Running                                                      ║
+║ ⠋ alpha            running  [ollama] @crab_1 │ T0 ⬡ [10:00] Running                                                  ║
 ║ ◦ beta             idle     [ollama] @crab_2                                                                         ║
 ║ ◌ gamma            stopped  [opencode_zen] @crab_3                                                                   ║
 ║ ✖ delta            errored  [ollama] @crab_4 │ Error: Network error                                                  ║
-║ ⠋ epsilon          running  [opencode_zen] (no account) │ 10:05:00 No account                                        ║
+║ ⠋ epsilon          running  [opencode_zen] (no account) │ T0 ⬡ [10:05] No account                                    ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

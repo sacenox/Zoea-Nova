@@ -152,7 +152,7 @@ func TestDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋")
+			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋", 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -267,7 +267,7 @@ func TestFocusView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1)
+			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -380,7 +380,7 @@ func TestLogEntry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines := renderLogEntryImpl(tt.entry, tt.maxWidth, tt.verbose)
+			lines := renderLogEntryImpl(tt.entry, tt.maxWidth, tt.verbose, 0)
 			output := strings.Join(lines, "\n")
 
 			t.Run("ANSI", func(t *testing.T) {
@@ -470,13 +470,13 @@ func TestFocusViewWithViewport(t *testing.T) {
 			vp := viewport.New(tt.width-4, 10)
 			var contentLines []string
 			for _, log := range tt.logs {
-				lines := renderLogEntryImpl(log, tt.width-4, false)
+				lines := renderLogEntryImpl(log, tt.width-4, false, 0)
 				contentLines = append(contentLines, lines...)
 			}
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
-			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", tt.autoScroll, false, tt.totalLines, 1, 1)
+			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", tt.autoScroll, false, tt.totalLines, 1, 1, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -675,7 +675,7 @@ func TestMysisLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := renderMysisLine(tt.mysis, false, tt.loading, "⬡", tt.width)
+			output := renderMysisLine(tt.mysis, false, tt.loading, "⬡", tt.width, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -742,7 +742,7 @@ func TestBroadcastLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := LogEntryFromMemory(tt.memory, currentMysisID, tt.senderName)
-			lines := renderLogEntryImpl(entry, 80, false)
+			lines := renderLogEntryImpl(entry, 80, false, 0)
 			output := strings.Join(lines, "\n")
 
 			t.Run("ANSI", func(t *testing.T) {

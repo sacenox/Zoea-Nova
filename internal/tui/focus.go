@@ -93,7 +93,7 @@ func wrapText(text string, maxWidth int) []string {
 }
 
 // RenderFocusView renders the detailed mysis view (legacy, without viewport).
-func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int) string {
+func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int, currentTick int64) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -153,7 +153,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 	} else {
 		// Render all log entries to fill panel content area
 		for _, entry := range logs {
-			entryLines := renderLogEntryImpl(entry, panelContentWidth, verbose)
+			entryLines := renderLogEntryImpl(entry, panelContentWidth, verbose, currentTick)
 			logLines = append(logLines, entryLines...)
 		}
 
@@ -175,7 +175,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int, focusIndex, totalMyses int) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -269,7 +269,7 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
+func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick int64) []string {
 	// Get the role's foreground color
 	roleColor := RoleColor(entry.Role)
 	prefixStyle := lipgloss.NewStyle().
@@ -304,9 +304,9 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool) []string {
 		rolePrefix = "???:"
 	}
 
-	timePrefix := "--:--:--"
+	timePrefix := "T0 ⬡ [--:--]"
 	if !entry.Timestamp.IsZero() {
-		timePrefix = entry.Timestamp.Local().Format("15:04:05")
+		timePrefix = formatTickTimestamp(currentTick, entry.Timestamp)
 	}
 
 	prefix := fmt.Sprintf("%s %s", timePrefix, rolePrefix)
