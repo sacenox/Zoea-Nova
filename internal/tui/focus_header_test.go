@@ -73,7 +73,7 @@ func TestFocusViewHeaderPresence(t *testing.T) {
 			vp.GotoTop()
 
 			// Render focus view
-			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", true, false, len(contentLines), 1, 1, 0)
+			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, len(contentLines), 1, 1, 0)
 
 			// Split into lines
 			lines := strings.Split(output, "\n")
@@ -90,7 +90,7 @@ func TestFocusViewHeaderPresence(t *testing.T) {
 
 			// Verify first line contains header elements
 			firstLine := lines[0]
-			
+
 			// Check for header decorations
 			if !strings.Contains(firstLine, "⬥") {
 				t.Errorf("First line does not contain header decoration '⬥'\nFirst line: %s", firstLine)

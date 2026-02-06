@@ -14,6 +14,7 @@ type MysisInfo struct {
 	ID              string
 	Name            string
 	State           string
+	Activity        string // Current activity (idle, llm_call, mcp_call, traveling, etc.)
 	Provider        string
 	AccountUsername string    // NEW: game account username
 	LastMessage     string    // Most recent message (user or assistant)
@@ -154,15 +155,37 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 }
 
 func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int, currentTick int64) string {
-	// State indicator: animated for running/loading, static for others
+	// State indicator: activity-specific for running myses, static for others
 	var stateIndicator string
 	if isLoading {
 		stateIndicator = spinnerView
 	} else {
 		switch m.State {
 		case "running":
-			// Animated indicator for running myses
-			stateIndicator = spinnerView
+			// Show activity-specific indicator for running myses
+			switch m.Activity {
+			case "llm_call":
+				// Purple ellipsis for LLM thinking
+				stateIndicator = lipgloss.NewStyle().Foreground(colorBrand).Render("⋯")
+			case "mcp_call":
+				// Teal gear for MCP tool execution
+				stateIndicator = lipgloss.NewStyle().Foreground(colorTeal).Render("⚙")
+			case "traveling":
+				// Teal arrow for traveling
+				stateIndicator = lipgloss.NewStyle().Foreground(colorTeal).Render("→")
+			case "mining":
+				// Yellow pickaxe for mining
+				stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFCC00")).Render("⛏")
+			case "in_combat":
+				// Red crossed swords for combat
+				stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("⚔")
+			case "cooldown":
+				// Dimmed hourglass for cooldown
+				stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render("⏳")
+			default:
+				// Default spinner for idle or unknown activity
+				stateIndicator = spinnerView
+			}
 		case "idle":
 			stateIndicator = stateIdleStyle.Render("◦")
 		case "stopped":
@@ -252,6 +275,7 @@ func MysisInfoFromCore(m *core.Mysis) MysisInfo {
 		ID:              m.ID(),
 		Name:            m.Name(),
 		State:           string(m.State()),
+		Activity:        string(m.ActivityState()), // NEW: copy activity state
 		Provider:        m.ProviderName(),
 		AccountUsername: m.CurrentAccountUsername(), // NEW: copy account username
 		CreatedAt:       m.CreatedAt(),

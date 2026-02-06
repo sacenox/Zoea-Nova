@@ -25,7 +25,7 @@ var helpItems = []helpItem{
 	{"Esc", "Back / Cancel"},
 	{"↑ / ↓", "Scroll / Browse history"},
 	{"PgUp / PgDn", "Scroll page"},
-	{"G / End", "Go to bottom (auto-scroll)"},
+	{"G / End", "Go to bottom"},
 	{"?", "Toggle help"},
 }
 

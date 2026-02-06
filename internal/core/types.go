@@ -24,6 +24,8 @@ const (
 	ActivityStateMining    ActivityState = "mining"
 	ActivityStateInCombat  ActivityState = "in_combat"
 	ActivityStateCooldown  ActivityState = "cooldown"
+	ActivityStateLLMCall   ActivityState = "llm_call" // Waiting for LLM response
+	ActivityStateMCPCall   ActivityState = "mcp_call" // Waiting for MCP tool execution
 )
 
 // EventType identifies the type of event.

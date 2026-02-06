@@ -566,7 +566,20 @@ func TestIntegration_ViewportScroll(t *testing.T) {
 	)
 	defer tm.Quit()
 
-	// Scroll up
+	// Scroll down to bottom first (since auto-scroll was removed, viewport starts at top)
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+
+	// Wait for scroll
+	teatest.WaitFor(
+		t,
+		tm.Output(),
+		func(bts []byte) bool {
+			return len(bts) > 0
+		},
+		teatest.WithDuration(2*time.Second),
+	)
+
+	// Now scroll up
 	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
 
 	// Wait for scroll
@@ -579,11 +592,11 @@ func TestIntegration_ViewportScroll(t *testing.T) {
 		teatest.WithDuration(2*time.Second),
 	)
 
-	// Verify viewport scrolled
+	// Verify viewport scrolled up from bottom
 	finalModel := quitAndFinalModel(t, tm, time.Second)
-	if finalModel.viewport.YOffset == 0 && len(finalModel.logs) > finalModel.viewport.Height {
-		// If there's content to scroll and we're still at offset 0, something is wrong
-		t.Error("viewport should have scrolled up but YOffset is still 0")
+	if finalModel.viewport.AtBottom() && len(finalModel.logs) > finalModel.viewport.Height {
+		// If there's content to scroll and we're still at bottom, scrolling up didn't work
+		t.Error("viewport should have scrolled up from bottom")
 	}
 }
 
@@ -929,45 +942,8 @@ func TestIntegration_VerboseToggle(t *testing.T) {
 	}
 }
 
-// TestIntegration_AutoScrollBehavior tests auto-scroll enables/disables correctly
-func TestIntegration_AutoScrollBehavior(t *testing.T) {
-	m, cleanup := setupTestModel(t)
-	defer cleanup()
-
-	// Create a mysis with some messages
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
-	m.commander.StartMysis(mysis.ID())
-
-	// Add messages
-	for i := 0; i < 10; i++ {
-		m.commander.SendMessage(mysis.ID(), "Message "+string(rune('0'+i)))
-	}
-
-	m.refreshMysisList()
-	m.focusID = mysis.ID()
-	m.view = ViewFocus
-	m.loadMysisLogs()
-	m.autoScroll = true // Start at bottom with auto-scroll
-
-	tm := teatest.NewTestModel(
-		t,
-		m,
-		teatest.WithInitialTermSize(TestTerminalWidth, TestTerminalHeight),
-	)
-	defer tm.Quit()
-
-	// Scroll up - should disable auto-scroll
-	tm.Send(tea.KeyMsg{Type: tea.KeyUp})
-
-	// Wait briefly
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify auto-scroll disabled
-	finalModel := quitAndFinalModel(t, tm, time.Second)
-	if finalModel.autoScroll {
-		t.Error("after scrolling up: autoScroll should be false")
-	}
-}
+// TestIntegration_AutoScrollBehavior - REMOVED: auto-scroll functionality removed per TODO item
+// Manual scrolling still works via G/End key and arrow keys
 
 // ============================================================================
 // Phase 10: New Integration Tests (Border, Spinner, Input, StatusBar, Resize)

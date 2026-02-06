@@ -177,7 +177,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, autoScroll bool, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64) string {
 	var sections []string
 
 	// Header with mysis name - spans full width
@@ -219,7 +219,7 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 
 	// Conversation title with scroll indicator - spans full width
 	scrollInfo := ""
-	if !autoScroll && totalLines > 0 {
+	if !vp.AtBottom() && totalLines > 0 {
 		currentLine := vp.YOffset + 1
 		if currentLine > totalLines {
 			currentLine = totalLines

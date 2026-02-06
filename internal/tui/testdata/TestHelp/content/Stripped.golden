@@ -6,26 +6,26 @@
 
 
 
-                                                                                     
-                                   ╔═══════════════════════════════════════════════╗ 
-                                   ║                                               ║ 
-                                   ║   ⬥═══ ⬡ COMMAND REFERENCE ⬡ ═══⬥             ║ 
-                                   ║                                               ║ 
-                                   ║  q / Ctrl+C       Quit                        ║ 
-                                   ║  n                New mysis                   ║ 
-                                   ║  d                Delete selected mysis       ║ 
-                                   ║  r                Relaunch selected mysis     ║ 
-                                   ║  s                Stop selected mysis         ║ 
-                                   ║  b                Broadcast message to all    ║ 
-                                   ║  m                Message selected mysis      ║ 
-                                   ║  c                Configure selected mysis    ║ 
-                                   ║  Tab / Shift+Tab  Navigate myses              ║ 
-                                   ║  Enter            Focus selected mysis        ║ 
-                                   ║  Esc              Back / Cancel               ║ 
-                                   ║  ↑ / ↓            Scroll / Browse history     ║ 
-                                   ║  PgUp / PgDn      Scroll page                 ║ 
-                                   ║  G / End          Go to bottom (auto-scroll)  ║ 
-                                   ║  ?                Toggle help                 ║ 
-                                   ║                                               ║ 
-                                   ╚═══════════════════════════════════════════════╝ 
-                                                                                     
+                                                                                    
+                                    ╔═════════════════════════════════════════════╗ 
+                                    ║                                             ║ 
+                                    ║   ⬥═══ ⬡ COMMAND REFERENCE ⬡ ═══⬥           ║ 
+                                    ║                                             ║ 
+                                    ║  q / Ctrl+C       Quit                      ║ 
+                                    ║  n                New mysis                 ║ 
+                                    ║  d                Delete selected mysis     ║ 
+                                    ║  r                Relaunch selected mysis   ║ 
+                                    ║  s                Stop selected mysis       ║ 
+                                    ║  b                Broadcast message to all  ║ 
+                                    ║  m                Message selected mysis    ║ 
+                                    ║  c                Configure selected mysis  ║ 
+                                    ║  Tab / Shift+Tab  Navigate myses            ║ 
+                                    ║  Enter            Focus selected mysis      ║ 
+                                    ║  Esc              Back / Cancel             ║ 
+                                    ║  ↑ / ↓            Scroll / Browse history   ║ 
+                                    ║  PgUp / PgDn      Scroll page               ║ 
+                                    ║  G / End          Go to bottom              ║ 
+                                    ║  ?                Toggle help               ║ 
+                                    ║                                             ║ 
+                                    ╚═════════════════════════════════════════════╝ 
+                                                                                    

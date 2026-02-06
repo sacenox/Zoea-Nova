@@ -12,5 +12,3 @@
 - Example item: example description [KEEP FOR REFERENCE ONLY]
 
 ---
-
-- Remove auto scrolling code in focus coversation log

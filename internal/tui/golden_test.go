@@ -406,7 +406,6 @@ func TestFocusViewWithViewport(t *testing.T) {
 		width      int
 		height     int
 		totalLines int
-		autoScroll bool
 	}{
 		{
 			name: "with_scrollbar",
@@ -433,7 +432,6 @@ func TestFocusViewWithViewport(t *testing.T) {
 			width:      TestTerminalWidth,
 			height:     20,
 			totalLines: 50,
-			autoScroll: true,
 		},
 		{
 			name: "with_scroll_indicator",
@@ -460,7 +458,6 @@ func TestFocusViewWithViewport(t *testing.T) {
 			width:      TestTerminalWidth,
 			height:     20,
 			totalLines: 30,
-			autoScroll: false,
 		},
 	}
 
@@ -476,7 +473,7 @@ func TestFocusViewWithViewport(t *testing.T) {
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
-			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", tt.autoScroll, false, tt.totalLines, 1, 1, 0)
+			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", false, tt.totalLines, 1, 1, 0)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

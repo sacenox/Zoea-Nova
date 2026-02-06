@@ -165,6 +165,14 @@ func (m *Mysis) CurrentAccountUsername() string {
 	return a.currentAccountUsername
 }
 
+// ActivityState returns the mysis current activity.
+func (m *Mysis) ActivityState() ActivityState {
+	a := m
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.activityState
+}
+
 // SetProvider updates the mysis provider.
 func (m *Mysis) SetProvider(p provider.Provider) {
 	a := m
@@ -431,6 +439,9 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			Int("tool_call_count", messageStats.ToolCallCount).
 			Msg("Context stats")
 
+		// Set activity state to indicate LLM call in progress
+		a.setActivity(ActivityStateLLMCall, time.Time{})
+
 		// Get response from provider
 		var response *provider.ChatResponse
 		if len(tools) > 0 {
@@ -444,6 +455,9 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				response = &provider.ChatResponse{Content: text}
 			}
 		}
+
+		// Clear LLM activity state after call completes (success or failure)
+		a.setActivity(ActivityStateIdle, time.Time{})
 
 		if err != nil {
 			a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
@@ -487,7 +501,14 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 					Timestamp: time.Now(),
 				})
 
+				// Set activity state to indicate MCP call in progress
+				a.setActivity(ActivityStateMCPCall, time.Time{})
+
 				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
+
+				// Clear MCP activity state after call completes
+				a.setActivity(ActivityStateIdle, time.Time{})
+
 				a.updateActivityFromToolResult(result, execErr)
 
 				// Store the tool result

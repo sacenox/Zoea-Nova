@@ -60,8 +60,7 @@ type Model struct {
 
 	// Conversation viewport
 	viewport           viewport.Model
-	autoScroll         bool // true if viewport should auto-scroll to bottom
-	viewportTotalLines int  // total lines in viewport content
+	viewportTotalLines int // total lines in viewport content
 
 	// Network activity indicator
 	netIndicator NetIndicator
@@ -110,7 +109,6 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 		spinner:      sp,
 		loadingSet:   make(map[string]bool),
 		viewport:     vp,
-		autoScroll:   true,
 		netIndicator: NewNetIndicator(),
 	}
 }
@@ -286,7 +284,7 @@ func (m Model) View() string {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
 		focusIndex, totalMyses := m.focusPosition(m.focusID)
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.autoScroll, m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -472,7 +470,6 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.myses) > 0 && m.selectedIdx < len(m.myses) {
 			m.focusID = m.myses[m.selectedIdx].ID
 			m.view = ViewFocus
-			m.autoScroll = true // Start at bottom when entering focus view
 			m.loadMysisLogs()
 		}
 
@@ -547,9 +544,8 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.End):
-		// Go to bottom and enable auto-scroll
+		// Go to bottom
 		m.viewport.GotoBottom()
-		m.autoScroll = true
 		return m, nil
 
 	case key.Matches(msg, keys.VerboseToggle):
@@ -561,17 +557,7 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Pass other keys to viewport for scrolling
 	var cmd tea.Cmd
-	wasAtBottom := m.viewport.AtBottom()
 	m.viewport, cmd = m.viewport.Update(msg)
-
-	// If user scrolled up, disable auto-scroll
-	if wasAtBottom && !m.viewport.AtBottom() {
-		m.autoScroll = false
-	}
-	// If user scrolled to bottom, enable auto-scroll
-	if m.viewport.AtBottom() {
-		m.autoScroll = true
-	}
 
 	return m, cmd
 }
@@ -835,11 +821,6 @@ func (m *Model) updateViewportContent() {
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
 	m.viewportTotalLines = len(lines) // Track total lines
-
-	// Auto-scroll to bottom if enabled
-	if m.autoScroll {
-		m.viewport.GotoBottom()
-	}
 }
 
 func (m Model) mysisByID(id string) MysisInfo {
