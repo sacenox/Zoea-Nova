@@ -54,6 +54,10 @@ func setupTestModel(t *testing.T) (Model, func()) {
 	model.width = 80
 	model.height = 24
 
+	// Set fixed test time for deterministic timestamps
+	fixedTime := testTime()
+	model.testTime = &fixedTime
+
 	cleanup := func() {
 		commander.StopAll()
 		bus.Close()

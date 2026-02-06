@@ -1,7 +1,9 @@
                                                                                 
- T0 ⬡ [10:30] AI: I will proceed with the plan.                                 
+ T0 ⬡ [10:30] AI: ───────────────────────────────────────────────────────────── 
+ I will proceed with the plan.                                                  
                                                                                 
- REASONING: First line of reasoning that explains the initial thought process.  
-            [4 more]                                                            
-            depth. Seventh line provides even more context. Eighth line         
-            concludes the reasoning with final thoughts.                        
+ T0 ⬡ [10:30] REASONING: ────────────────────────────────────────────────────── 
+ First line of reasoning that explains the initial       
+ [6 more]                                               
+ even more context. Eighth line concludes the reasoning  
+ with final thoughts.                                    

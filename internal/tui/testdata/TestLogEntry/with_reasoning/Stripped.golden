@@ -1,5 +1,7 @@
                                                                                 
- T0 ⬡ [10:30] AI: I will mine the asteroid.                                     
+ T0 ⬡ [10:30] AI: ───────────────────────────────────────────────────────────── 
+ I will mine the asteroid.                                                      
                                                                                 
- REASONING: The asteroid contains valuable ore. I have enough fuel and cargo    
-            space.                                                              
+ T0 ⬡ [10:30] REASONING: ────────────────────────────────────────────────────── 
+ The asteroid contains valuable ore. I have enough fuel  
+ and cargo space.                                        

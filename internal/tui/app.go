@@ -50,6 +50,9 @@ type Model struct {
 	// Current swarm aggregate tick
 	currentTick int64
 
+	// Test-only: override time.Now() for deterministic timestamps in tests
+	testTime *time.Time
+
 	spinner     spinner.Model
 	loadingSet  map[string]bool // mysisIDs currently loading
 	sending     bool
@@ -65,7 +68,8 @@ type Model struct {
 
 	providerErrorTimes []time.Time
 
-	err error
+	onQuit func() // Callback to run before quitting
+	err    error
 }
 
 const providerErrorWindow = 10 * time.Minute
@@ -109,6 +113,11 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 		autoScroll:   true,
 		netIndicator: NewNetIndicator(),
 	}
+}
+
+// SetOnQuit sets a callback to run before the TUI quits.
+func (m *Model) SetOnQuit(fn func()) {
+	m.onQuit = fn
 }
 
 // Init initializes the model.
@@ -169,6 +178,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle global keys
 		switch {
 		case key.Matches(msg, keys.Quit):
+			// Call cleanup callback before quitting
+			if m.onQuit != nil {
+				m.onQuit()
+			}
 			return m, tea.Quit
 
 		case key.Matches(msg, keys.Escape):
@@ -211,6 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.netIndicator.SetActivity(NetActivityIdle)
 			m.sending = false
 			m.sendingMode = InputModeNone
+			m.input.Reset()
 		}
 		if m.view == ViewFocus && msg.mysisID == m.focusID {
 			m.loadMysisLogs()
@@ -222,6 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.netIndicator.SetActivity(NetActivityIdle)
 		m.sending = false
 		m.sendingMode = InputModeNone
+		m.input.Reset()
 		if msg.err != nil {
 			m.err = msg.err
 		}
@@ -424,8 +439,13 @@ func (m Model) renderStateCounts() string {
 
 // renderTickTimestamp renders the tick + timestamp in format: T#### ⬡ [HH:MM]
 func (m Model) renderTickTimestamp() string {
-	// Get current time
-	now := time.Now()
+	// Get current time (or test time override)
+	var now time.Time
+	if m.testTime != nil {
+		now = *m.testTime
+	} else {
+		now = time.Now()
+	}
 
 	// Use the shared formatter from styles.go
 	// formatTickTimestamp returns pre-styled string with colors
@@ -516,6 +536,10 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Configure):
 		m.input.SetMode(InputModeConfigProvider, m.focusID)
+		return m, m.input.Focus()
+
+	case key.Matches(msg, keys.Broadcast):
+		m.input.SetMode(InputModeBroadcast, "")
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.End):

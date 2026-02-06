@@ -1,0 +1,10 @@
+                                                                                                                  
+ T42000 ⬡ [14:30] AI: ─────────────────────────────────────────────────────────────────────────────────────────── 
+ ⚡ Calling tools:                                                                                                
+   • scan(range: 1000)                                                                                            
+                                                                                                                  
+ T42000 ⬡ [14:30] REASONING: ──────────────────────────────────────────────────────────────────────────────────── 
+ Step 1: Scan the area for potential threats                                           
+ [1 more]                                                                             
+ Step 3: Plan optimal mining route                                                     
+ Step 4: Execute mining sequence                                                       

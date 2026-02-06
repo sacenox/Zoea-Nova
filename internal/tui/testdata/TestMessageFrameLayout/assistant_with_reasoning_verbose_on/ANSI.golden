@@ -1,0 +1,10 @@
+                                                                                                    
+ [38;2;255;0;204m[38;2;0;255;204mT42337[0m [38;2;157;0;255m⬡[0m [38;2;85;85;170m[14:30][0m AI:[0m[38;5;240m ─────────────────────────────────────────────────────────────────────────────[0m 
+ I'll check my cargo status first.                                                                  
+                                                                                                    
+ [38;5;170m[38;2;0;255;204mT42337[0m [38;2;157;0;255m⬡[0m [38;2;85;85;170m[14:30][0m REASONING:[0m[38;5;240m ──────────────────────────────────────────────────────────────────────[0m 
+ [38;5;213mThe user asked me to check cargo. I need to verify what items I'm      [0m 
+ [38;5;213mcarrying and how much space is available. This will help me plan my    [0m 
+ [38;5;213mnext actions. I should use the get_cargo tool to retrieve this         [0m 
+ [38;5;213minformation. The tool requires no parameters and will return a list of [0m 
+ [38;5;213mitems in my cargo hold along with capacity information.                [0m 

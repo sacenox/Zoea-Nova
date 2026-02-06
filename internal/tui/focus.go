@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/xonecas/zoea-nova/internal/constants"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
@@ -269,6 +271,108 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
+// renderToolCallsEntry formats tool calls with special visual treatment.
+// Format: ⚡ Calling tools: with bulleted list of tool names and arguments.
+func renderToolCallsEntry(content string, contentWidth int, verbose bool) []string {
+	// Parse tool calls from storage format
+	stored := strings.TrimPrefix(content, constants.ToolCallStoragePrefix)
+	if stored == "" {
+		return []string{"⚠️ Empty tool call record"}
+	}
+
+	var result []string
+	toolCallStyle := lipgloss.NewStyle().Foreground(colorTool).Bold(true)
+	toolNameStyle := lipgloss.NewStyle().Foreground(colorTool).Bold(true)
+	toolArgStyle := lipgloss.NewStyle().Foreground(colorTool)
+	dimmedStyle := lipgloss.NewStyle().Foreground(colorMuted)
+
+	// Header line
+	header := toolCallStyle.Render("⚡ Calling tools:")
+	result = append(result, header)
+
+	// Parse each tool call record
+	parts := strings.Split(stored, constants.ToolCallStorageRecordDelimiter)
+	for _, part := range parts {
+		fields := strings.SplitN(part, constants.ToolCallStorageFieldDelimiter, constants.ToolCallStorageFieldCount)
+		if len(fields) < constants.ToolCallStorageFieldCount {
+			// Malformed: skip or show warning
+			continue
+		}
+
+		toolName := fields[1]
+		argsJSON := fields[2]
+
+		// Simplified argument format for non-verbose mode
+		if !verbose || argsJSON == "{}" {
+			// Show as: • tool_name() or • tool_name(arg: value)
+			var argsDisplay string
+			if argsJSON == "{}" {
+				argsDisplay = "()"
+			} else {
+				// Parse JSON and create simplified inline format
+				var args map[string]interface{}
+				if err := json.Unmarshal([]byte(argsJSON), &args); err == nil && len(args) > 0 {
+					// Sort keys for deterministic output
+					var keys []string
+					for k := range args {
+						keys = append(keys, k)
+					}
+					// Use simple lexicographic sort
+					for i := 0; i < len(keys); i++ {
+						for j := i + 1; j < len(keys); j++ {
+							if keys[i] > keys[j] {
+								keys[i], keys[j] = keys[j], keys[i]
+							}
+						}
+					}
+
+					var argParts []string
+					for _, k := range keys {
+						v := args[k]
+						// Format value based on type
+						var valStr string
+						switch v := v.(type) {
+						case string:
+							valStr = fmt.Sprintf("%q", v)
+						case float64, int, bool:
+							valStr = fmt.Sprintf("%v", v)
+						default:
+							// Complex types: use ellipsis
+							valStr = "{...}"
+						}
+						argParts = append(argParts, fmt.Sprintf("%s: %s", k, valStr))
+					}
+					argsDisplay = "(" + strings.Join(argParts, ", ") + ")"
+				} else {
+					argsDisplay = "(...)"
+				}
+			}
+
+			toolLine := "  • " + toolNameStyle.Render(toolName) + toolArgStyle.Render(argsDisplay)
+			result = append(result, toolLine)
+		} else {
+			// Verbose mode: show tool name with JSON tree below
+			toolLine := "  • " + toolNameStyle.Render(toolName)
+			result = append(result, toolLine)
+
+			if argsJSON != "{}" {
+				// Render JSON as indented tree
+				var args map[string]interface{}
+				if err := json.Unmarshal([]byte(argsJSON), &args); err == nil {
+					// Simple indented JSON rendering
+					jsonBytes, _ := json.MarshalIndent(args, "    ", "  ")
+					jsonLines := strings.Split(string(jsonBytes), "\n")
+					for _, line := range jsonLines {
+						result = append(result, dimmedStyle.Render("    "+line))
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
 func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick int64) []string {
 	// Get the role's foreground color
 	roleColor := RoleColor(entry.Role)
@@ -324,9 +428,14 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 		contentWidth = 20
 	}
 
-	// Detect JSON content in tool messages and render as tree
+	// Detect special content types and render appropriately
 	var wrappedLines []string
-	if entry.Role == "tool" && isJSON(entry.Content) {
+
+	// Check for tool calls (assistant messages with [TOOL_CALLS] prefix)
+	if entry.Role == "assistant" && strings.HasPrefix(entry.Content, constants.ToolCallStoragePrefix) {
+		// Render tool calls with special visual treatment
+		wrappedLines = renderToolCallsEntry(entry.Content, contentWidth, verbose)
+	} else if entry.Role == "tool" && isJSON(entry.Content) {
 		// Extract JSON content (strip tool call ID prefix if present)
 		jsonContent := entry.Content
 		if idx := strings.Index(jsonContent, ":"); idx > 0 && strings.HasPrefix(jsonContent, "call_") {
@@ -348,34 +457,47 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 	}
 
 	var result []string
-	indent := strings.Repeat(" ", prefixWidth)
 
 	// Add top padding (empty line with background)
 	emptyLine := contentStyle.Width(maxWidth).Render("")
 	result = append(result, emptyLine)
 
-	for i, line := range wrappedLines {
+	// Render header line: timestamp + role + horizontal separator
+	leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+	styledPrefix := prefixStyle.Render(prefix)
+
+	// Calculate remaining width for separator after prefix
+	prefixDisplayWidth := lipgloss.Width(prefix)
+	separatorWidth := maxWidth - padLeft - prefixDisplayWidth - 1 - padRight // -1 for space after prefix
+	if separatorWidth < 0 {
+		separatorWidth = 0
+	}
+
+	// Create dimmed horizontal separator
+	dimmedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dim gray
+	separator := strings.Repeat("─", separatorWidth)
+	styledSeparator := dimmedStyle.Render(" " + separator)
+
+	// Pad to full width
+	headerPadding := strings.Repeat(" ", padRight)
+	headerLine := leftPad + styledPrefix + styledSeparator + headerPadding
+	result = append(result, headerLine)
+
+	// Render content lines (start at left margin, no indentation)
+	for _, line := range wrappedLines {
 		// Pad the line content to fill remaining width
 		lineLen := lipgloss.Width(line)
-		remainingWidth := contentWidth - lineLen
+		remainingWidth := maxWidth - padLeft - lineLen - padRight
 		if remainingWidth < 0 {
 			remainingWidth = 0
 		}
-		paddedLine := line + strings.Repeat(" ", remainingWidth+padRight)
+		paddedLine := line + strings.Repeat(" ", remainingWidth)
 
-		if i == 0 {
-			// First line: left pad + styled prefix + space + content with background
-			leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
-			styledPrefix := prefixStyle.Render(prefix)
-			styledContent := contentStyle.Render(" " + paddedLine)
-			result = append(result, leftPad+styledPrefix+styledContent)
-		} else {
-			// Continuation lines: left pad + indent + content with background
-			leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
-			styledIndent := contentStyle.Render(indent)
-			styledContent := contentStyle.Render(paddedLine)
-			result = append(result, leftPad+styledIndent+styledContent)
-		}
+		// All content lines: left pad + content (no indent)
+		contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+		styledContent := contentStyle.Render(paddedLine)
+		rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
+		result = append(result, contentLeftPad+styledContent+rightPad)
 	}
 
 	// Render reasoning if present
@@ -394,12 +516,28 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 		dimmedStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")) // Dim gray for truncation indicator
 
-		reasoningHeader := "REASONING:"
+		// Format reasoning header with timestamp (same format as main message)
+		reasoningLabel := "REASONING:"
+		reasoningHeader := fmt.Sprintf("%s %s", timePrefix, reasoningLabel)
 		reasoningHeaderWidth := lipgloss.Width(reasoningHeader) + 1 // +1 for space after
 		reasoningContentWidth := maxWidth - reasoningHeaderWidth - padLeft - padRight
 		if reasoningContentWidth < 20 {
 			reasoningContentWidth = 20
 		}
+
+		// Render header line with separator (matching main message pattern)
+		leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+		styledReasoningHeader := reasoningHeaderStyle.Render(reasoningHeader)
+		reasoningPrefixDisplayWidth := lipgloss.Width(reasoningHeader)
+		reasoningSeparatorWidth := maxWidth - padLeft - reasoningPrefixDisplayWidth - 1 - padRight // -1 for space after prefix
+		if reasoningSeparatorWidth < 0 {
+			reasoningSeparatorWidth = 0
+		}
+		reasoningSeparator := strings.Repeat("─", reasoningSeparatorWidth)
+		styledReasoningSeparator := dimmedStyle.Render(" " + reasoningSeparator)
+		reasoningHeaderPadding := strings.Repeat(" ", padRight)
+		reasoningHeaderLine := leftPad + styledReasoningHeader + styledReasoningSeparator + reasoningHeaderPadding
+		result = append(result, reasoningHeaderLine)
 
 		// Wrap reasoning text
 		wrappedReasoning := wrapText(entry.Reasoning, reasoningContentWidth)
@@ -443,29 +581,19 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 				if truncRemainingWidth < 0 {
 					truncRemainingWidth = 0
 				}
-				truncPaddedLine := truncMsg + strings.Repeat(" ", truncRemainingWidth+padRight)
+				truncPaddedLine := truncMsg + strings.Repeat(" ", truncRemainingWidth)
 
-				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
-				indent := strings.Repeat(" ", reasoningHeaderWidth)
-				styledIndent := contentStyle.Render(indent)
+				contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
 				styledTrunc := dimmedStyle.Render(truncPaddedLine)
-				result = append(result, leftPad+styledIndent+styledTrunc)
+				rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
+				result = append(result, contentLeftPad+styledTrunc+rightPad)
 			}
 
-			if i == 0 {
-				// First line: left pad + styled header + space + content
-				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
-				styledHeader := reasoningHeaderStyle.Render(reasoningHeader)
-				styledContent := reasoningStyle.Render(" " + paddedLine)
-				result = append(result, leftPad+styledHeader+styledContent)
-			} else {
-				// Continuation lines: left pad + indent + content
-				leftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
-				indent := strings.Repeat(" ", reasoningHeaderWidth)
-				styledIndent := contentStyle.Render(indent)
-				styledContent := reasoningStyle.Render(paddedLine)
-				result = append(result, leftPad+styledIndent+styledContent)
-			}
+			// All lines: left pad + content (no indent, matches main message rendering)
+			contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+			styledContent := reasoningStyle.Render(paddedLine)
+			rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
+			result = append(result, contentLeftPad+styledContent+rightPad)
 		}
 	}
 

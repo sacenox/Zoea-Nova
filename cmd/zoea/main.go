@@ -147,6 +147,12 @@ func main() {
 
 	// Create and run TUI
 	model := tui.New(commander, s, eventCh)
+
+	// Set cleanup callback to close event bus before quit
+	model.SetOnQuit(func() {
+		bus.Close()
+	})
+
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Handle shutdown in a goroutine
@@ -154,6 +160,7 @@ func main() {
 		<-sigCh
 		log.Info().Msg("Received shutdown signal")
 		commander.StopAll()
+		bus.Close() // Close event bus to unblock TUI event listener
 		program.Quit()
 	}()
 

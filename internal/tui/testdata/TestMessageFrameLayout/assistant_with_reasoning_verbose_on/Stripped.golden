@@ -1,0 +1,10 @@
+                                                                                                    
+ T42337 ⬡ [14:30] AI: ───────────────────────────────────────────────────────────────────────────── 
+ I'll check my cargo status first.                                                                  
+                                                                                                    
+ T42337 ⬡ [14:30] REASONING: ────────────────────────────────────────────────────────────────────── 
+ The user asked me to check cargo. I need to verify what items I'm       
+ carrying and how much space is available. This will help me plan my     
+ next actions. I should use the get_cargo tool to retrieve this          
+ information. The tool requires no parameters and will return a list of  
+ items in my cargo hold along with capacity information.                 

@@ -1,0 +1,22 @@
+                                                                                
+ T42000 ⬡ [12:00] TOOL: ─────────────────────────────────────────────────────── 
+   ├─"level": 9                                                                 
+   └─"next":                                                                    
+     ├─"level": 8                                                               
+     └─"next":                                                                  
+       ├─"level": 7                                                             
+       └─"next":                                                                
+         ├─"level": 6                                                           
+         └─"next":                                                              
+           ├─"level": 5                                                         
+           └─"next":                                                            
+             ├─"level": 4                                                       
+             └─"next":                                                          
+               ├─"level": 3                                                     
+               └─"next":                                                        
+                 ├─"level": 2                                                   
+                 └─"next":                                                      
+                   ├─"level": 1                                                 
+                   └─"next":                                                    
+                     ├─"level": 0                                               
+                     └─"next": deepest                                          

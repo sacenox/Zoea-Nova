@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -49,4 +50,12 @@ func testMysisID(id int) string {
 // testMysisName returns a consistent test mysis name.
 func testMysisName(id int) string {
 	return fmt.Sprintf("test-mysis-%d", id)
+}
+
+// testTime returns a consistent test timestamp for today at a fixed time.
+// This prevents golden file mismatches from timestamps changing.
+// Returns time for today at 12:00:00 in local timezone.
+func testTime() time.Time {
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, time.Local)
 }

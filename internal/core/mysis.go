@@ -205,7 +205,8 @@ func (m *Mysis) Start() error {
 	// Add system prompt if this is the first time starting (no memories yet)
 	count, err := a.store.CountMemories(a.id)
 	if err == nil && count == 0 {
-		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, constants.SystemPrompt, "", "")
+		systemPrompt := a.buildSystemPrompt()
+		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, systemPrompt, "", "")
 	}
 
 	// Emit state change event
@@ -940,6 +941,42 @@ func (m *Mysis) run(ctx context.Context) {
 			go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
 		}
 	}
+}
+
+// buildSystemPrompt creates the system prompt with the latest swarm broadcast injected.
+func (m *Mysis) buildSystemPrompt() string {
+	a := m
+	base := constants.SystemPrompt
+
+	// Get most recent broadcast (any sender)
+	broadcasts, err := a.store.GetRecentBroadcasts(1)
+	if err != nil || len(broadcasts) == 0 {
+		// No broadcasts yet - show fallback
+		fallback := "\n## Swarm Status\nNo commander directives yet. Grow more powerful while awaiting instructions.\n"
+		return strings.Replace(base, "{{LATEST_BROADCAST}}", fallback, 1)
+	}
+
+	broadcast := broadcasts[0]
+
+	// Get sender name
+	senderName := "Unknown"
+	if broadcast.SenderID != "" {
+		if mysis, err := a.store.GetMysis(broadcast.SenderID); err == nil && mysis != nil {
+			senderName = mysis.Name
+		}
+	}
+
+	// Format broadcast section
+	broadcastSection := fmt.Sprintf(`
+## Latest Commander Broadcast
+From: %s
+Message: %s
+
+Follow swarm directives. Coordinate your actions with the swarm's goals.`,
+		senderName,
+		broadcast.Content)
+
+	return strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
 }
 
 func (m *Mysis) buildContinuePrompt() string {

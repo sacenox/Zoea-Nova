@@ -6,16 +6,16 @@
 [1;38;2;0;255;204m⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧[0m
 [38;2;107;0;179m╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
 [38;2;107;0;179m│[0m                                                                                                                      [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m   [38;2;255;0;204m[38;2;0;255;204mT0[0m [38;2;157;0;255m⬡[0m [38;2;85;85;170m[10:00][0m AI:[0m This is a very long message that will need to be wrapped across multiple lines. This is a very    [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    long message that will need to be wrapped across multiple lines. This is a very long message      [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    that will need to be wrapped across multiple lines. This is a very long message that will need    [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    to be wrapped across multiple lines. This is a very long message that will need to be wrapped     [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    across multiple lines. This is a very long message that will need to be wrapped across multiple   [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    lines. This is a very long message that will need to be wrapped across multiple lines. This is    [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    a very long message that will need to be wrapped across multiple lines. This is a very long       [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    message that will need to be wrapped across multiple lines. This is a very long message that      [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                    will need to be wrapped across multiple lines.                                                    [38;2;107;0;179m│[0m
-[38;2;107;0;179m│[0m                                                                                                                      [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   [38;2;255;0;204m[38;2;0;255;204mT0[0m [38;2;157;0;255m⬡[0m [38;2;85;85;170m[10:00][0m AI:[0m[38;5;240m ───────────────────────────────────────────────────────────────────────────────────────────────[0m   [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   This is a very long message that will need to be wrapped across multiple lines. This is a very                     [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   long message that will need to be wrapped across multiple lines. This is a very long message                       [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   that will need to be wrapped across multiple lines. This is a very long message that will need                     [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   to be wrapped across multiple lines. This is a very long message that will need to be wrapped                      [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   across multiple lines. This is a very long message that will need to be wrapped across multiple                    [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   lines. This is a very long message that will need to be wrapped across multiple lines. This is                     [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   a very long message that will need to be wrapped across multiple lines. This is a very long                        [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   message that will need to be wrapped across multiple lines. This is a very long message that                       [38;2;107;0;179m│[0m
+[38;2;107;0;179m│[0m   will need to be wrapped across multiple lines.                                                                     [38;2;107;0;179m│[0m
 [38;2;107;0;179m│[0m                                                                                                                      [38;2;107;0;179m│[0m
 [38;2;107;0;179m│[0m                                                                                                                      [38;2;107;0;179m│[0m
 [38;2;107;0;179m│[0m                                                                                                                      [38;2;107;0;179m│[0m

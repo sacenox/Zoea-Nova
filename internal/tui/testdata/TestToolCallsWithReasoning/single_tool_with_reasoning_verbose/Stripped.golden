@@ -1,0 +1,11 @@
+                                                                                                                  
+ T42000 ⬡ [14:30] AI: ─────────────────────────────────────────────────────────────────────────────────────────── 
+ ⚡ Calling tools:                                                                                                
+   • travel                                                                                                       
+     {                                                                                                            
+           "destination": "sol_base"                                                                              
+         }                                                                                                        
+                                                                                                                  
+ T42000 ⬡ [14:30] REASONING: ──────────────────────────────────────────────────────────────────────────────────── 
+ The ship is currently at coordinates (150, 200) and needs to travel to sol_base to    
+ sell the ore. This will take approximately 5 ticks and consume fuel.                  

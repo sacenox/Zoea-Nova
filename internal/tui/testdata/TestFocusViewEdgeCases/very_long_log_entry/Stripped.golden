@@ -6,16 +6,16 @@
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                                      │
-│   T0 ⬡ [10:00] AI: This is a very long message that will need to be wrapped across multiple lines. This is a very    │
-│                    long message that will need to be wrapped across multiple lines. This is a very long message      │
-│                    that will need to be wrapped across multiple lines. This is a very long message that will need    │
-│                    to be wrapped across multiple lines. This is a very long message that will need to be wrapped     │
-│                    across multiple lines. This is a very long message that will need to be wrapped across multiple   │
-│                    lines. This is a very long message that will need to be wrapped across multiple lines. This is    │
-│                    a very long message that will need to be wrapped across multiple lines. This is a very long       │
-│                    message that will need to be wrapped across multiple lines. This is a very long message that      │
-│                    will need to be wrapped across multiple lines.                                                    │
-│                                                                                                                      │
+│   T0 ⬡ [10:00] AI: ───────────────────────────────────────────────────────────────────────────────────────────────   │
+│   This is a very long message that will need to be wrapped across multiple lines. This is a very                     │
+│   long message that will need to be wrapped across multiple lines. This is a very long message                       │
+│   that will need to be wrapped across multiple lines. This is a very long message that will need                     │
+│   to be wrapped across multiple lines. This is a very long message that will need to be wrapped                      │
+│   across multiple lines. This is a very long message that will need to be wrapped across multiple                    │
+│   lines. This is a very long message that will need to be wrapped across multiple lines. This is                     │
+│   a very long message that will need to be wrapped across multiple lines. This is a very long                        │
+│   message that will need to be wrapped across multiple lines. This is a very long message that                       │
+│   will need to be wrapped across multiple lines.                                                                     │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
