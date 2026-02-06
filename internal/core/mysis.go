@@ -678,17 +678,36 @@ func (m *Mysis) memoriesToMessages(memories []*store.Memory) []provider.Message 
 		// Handle tool role - needs ToolCallID
 		if m.Role == store.MemoryRoleTool {
 			// Extract tool call ID from stored format: "tool_call_id:content"
-			if idx := strings.Index(m.Content, constants.ToolCallStorageFieldDelimiter); idx > 0 {
-				msg.ToolCallID = m.Content[:idx]
-				msg.Content = m.Content[idx+1:]
+			idx := strings.Index(m.Content, constants.ToolCallStorageFieldDelimiter)
+			if idx <= 0 {
+				log.Warn().
+					Str("content", m.Content).
+					Msg("Skipping malformed tool result - missing delimiter")
+				continue // Skip this message
 			}
+			toolCallID := m.Content[:idx]
+			if toolCallID == "" {
+				log.Warn().
+					Str("content", m.Content).
+					Msg("Skipping tool result with empty tool_call_id")
+				continue // Skip this message
+			}
+			msg.ToolCallID = toolCallID
+			msg.Content = m.Content[idx+1:]
 		}
 
 		// Handle assistant messages with tool calls
 		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
 			// Parse tool calls from stored format
-			msg.Content = ""
 			msg.ToolCalls = a.parseStoredToolCalls(m.Content)
+			if len(msg.ToolCalls) > 0 {
+				msg.Content = "" // Only clear content if tool calls were parsed successfully
+			} else {
+				log.Warn().
+					Str("content", m.Content).
+					Msg("Failed to parse tool calls from assistant message - keeping original content")
+				// Keep original content as fallback
+			}
 		}
 
 		messages = append(messages, msg)
@@ -779,10 +798,18 @@ func (m *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 	for _, part := range parts {
 		fields := strings.SplitN(part, constants.ToolCallStorageFieldDelimiter, constants.ToolCallStorageFieldCount)
 		if len(fields) >= constants.ToolCallStorageFieldCount {
+			args := json.RawMessage(fields[2])
+			if !json.Valid(args) {
+				log.Warn().
+					Str("tool_call_id", fields[0]).
+					Str("tool_name", fields[1]).
+					Msg("Invalid JSON in tool call arguments - using empty object")
+				args = json.RawMessage("{}")
+			}
 			calls = append(calls, provider.ToolCall{
 				ID:        fields[0],
 				Name:      fields[1],
-				Arguments: json.RawMessage(fields[2]),
+				Arguments: args,
 			})
 		}
 	}
