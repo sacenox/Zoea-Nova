@@ -1,6 +1,21 @@
-# Historical Investigations
+# Active and Historical Investigations
 
-This folder contains investigation reports for issues that have since been resolved. These documents are preserved for historical context and understanding of the debugging process.
+This folder contains investigation reports for issues both active and resolved. Active investigations document ongoing research, while resolved issues are preserved for historical context and understanding of the debugging process.
+
+## Active Investigations
+
+### OpenCode Zen API System-Only Messages Bug
+
+**Issue:** OpenCode Zen API returns `"Cannot read properties of undefined (reading 'input_tokens')"` error when messages contain only system messages (no user or assistant turns).
+
+**Investigation Documents:**
+- `OPENCODE_ZEN_API_TESTS_2026-02-06.md` - Direct curl testing proving system-only requests crash
+
+**Status:** Confirmed as API limitation. Workaround implemented in `internal/provider/opencode.go` (fallback to add dummy user message).
+
+**Next Steps:** Consider reporting to OpenCode team.
+
+---
 
 ## Resolved Issues
 
