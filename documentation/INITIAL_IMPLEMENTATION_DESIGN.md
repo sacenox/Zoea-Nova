@@ -93,7 +93,7 @@ upstream = "https://game.spacemolt.com/mcp"
 ```sql
 -- Myses table
 CREATE TABLE myses (
-    id TEXT PRIMARY KY,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
     model TEXT NOT NULL,

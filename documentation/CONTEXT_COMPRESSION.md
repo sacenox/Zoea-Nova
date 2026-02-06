@@ -46,18 +46,11 @@ Without compression, Mysis context grows unbounded:
 // Value chosen to cover ~2 server ticks worth of activity.
 const MaxContextMessages = 20
 
-// snapshotTools defines tools that return state snapshots.
+// Snapshot tools are identified by prefix matching and explicit names:
+// - Any tool starting with "get_" (e.g., get_ship, get_system, get_poi, get_nearby, get_cargo)
+// - Explicit: zoea_swarm_status, zoea_list_myses
 // When multiple results from the same snapshot tool appear in context,
 // only the most recent one is kept to prevent redundant state data.
-var snapshotTools = map[string]bool{
-    "get_ship":          true,
-    "get_system":        true,
-    "get_poi":           true,
-    "get_nearby":        true,
-    "get_cargo":         true,
-    "zoea_swarm_status": true,
-    "zoea_list_myses":   true,
-}
 ```
 
 ### Context Assembly

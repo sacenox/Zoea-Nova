@@ -262,7 +262,7 @@ mysisListHeight = height - usedHeight
 ### Components
 
 #### 1. Header
-**Location:** `focus.go` `renderFocusHeader()` (lines 492-512)
+**Location:** `focus.go` `renderFocusHeader()` (lines 621+)
 
 ```
  ⬥─── ⬡ MYSIS: alpha (2/16) ⬡ ───⬥
@@ -275,7 +275,7 @@ mysisListHeight = height - usedHeight
 - **Character:** `⬥` (U+2B25 BLACK MEDIUM DIAMOND)
 
 #### 2. Info Panel
-**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 185-216)
+**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 180+)
 
 ```
 ID: 6b152b72-09e4-4695-aaa2-9a529147d3d7  State: running  Provider: ollama
@@ -297,7 +297,7 @@ Account: prawn_trader  Created: 2026-02-05 20:29
 - Format: `running ⠋ thinking...`
 
 #### 3. Conversation Viewport
-**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 177-270)
+**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 180+)
 
 **Section header:**
 ```
@@ -362,7 +362,7 @@ Account: prawn_trader  Created: 2026-02-05 20:29
 ---
 
 #### 5. Footer
-**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 260-267)
+**Location:** `focus.go` `RenderFocusViewWithViewport()` (lines 180+)
 
 ```
 [ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM  ·  [ v ] VERBOSE: OFF
@@ -431,7 +431,7 @@ Account: prawn_trader  Created: 2026-02-05 20:29
 
 ### Main Files
 - `internal/tui/dashboard.go` - Dashboard rendering (268 lines)
-- `internal/tui/focus.go` - Focus view rendering (528 lines)
+- `internal/tui/focus.go` - Focus view rendering (655 lines)
 - `internal/tui/styles.go` - Style definitions
 - `internal/tui/app.go` - Model and update logic
 - `internal/tui/json_tree.go` - JSON tree rendering - NEW in v1
@@ -441,8 +441,8 @@ Account: prawn_trader  Created: 2026-02-05 20:29
 - `RenderDashboard()` - Main dashboard render (line 34)
 - `renderMysisLine()` - Individual mysis line (line 156)
 - `renderSectionTitle()` - Section headers (in `styles.go`)
-- `RenderFocusViewWithViewport()` - Focus view with scrolling (line 178)
-- `renderLogEntryImpl()` - Log entry rendering with timestamps (line 272)
+- `RenderFocusViewWithViewport()` - Focus view with scrolling (line 180)
+- `renderLogEntryImpl()` - Log entry rendering with timestamps (line 376)
 - `renderJSONTree()` - JSON tree structure rendering (in `json_tree.go`)
 - `renderScrollbar()` - Scrollbar indicator rendering (in `scrollbar.go`)
 - `formatSenderLabel()` - Broadcast sender label formatting (in `styles.go`)

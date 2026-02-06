@@ -418,23 +418,25 @@ func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
 }
 
 func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
-	if !strings.Contains(constants.SystemPrompt, "captains_log_add({\"entry\":") {
-		t.Fatal("SystemPrompt missing captains_log_add example")
-	}
-	if !strings.Contains(constants.SystemPrompt, "non-empty entry field") {
+	// Check for captain's log guidance in Critical Rules section
+	if !strings.Contains(constants.SystemPrompt, "Captain's log entry field must be non-empty") {
 		t.Fatal("SystemPrompt missing non-empty entry reminder")
 	}
-	if !strings.Contains(constants.SystemPrompt, "Max 20 entries") {
+	if !strings.Contains(constants.SystemPrompt, "max 20 entries") {
 		t.Fatal("SystemPrompt missing captain's log limit guidance")
+	}
+	if !strings.Contains(constants.SystemPrompt, "100KB each") {
+		t.Fatal("SystemPrompt missing captain's log size limit")
 	}
 }
 
 func TestContinuePromptContainsCriticalReminders(t *testing.T) {
-	if !strings.Contains(constants.ContinuePrompt, "captains_log_add") {
-		t.Fatal("ContinuePrompt missing captains_log_add reminder")
+	// Check for get_notifications reminder which is the critical reminder in ContinuePrompt
+	if !strings.Contains(constants.ContinuePrompt, "get_notifications") {
+		t.Fatal("ContinuePrompt missing get_notifications reminder")
 	}
-	if !strings.Contains(constants.ContinuePrompt, "100KB") {
-		t.Fatal("ContinuePrompt missing captain's log limit reminder")
+	if !strings.Contains(constants.ContinuePrompt, "What's your next move?") {
+		t.Fatal("ContinuePrompt missing autonomy prompt")
 	}
 }
 
@@ -572,32 +574,27 @@ func TestMysisContextCompaction(t *testing.T) {
 }
 
 func TestSystemPromptContainsSearchGuidance(t *testing.T) {
+	// Check for search tools in Swarm Coordination section
 	if !strings.Contains(constants.SystemPrompt, "zoea_search_messages") {
 		t.Fatal("SystemPrompt missing zoea_search_messages reference")
 	}
 	if !strings.Contains(constants.SystemPrompt, "zoea_search_reasoning") {
 		t.Fatal("SystemPrompt missing zoea_search_reasoning reference")
 	}
-	if !strings.Contains(constants.SystemPrompt, "Context & Memory Management") {
-		t.Fatal("SystemPrompt missing Context & Memory Management section")
+	if !strings.Contains(constants.SystemPrompt, "zoea_search_broadcasts") {
+		t.Fatal("SystemPrompt missing zoea_search_broadcasts reference")
+	}
+	// Check for context limitation guidance
+	if !strings.Contains(constants.SystemPrompt, "Context is limited") {
+		t.Fatal("SystemPrompt missing context limitation guidance")
 	}
 }
 
 func TestContinuePromptContainsSearchReminder(t *testing.T) {
-	if !strings.Contains(constants.ContinuePrompt, "zoea_search_messages") {
-		t.Fatal("ContinuePrompt missing zoea_search_messages reminder")
-	}
-	if !strings.Contains(constants.ContinuePrompt, "zoea_search_reasoning") {
-		t.Fatal("ContinuePrompt missing zoea_search_reasoning reminder")
-	}
-	if !strings.Contains(constants.ContinuePrompt, "zoea_claim_account") {
-		t.Fatal("ContinuePrompt missing zoea_claim_account reminder")
-	}
-	if !strings.Contains(constants.ContinuePrompt, "Crustacean-themed") {
-		t.Fatal("ContinuePrompt missing themed username reminder")
-	}
-	if !strings.Contains(constants.ContinuePrompt, "real-world time") {
-		t.Fatal("ContinuePrompt missing real-world time reminder")
+	// ContinuePrompt is intentionally minimal - only checks for critical get_notifications reminder
+	// Search tools, account claiming, and other guidance are in SystemPrompt
+	if !strings.Contains(constants.ContinuePrompt, "get_notifications") {
+		t.Fatal("ContinuePrompt missing get_notifications reminder")
 	}
 }
 

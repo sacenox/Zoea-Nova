@@ -13,11 +13,8 @@
 
 ---
 
-- Animate the message input with themed unicode patterns when sending messages, to indicate activity.
+- stopping a mysis shows "errored" and the mysis is stuck forever in this state. Investigate with two subagents, ensure we test all variants.
 
-- Make install command that places the binary in the user's zoea config folder
-- check ollama logs, llms are stopping the loop.
+- Add a bottom border to match the top one to the conversation log.
 
-- mysis are calculating tick wrong.
-│  │ AI:   Waiting for travel to sol_base to complete (arrival_tick: 38549). Will sell ore once arrived at base to conver│ │  │
-│  │       resources into credits.
+- Conversation log should not show broadcast messages.
