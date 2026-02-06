@@ -172,10 +172,15 @@ func mergeSystemMessagesOpenAI(messages []openai.ChatCompletionMessage) []openai
 		})
 	}
 
-	// If conversation ends with assistant message, warn (may cause issues)
-	if len(result) > 1 && result[len(result)-1].Role == "assistant" {
-		log.Warn().
-			Msg("OpenAI: Conversation ends with assistant message")
+	// If conversation ends with assistant message, add a user prompt
+	// OpenAI requires conversation to end with user message when requesting completion
+	if len(result) > 0 && result[len(result)-1].Role == "assistant" {
+		log.Debug().
+			Msg("OpenAI: Conversation ends with assistant - adding continuation prompt")
+		result = append(result, openai.ChatCompletionMessage{
+			Role:    "user",
+			Content: "Continue.",
+		})
 	}
 
 	log.Debug().
@@ -184,6 +189,7 @@ func mergeSystemMessagesOpenAI(messages []openai.ChatCompletionMessage) []openai
 		Int("system_merged", len(systemMessages)).
 		Int("conversation_kept", len(conversationMessages)).
 		Bool("added_user_msg", len(conversationMessages) == 0 && len(result) > 0).
+		Bool("added_continuation", len(result) > 0 && result[len(result)-1].Role == "user" && (result[len(result)-1].Content == "Continue." || result[len(result)-1].Content == "Begin.")).
 		Msg("OpenAI: Merged system messages")
 
 	return result
