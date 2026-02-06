@@ -200,6 +200,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case EventMsg:
+		// Don't re-schedule if channel closed (zero-value event)
+		if msg.Event.Type == "" {
+			return m, nil
+		}
 		m.handleEvent(msg.Event)
 		return m, m.listenForEvents()
 
