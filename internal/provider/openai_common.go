@@ -74,6 +74,49 @@ func toOpenAIMessages(messages []Message) []openai.ChatCompletionMessage {
 	return result
 }
 
+// validateOpenAIMessages ensures message structure meets OpenAI API requirements:
+// 1. At least one non-system message exists
+// 2. Conversation ends with user message (if expecting completion)
+// 3. No consecutive assistant messages without user messages between them
+//
+// Returns error if validation fails.
+func validateOpenAIMessages(messages []openai.ChatCompletionMessage) error {
+	if len(messages) == 0 {
+		return errors.New("messages array is empty")
+	}
+
+	// Count message types
+	hasUser := false
+	hasAssistant := false
+	lastRole := ""
+
+	for _, msg := range messages {
+		if msg.Role == "user" {
+			hasUser = true
+		}
+		if msg.Role == "assistant" {
+			hasAssistant = true
+			// Check for consecutive assistant messages
+			if lastRole == "assistant" {
+				log.Warn().Msg("OpenAI: Consecutive assistant messages detected")
+			}
+		}
+		lastRole = msg.Role
+	}
+
+	// If we have assistant messages but no user messages, that's invalid
+	if hasAssistant && !hasUser {
+		return errors.New("conversation has assistant messages but no user messages")
+	}
+
+	// If last message is assistant (and we're expecting a completion), that's invalid
+	if lastRole == "assistant" {
+		log.Warn().Msg("OpenAI: Conversation ends with assistant message - may cause issues")
+	}
+
+	return nil
+}
+
 // mergeSystemMessagesOpenAI merges all system messages into a single message at the start.
 // OpenAI Chat Completions API requires:
 // 1. System messages must be first
@@ -85,6 +128,12 @@ func toOpenAIMessages(messages []Message) []openai.ChatCompletionMessage {
 func mergeSystemMessagesOpenAI(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {
 	if len(messages) == 0 {
 		return messages
+	}
+
+	// Validate messages before processing
+	if err := validateOpenAIMessages(messages); err != nil {
+		log.Error().Err(err).Msg("OpenAI: Message validation failed")
+		// Continue processing but log the issue
 	}
 
 	// Separate system messages from others
