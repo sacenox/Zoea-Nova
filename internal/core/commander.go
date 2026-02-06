@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
@@ -351,7 +353,7 @@ func (c *Commander) BroadcastAsync(content string) error {
 	return c.BroadcastFrom("", content)
 }
 
-// StopAll stops all running myses.
+// StopAll stops all running myses with a 10-second timeout.
 func (c *Commander) StopAll() {
 	c.mu.RLock()
 	myses := make([]*Mysis, 0)
@@ -360,10 +362,27 @@ func (c *Commander) StopAll() {
 	}
 	c.mu.RUnlock()
 
-	for _, m := range myses {
-		if m.State() == MysisStateRunning {
-			m.Stop()
+	// Stop with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		for _, m := range myses {
+			if m.State() == MysisStateRunning {
+				if err := m.Stop(); err != nil {
+					log.Warn().Err(err).Str("mysis", m.Name()).Msg("Failed to stop mysis")
+				}
+			}
 		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Info().Int("count", len(myses)).Msg("All myses stopped")
+	case <-ctx.Done():
+		log.Warn().Msg("StopAll timeout - some myses may still be running")
 	}
 }
 

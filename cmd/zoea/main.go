@@ -25,6 +25,9 @@ import (
 // Version is set at build time via ldflags.
 var Version = "dev"
 
+// logFile is the global log file handle, closed on shutdown.
+var logFile *os.File
+
 func main() {
 	// Parse flags
 	var (
@@ -51,6 +54,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
+	defer func() {
+		if logFile != nil {
+			logFile.Close()
+		}
+	}()
 
 	log.Info().Str("version", Version).Msg("Starting Zoea Nova")
 
@@ -78,7 +86,8 @@ func main() {
 
 	// Initialize event bus
 	bus := core.NewEventBus(1000)
-	defer bus.Close()
+	// Note: bus.Close() is called explicitly in onQuit callback and signal handler
+	// No defer needed here to avoid duplicate closes
 
 	// Initialize provider registry
 	registry := initProviders(cfg, creds)
@@ -189,9 +198,10 @@ func initLogging(debug bool) error {
 
 	// Open log file (truncate on startup)
 	logPath := filepath.Join(dataDir, "zoea.log")
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("open log file: %w", err)
+	var openErr error
+	logFile, openErr = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if openErr != nil {
+		return fmt.Errorf("open log file: %w", openErr)
 	}
 
 	// Configure zerolog

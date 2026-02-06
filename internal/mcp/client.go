@@ -27,7 +27,7 @@ func NewClient(endpoint string) *Client {
 	return &Client{
 		endpoint: endpoint,
 		httpClient: &http.Client{
-			Timeout: 0, // No timeout, MCP requests can be long-running
+			Timeout: 30 * time.Second, // 30s timeout to prevent hanging requests
 		},
 		protocolVersion: "2024-11-05", // Default, may be updated during initialization
 	}
@@ -314,5 +314,13 @@ func (c *Client) Notify(ctx context.Context, method string, params interface{}) 
 		return fmt.Errorf("http error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
+	return nil
+}
+
+// Close closes idle HTTP connections
+func (c *Client) Close() error {
+	if c.httpClient != nil {
+		c.httpClient.CloseIdleConnections()
+	}
 	return nil
 }

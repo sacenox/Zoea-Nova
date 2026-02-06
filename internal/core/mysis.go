@@ -183,24 +183,27 @@ func (m *Mysis) Start() error {
 	}
 
 	oldState := a.state
+	a.mu.Unlock()
+
+	// Create context first (before any state changes)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Update store BEFORE changing in-memory state
+	// This ensures we don't start the goroutine if persistence fails
+	if err := a.store.UpdateMysisState(a.id, store.MysisStateRunning); err != nil {
+		cancel() // Clean up context since we're not starting
+		return fmt.Errorf("failed to update state in store: %w", err)
+	}
+
+	// Now that store update succeeded, update in-memory state
+	a.mu.Lock()
 	a.state = MysisStateRunning
 	a.lastError = nil
 	a.activityState = ActivityStateIdle
 	a.activityUntil = time.Time{}
-
-	ctx, cancel := context.WithCancel(context.Background())
 	a.ctx = ctx
 	a.cancel = cancel
 	a.mu.Unlock()
-
-	// Update store
-	if err := a.store.UpdateMysisState(a.id, store.MysisStateRunning); err != nil {
-		a.mu.Lock()
-		a.state = MysisStateErrored
-		a.lastError = err
-		a.mu.Unlock()
-		return err
-	}
 
 	// Add system prompt if this is the first time starting (no memories yet)
 	count, err := a.store.CountMemories(a.id)
@@ -212,7 +215,7 @@ func (m *Mysis) Start() error {
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateRunning)
 
-	// Start the processing goroutine
+	// Start the processing goroutine (only after all setup succeeded)
 	go a.run(ctx)
 
 	// Trigger initial turn to encourage autonomy
@@ -235,9 +238,21 @@ func (m *Mysis) Stop() error {
 	}
 	a.mu.Unlock()
 
-	// Wait for current turn to finish
-	a.turnMu.Lock()
-	defer a.turnMu.Unlock()
+	// Wait for current turn to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		a.turnMu.Lock()
+		close(done)
+		a.turnMu.Unlock()
+	}()
+
+	select {
+	case <-done:
+		// Turn finished successfully
+	case <-time.After(5 * time.Second):
+		log.Warn().Str("mysis", a.name).Msg("Stop timeout - forcing shutdown")
+		// Continue with cleanup even if turn didn't complete
+	}
 
 	a.mu.Lock()
 	if a.state != MysisStateRunning {
@@ -751,13 +766,25 @@ func (m *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) strin
 	return content
 }
 
-// setError sets the mysis last error and emits an error event.
+// setError sets the mysis last error, transitions to errored state, and emits events.
+// This method ensures proper state machine compliance by transitioning to MysisStateErrored.
 func (m *Mysis) setError(err error) {
 	a := m
 	a.mu.Lock()
+	oldState := a.state
 	a.lastError = err
+	a.state = MysisStateErrored
 	a.mu.Unlock()
 
+	// Update store
+	if updateErr := a.store.UpdateMysisState(a.id, store.MysisStateErrored); updateErr != nil {
+		log.Warn().Err(updateErr).Str("mysis", a.id).Msg("Failed to update state in store")
+	}
+
+	// Emit state change event
+	a.emitStateChange(oldState, MysisStateErrored)
+
+	// Emit error event
 	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
 		MysisID:   a.id,
