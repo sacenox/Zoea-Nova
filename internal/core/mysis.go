@@ -262,10 +262,8 @@ func (m *Mysis) Start() error {
 	}
 
 	// Start the processing goroutine (only after all setup succeeded)
+	// Initial nudge is sent from run() loop, not here, to avoid async race
 	go a.run(ctx)
-
-	// Trigger initial turn to encourage autonomy
-	go a.SendMessage(a.buildContinuePrompt(), store.MemorySourceSystem)
 
 	return nil
 }
@@ -1027,6 +1025,13 @@ func (m *Mysis) run(ctx context.Context) {
 	// Signal goroutine completion when exiting
 	if a.commander != nil {
 		defer a.commander.wg.Done()
+	}
+
+	// Send initial nudge immediately to start autonomy
+	// This happens inside run() to avoid async race in Start()
+	select {
+	case a.nudgeCh <- struct{}{}:
+	default:
 	}
 
 	// Ticker to nudge the mysis if it's idle
