@@ -145,6 +145,10 @@ type chatCompletionFunction struct {
 	Arguments string `json:"arguments"`
 }
 
+// OLLAMA-SPECIFIC TYPES
+// These types are custom to Ollama and should NOT be used by other providers.
+// They differ from OpenAI standard in structure and field names.
+
 type ollamaChatRequest struct {
 	Model       string             `json:"model"`
 	Messages    []ollamaReqMessage `json:"messages"`
@@ -181,6 +185,10 @@ type ollamaReqFuncCall struct {
 	Arguments string `json:"arguments"`
 }
 
+// reasoning extracts reasoning content from Ollama response.
+//
+// OLLAMA-SPECIFIC: Ollama may return reasoning in either "reasoning" or "reasoning_content" fields.
+// This is an Ollama extension not present in standard OpenAI Chat Completions API.
 func (m chatCompletionMessage) reasoning() string {
 	if m.Reasoning != "" {
 		return m.Reasoning
@@ -262,6 +270,10 @@ func (p *OllamaProvider) Stream(ctx context.Context, messages []Message) (<-chan
 	return ch, nil
 }
 
+// toOllamaMessages converts provider messages to Ollama's custom request format.
+//
+// OLLAMA-SPECIFIC: Uses custom ollamaReqMessage type instead of OpenAI SDK types.
+// Ollama has its own message format and tool call structure.
 func toOllamaMessages(messages []Message) []ollamaReqMessage {
 	result := make([]ollamaReqMessage, len(messages))
 	for i, m := range messages {
@@ -325,8 +337,13 @@ func toOllamaTools(tools []Tool) []ollamaReqTool {
 }
 
 // mergeConsecutiveSystemMessagesOllama merges consecutive system messages into a single message.
-// This prevents API errors from providers that don't support multiple system messages,
-// and reduces context waste by deduplicating repeated system prompts.
+//
+// OLLAMA-SPECIFIC BEHAVIOR:
+// Unlike OpenAI, Ollama allows system messages anywhere in the conversation.
+// This function merges consecutive system messages IN PLACE without moving them to the start.
+// This preserves Ollama's flexible system message handling.
+//
+// DO NOT use this function for OpenAI-compatible providers - use mergeSystemMessagesOpenAI instead.
 func mergeConsecutiveSystemMessagesOllama(messages []ollamaReqMessage) []ollamaReqMessage {
 	if len(messages) == 0 {
 		return messages
