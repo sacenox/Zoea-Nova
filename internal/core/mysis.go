@@ -850,6 +850,9 @@ func (m *Mysis) setError(err error) {
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateErrored)
 
+	// Release account (if any) to allow restart
+	a.releaseCurrentAccount()
+
 	// Emit error event
 	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
@@ -1511,6 +1514,9 @@ func (m *Mysis) setErrorState(err error) {
 			Msg("failed to update mysis state to errored")
 	}
 	a.emitStateChange(oldState, MysisStateErrored)
+
+	// Release account (if any) to allow restart
+	a.releaseCurrentAccount()
 
 	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
