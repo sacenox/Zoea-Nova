@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -756,11 +755,7 @@ func (m *Model) refreshSwarmMessages() {
 
 // refreshTick updates the currentTick field from the Commander's aggregate tick.
 func (m *Model) refreshTick() {
-	oldTick := m.currentTick
 	m.currentTick = m.commander.AggregateTick()
-	if oldTick != m.currentTick {
-		log.Debug().Int64("old_tick", oldTick).Int64("new_tick", m.currentTick).Msg("[TICK DEBUG] TUI tick updated")
-	}
 }
 
 func (m *Model) loadMysisLogs() {

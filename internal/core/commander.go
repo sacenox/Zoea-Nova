@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
@@ -412,7 +411,6 @@ func (c *Commander) AggregateTick() int64 {
 	defer c.mu.RUnlock()
 
 	var maxTick int64
-	mysisCount := len(c.myses)
 	for _, m := range c.myses {
 		m.mu.RLock()
 		tick := m.lastServerTick
@@ -423,6 +421,5 @@ func (c *Commander) AggregateTick() int64 {
 		}
 	}
 
-	log.Debug().Int("mysis_count", mysisCount).Int64("max_tick", maxTick).Msg("[TICK DEBUG] AggregateTick called")
 	return maxTick
 }

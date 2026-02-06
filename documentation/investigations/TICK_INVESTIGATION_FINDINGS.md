@@ -2,11 +2,24 @@
 
 **Date:** 2026-02-05  
 **Issue:** Tick display always shows 0 in the UI  
-**Status:** ⚠️ ROOT CAUSE IDENTIFIED - SERVER DOES NOT RETURN TICKS
+**Status:** ✅ **RESOLVED** - Server v0.44.4 now returns ticks
+
+---
+
+# ⚠️ ISSUE RESOLVED
+
+**Resolution Date:** 2026-02-06  
+**Server Version Fixed:** v0.44.4
+
+The server issue documented below was **FIXED in server v0.44.4**. The `get_notifications` tool now correctly returns `current_tick` and `timestamp` fields as expected. Zoea Nova's implementation was already correct and began working immediately after the server update.
+
+This document is preserved for historical context.
+
+---
 
 ## Root Cause Identified (Systematic Debugging)
 
-### **ACTUAL ROOT CAUSE**: SpaceMolt Server Does Not Return `current_tick` ⚠️
+### **HISTORICAL ROOT CAUSE** (Pre-v0.44.4): SpaceMolt Server Did Not Return `current_tick`
 
 **Discovery Method:** Systematic debugging with diagnostic instrumentation
 

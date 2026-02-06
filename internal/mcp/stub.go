@@ -112,9 +112,12 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 			"system_id": "stub_system"
 		}`
 	case "get_notifications":
+		// Match real API format (server v0.44.4+)
 		content = `{
-			"tick": 42,
-			"notifications": []
+			"count": 0,
+			"current_tick": 42,
+			"notifications": [],
+			"remaining": 0
 		}`
 	default:
 		return &ToolResult{

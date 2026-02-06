@@ -7,9 +7,23 @@
 
 ---
 
+# ⚠️ HISTORICAL DOCUMENT - ISSUE RESOLVED
+
+**Date Resolved:** 2026-02-06  
+**Server Version Fixed:** v0.44.4  
+**Status:** This investigation documented an API limitation that has since been fixed.
+
+The SpaceMolt server **NOW RETURNS tick information** in `get_notifications` responses as of server v0.44.4. The findings below were accurate for server versions v0.44.2 and earlier, but are now outdated.
+
+**Resolution:** Server fix added `current_tick` and `timestamp` fields to `get_notifications` responses. Zoea Nova's implementation was already correct and began working immediately after the server update.
+
+This document is preserved for historical context only.
+
+---
+
 ## Executive Summary
 
-**CRITICAL FINDING:** The SpaceMolt `get_notifications` API **DOES NOT return tick information**.
+**CRITICAL FINDING (RESOLVED):** The SpaceMolt `get_notifications` API **DID NOT return tick information** (prior to v0.44.4).
 
 This contradicts:
 1. Our implementation plan (based on skill.md interpretation)
