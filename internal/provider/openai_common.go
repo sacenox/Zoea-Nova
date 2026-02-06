@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -117,55 +118,52 @@ func validateOpenAIMessages(messages []openai.ChatCompletionMessage) error {
 	return nil
 }
 
-// mergeSystemMessagesOpenAI merges all system messages into a single message at the start.
-// OpenAI Chat Completions API requires:
-// 1. System messages must be first
-// 2. At least one non-system message must follow
+// mergeSystemMessagesOpenAI merges system messages intelligently while preserving conversation flow.
 //
-// This function collects ALL system messages regardless of position and places them
-// at the start as a single merged message. If only system messages exist, it adds
-// a minimal "Begin." user message to meet OpenAI requirements.
+// Strategy:
+// 1. Separate initial system messages (before any user/assistant messages)
+// 2. Keep user/assistant conversation intact
+// 3. Merge any mid-conversation system messages into the initial system prompt
+//
+// OpenAI requires:
+// - System messages at the start
+// - At least one non-system message
+// - Proper user/assistant alternation
 func mergeSystemMessagesOpenAI(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {
 	if len(messages) == 0 {
 		return messages
 	}
 
-	// Validate messages before processing
-	if err := validateOpenAIMessages(messages); err != nil {
-		log.Error().Err(err).Msg("OpenAI: Message validation failed")
-		// Continue processing but log the issue
-	}
-
-	// Separate system messages from others
-	var systemBuffer strings.Builder
-	nonSystemMessages := make([]openai.ChatCompletionMessage, 0, len(messages))
+	// Separate system messages from conversation messages
+	var systemMessages []string
+	var conversationMessages []openai.ChatCompletionMessage
 
 	for _, msg := range messages {
 		if msg.Role == "system" {
-			if systemBuffer.Len() > 0 {
-				systemBuffer.WriteString("\n\n")
-			}
-			systemBuffer.WriteString(msg.Content)
+			systemMessages = append(systemMessages, msg.Content)
 		} else {
-			nonSystemMessages = append(nonSystemMessages, msg)
+			conversationMessages = append(conversationMessages, msg)
 		}
 	}
 
-	// Build result: system first, then non-system
+	// Build result: merged system message + conversation
 	result := make([]openai.ChatCompletionMessage, 0, len(messages))
 
-	if systemBuffer.Len() > 0 {
+	// Add merged system message if any system messages exist
+	if len(systemMessages) > 0 {
+		mergedSystem := strings.Join(systemMessages, "\n\n")
 		result = append(result, openai.ChatCompletionMessage{
 			Role:    "system",
-			Content: systemBuffer.String(),
+			Content: mergedSystem,
 		})
 	}
 
-	result = append(result, nonSystemMessages...)
+	// Add conversation messages
+	result = append(result, conversationMessages...)
 
 	// OpenAI requires at least one non-system message
 	// If we only have system messages, add a minimal user message
-	if len(nonSystemMessages) == 0 && len(result) > 0 {
+	if len(conversationMessages) == 0 && len(result) > 0 {
 		log.Debug().
 			Msg("OpenAI: Only system messages present, adding minimal user message")
 		result = append(result, openai.ChatCompletionMessage{
@@ -174,10 +172,18 @@ func mergeSystemMessagesOpenAI(messages []openai.ChatCompletionMessage) []openai
 		})
 	}
 
+	// If conversation ends with assistant message, warn (may cause issues)
+	if len(result) > 1 && result[len(result)-1].Role == "assistant" {
+		log.Warn().
+			Msg("OpenAI: Conversation ends with assistant message")
+	}
+
 	log.Debug().
 		Int("original_count", len(messages)).
 		Int("merged_count", len(result)).
-		Bool("added_user_msg", len(nonSystemMessages) == 0 && len(result) > 0).
+		Int("system_merged", len(systemMessages)).
+		Int("conversation_kept", len(conversationMessages)).
+		Bool("added_user_msg", len(conversationMessages) == 0 && len(result) > 0).
 		Msg("OpenAI: Merged system messages")
 
 	return result
