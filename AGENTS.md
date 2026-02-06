@@ -217,6 +217,49 @@ flowchart LR
     MCPProxy --> SpaceMolt["SpaceMolt MCP Server"]
 ```
 
+## Provider Architecture
+
+Zoea Nova supports two types of LLM providers:
+
+### OpenAI-Compatible Providers
+Providers that follow the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat/create) specification.
+
+**Examples:** OpenCode Zen, OpenAI, Azure OpenAI, Together AI, etc.
+
+**Implementation:**
+- Use shared code in `internal/provider/openai_common.go`
+- Strict message ordering (system first, alternating user/assistant)
+- Tool call validation and orphaned message removal
+- Fallback user message if only system messages exist
+
+**Location:** `internal/provider/opencode.go` (reference implementation)
+
+### Ollama Provider
+Custom provider with flexible API that differs from OpenAI standard.
+
+**Ollama-Specific Behavior:**
+- System messages allowed anywhere (not just first)
+- Custom response types with `reasoning()` method
+- Flexible message ordering
+
+**Implementation:**
+- Isolated in `internal/provider/ollama.go`
+- Uses custom types (`ollamaReqMessage`, `chatCompletionResponse`, etc.)
+- Custom message merging (`mergeConsecutiveSystemMessagesOllama`)
+- **DO NOT** use Ollama code for OpenAI-compatible providers
+
+**Location:** `internal/provider/ollama.go`
+
+### Key Files
+- `internal/provider/openai_common.go` - Shared OpenAI-compliant code (use for new OpenAI-compatible providers)
+- `internal/provider/opencode.go` - OpenCode Zen implementation (OpenAI-compatible reference)
+- `internal/provider/ollama.go` - Ollama implementation (isolated, custom)
+- `documentation/architecture/OPENAI_COMPATIBILITY.md` - Full compatibility guide
+
+### Adding New Providers
+- **OpenAI-compatible:** Use `openai_common.go` functions, follow OpenCode pattern
+- **Custom API:** Create isolated implementation like Ollama, document differences
+
 ## State Machine
 
 See `documentation/architecture/MYSIS_STATE_MACHINE.md` for valid Mysis transitions and triggers.
