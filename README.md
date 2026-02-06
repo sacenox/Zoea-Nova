@@ -49,6 +49,9 @@ See `documentation/TERMINAL_COMPATIBILITY.md` for detailed compatibility informa
 make run          # Build and start
 make install      # Install to ~/.zoea-nova/bin/zoea
 ./bin/zoea        # Run directly
+
+or
+
 ./bin/zoea -debug # With debug logging
 ./bin/zoea -offline # Run in offline mode (mock game server)
 ```
