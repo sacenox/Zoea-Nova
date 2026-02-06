@@ -508,6 +508,11 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		a.setActivity(ActivityStateIdle, time.Time{})
 
 		if err != nil {
+			log.Error().
+				Str("mysis", a.name).
+				Str("provider", p.Name()).
+				Err(err).
+				Msg("Provider returned error")
 			a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 			a.setError(err)
 			return fmt.Errorf("provider chat: %w", err)
@@ -851,6 +856,12 @@ func (m *Mysis) setError(err error) {
 		return
 	}
 
+	log.Error().
+		Str("mysis", a.name).
+		Str("old_state", string(oldState)).
+		Err(err).
+		Msg("Mysis transitioning to errored state")
+
 	a.lastError = err
 	a.state = MysisStateErrored
 	a.mu.Unlock()
@@ -889,6 +900,10 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 
 	// Apply compaction to remove redundant snapshot tool results
 	compacted := a.compactSnapshots(recent)
+
+	// Remove orphaned tool messages (results without corresponding tool calls)
+	// This ensures OpenAI Chat Completions API compliance
+	compacted = a.removeOrphanedToolMessages(compacted)
 
 	// Always try to fetch the system prompt and prepend it if not already first
 	system, err := a.store.GetSystemMemory(a.id)
@@ -1566,4 +1581,66 @@ func (m *Mysis) publishCriticalEvent(event Event) {
 		Str("mysis_id", a.id).
 		Str("mysis_name", a.name).
 		Msg("event bus publish timeout")
+}
+
+// collectValidToolCallIDs extracts all tool call IDs from assistant messages.
+// Used to validate that tool result messages reference existing tool calls.
+func (m *Mysis) collectValidToolCallIDs(memories []*store.Memory) map[string]bool {
+	validToolCalls := make(map[string]bool)
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleAssistant &&
+			strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			calls := m.parseStoredToolCalls(mem.Content)
+			for _, call := range calls {
+				validToolCalls[call.ID] = true
+			}
+		}
+	}
+
+	return validToolCalls
+}
+
+// removeOrphanedToolMessages removes tool result messages that don't have
+// a corresponding assistant tool call message. This can happen due to:
+// 1. Context window cutting off tool calls but keeping results
+// 2. Context compaction removing tool call messages
+//
+// OpenAI Chat Completions API requires tool results to reference valid tool calls.
+func (m *Mysis) removeOrphanedToolMessages(memories []*store.Memory) []*store.Memory {
+	validToolCalls := m.collectValidToolCallIDs(memories)
+
+	result := make([]*store.Memory, 0, len(memories))
+	for _, mem := range memories {
+		// Check if this is a tool result message
+		if mem.Role == store.MemoryRoleTool {
+			idx := strings.Index(mem.Content, constants.ToolCallStorageFieldDelimiter)
+			if idx > 0 {
+				toolCallID := mem.Content[:idx]
+				if !validToolCalls[toolCallID] {
+					log.Debug().
+						Str("tool_call_id", toolCallID).
+						Msg("Removing orphaned tool result - no matching tool call")
+					continue // Skip orphaned result
+				}
+			} else {
+				// Malformed tool result - skip it
+				log.Warn().
+					Str("content", mem.Content).
+					Msg("Skipping malformed tool result")
+				continue
+			}
+		}
+		result = append(result, mem)
+	}
+
+	if len(result) < len(memories) {
+		log.Debug().
+			Int("removed", len(memories)-len(result)).
+			Int("original", len(memories)).
+			Int("final", len(result)).
+			Msg("Removed orphaned tool messages for OpenAI compliance")
+	}
+
+	return result
 }
