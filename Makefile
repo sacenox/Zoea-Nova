@@ -19,7 +19,7 @@ install: build
 	cp bin/zoea $(HOME)/.zoea-nova/bin/zoea
 
 test:
-	go test -race -timeout=30s -coverprofile=coverage.out ./internal/config ./internal/core ./internal/integration ./internal/mcp ./internal/provider ./internal/store
+	go test -race -timeout=60s -coverprofile=coverage.out ./internal/config ./internal/core ./internal/integration ./internal/mcp ./internal/provider ./internal/store
 	go test -timeout=30s -coverprofile=coverage-tui.out ./internal/tui
 	go tool cover -func=coverage.out
 	@echo ""

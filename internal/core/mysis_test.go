@@ -953,3 +953,254 @@ func TestMysisStopDoesNotOverrideWithError(t *testing.T) {
 		t.Errorf("expected no lastError after clean stop, got: %v", m.LastError())
 	}
 }
+
+// TestStopDuringInitialMessage tests the critical race condition:
+// Stop() called IMMEDIATELY after Start(), during the initial SendMessage.
+//
+// Timeline:
+// - Line 268: Start() spawns `go a.SendMessage(ContinuePrompt, ...)`
+// - Line 270: Start() returns
+// - HERE: Test calls Stop() (within 5-10ms)
+// - SendMessage goroutine may still be waiting to acquire turnMu
+//
+// Expected: Final state is Stopped, no deadlock, no panic.
+func TestStopDuringInitialMessage(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("race-test", "mock", "test-model", 0.7)
+
+	// Use a mock provider with NO delay - we want to test the race
+	// between Start() spawning SendMessage and Stop() being called
+	mock := provider.NewMock("mock", "response")
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start the mysis (spawns initial SendMessage goroutine)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// IMMEDIATELY call Stop() - this creates the race condition
+	// The initial SendMessage may not have acquired turnMu yet
+	// No sleep = tightest race window possible
+	// time.Sleep(5 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- m.Stop()
+	}()
+
+	// Stop should complete within a reasonable timeout
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Stop() error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for Stop() - possible deadlock")
+	}
+
+	// Verify final state is Stopped
+	if m.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped after immediate Stop(), got %s", m.State())
+	}
+
+	// Verify no error was set
+	if m.LastError() != nil {
+		t.Errorf("expected no lastError after immediate Stop(), got: %v", m.LastError())
+	}
+}
+
+// TestStopDuringInitialMessageWithSlowProvider tests an even tighter race:
+// Stop() called while the initial SendMessage is INSIDE the provider.Chat() call.
+//
+// Timeline:
+// - Start() spawns SendMessage goroutine
+// - SendMessage acquires turnMu and enters provider.Chat() (50ms delay)
+// - Test calls Stop() immediately (no sleep)
+// - Stop() waits for turnMu while provider is processing
+//
+// Expected: Stop waits for turn to complete, then succeeds.
+func TestStopDuringInitialMessageWithSlowProvider(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("slow-provider-race", "mock", "test-model", 0.7)
+
+	// Use a provider with delay to simulate the mysis being mid-turn when Stop is called
+	mock := provider.NewMock("mock", "response").SetDelay(50 * time.Millisecond)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start the mysis
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Call Stop IMMEDIATELY (no sleep) - this should catch the initial
+	// SendMessage while it's inside provider.Chat()
+	done := make(chan error, 1)
+	go func() {
+		done <- m.Stop()
+	}()
+
+	// Stop should wait for the current turn to finish, then succeed
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Stop() error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for Stop() - possible deadlock")
+	}
+
+	// Verify final state is Stopped
+	if m.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped, got %s", m.State())
+	}
+
+	// Verify no error was set
+	if m.LastError() != nil {
+		t.Errorf("expected no lastError, got: %v", m.LastError())
+	}
+}
+
+// TestStopDuringIdleNudge tests stopping a mysis while it's processing an idle nudge.
+// This reproduces the race condition where Stop() is called during nudge processing.
+//
+// Timeline:
+// - Start() completes, initial message finishes processing
+// - Test manually triggers nudge via nudgeCh (no 30s wait needed)
+// - Line 1047-1052: nudge handler spawns `go a.SendMessage(ContinuePrompt, ...)`
+// - HERE: Test calls Stop() while SendMessage goroutine is running
+// - SendMessage tries to process but context is canceled -> calls setError()
+// - Race: setError() tries to set state=Errored, but Stop() already set state=Stopped
+//
+// Expected: Final state is Stopped (not Errored), no lastError.
+func TestStopDuringIdleNudge(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("nudge-race-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Use a mock provider with a delay to simulate LLM processing
+	mock := provider.NewMock("mock", "nudge response").SetDelay(100 * time.Millisecond)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start mysis (triggers initial SendMessage at line 268)
+	if err := m.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Wait for initial message to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Manually trigger a nudge (instead of waiting 30 seconds for ticker)
+	// This simulates what the run() goroutine does on line 1043
+	select {
+	case m.nudgeCh <- struct{}{}:
+		// Nudge sent successfully
+	default:
+		t.Fatal("failed to send nudge - channel full")
+	}
+
+	// Give the nudge handler time to spawn SendMessage goroutine
+	time.Sleep(10 * time.Millisecond)
+
+	// Call Stop() DURING the nudge processing
+	// The race happens when:
+	// 1. Nudge handler (line 1047-1052) spawns: go a.SendMessage(...)
+	// 2. Stop() is called here (cancels context)
+	// 3. SendMessage goroutine tries to process but context is canceled
+	// 4. SendMessage calls setError() which tries to change state to Errored
+	// 5. But Stop() should have already set state to Stopped
+	if err := m.Stop(); err != nil {
+		t.Fatalf("Stop() error: %v", err)
+	}
+
+	// Give a moment for any racing goroutines to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Assert state == MysisStateStopped (NOT Errored)
+	if m.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped after Stop(), got %s (lastError: %v)", m.State(), m.LastError())
+	}
+
+	// Assert lastError == nil
+	if m.LastError() != nil {
+		t.Errorf("expected no lastError after clean stop, got: %v", m.LastError())
+	}
+}
+
+// TestStopAtVariousTimings is a parameterized test that calls Stop() at
+// different delays after Start() to systematically explore timing windows.
+//
+// This test helps identify which timing windows consistently fail or pass,
+// revealing patterns in race conditions.
+//
+// Test delays:
+// - 0ms: Immediate (before initial SendMessage goroutine starts)
+// - 10ms: Very fast (goroutine just started, may not have acquired turnMu)
+// - 50ms: During initial message processing (inside provider.Chat)
+// - 100ms: After initial message likely done
+// - 500ms: After idle nudge interval
+//
+// Run each timing 10 times with:
+//
+//	go test ./internal/core -run TestStopAtVariousTimings -count=10
+func TestStopAtVariousTimings(t *testing.T) {
+	delays := []time.Duration{
+		0,                      // 0ms - immediate
+		10 * time.Millisecond,  // 10ms - very fast
+		50 * time.Millisecond,  // 50ms - during initial message
+		100 * time.Millisecond, // 100ms - after initial message likely done
+		500 * time.Millisecond, // 500ms - after idle nudge interval
+	}
+
+	for _, delay := range delays {
+		t.Run(fmt.Sprintf("delay_%dms", delay.Milliseconds()), func(t *testing.T) {
+			s, bus, cleanup := setupMysisTest(t)
+			defer cleanup()
+
+			stored, err := s.CreateMysis(
+				fmt.Sprintf("timing-test-%dms", delay.Milliseconds()),
+				"mock",
+				"test-model",
+				0.7,
+			)
+			if err != nil {
+				t.Fatalf("CreateMysis() error: %v", err)
+			}
+
+			// Use a mock with a delay to simulate real LLM processing
+			mock := provider.NewMock("mock", "test response").SetDelay(25 * time.Millisecond)
+			mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+			// Start mysis
+			if err := mysis.Start(); err != nil {
+				t.Fatalf("Start() error: %v", err)
+			}
+
+			// Wait for the specified delay
+			time.Sleep(delay)
+
+			// Stop mysis
+			if err := mysis.Stop(); err != nil {
+				t.Fatalf("Stop() error: %v", err)
+			}
+
+			// Verify final state is Stopped (critical assertion)
+			finalState := mysis.State()
+			if finalState != MysisStateStopped {
+				t.Errorf("expected state=stopped, got %s (lastError: %v)", finalState, mysis.LastError())
+			}
+
+			// Verify no error is set
+			if mysis.LastError() != nil {
+				t.Errorf("expected no lastError after clean stop, got: %v", mysis.LastError())
+			}
+		})
+	}
+}

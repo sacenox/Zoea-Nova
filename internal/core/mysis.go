@@ -279,12 +279,30 @@ func (m *Mysis) Stop() error {
 		return nil
 	}
 
+	// Cancel context to signal goroutine to stop
 	if a.cancel != nil {
 		a.cancel()
 	}
+
+	// Set state to Stopped IMMEDIATELY (before waiting)
+	// This closes the race window where setError() could override with Errored
+	oldState := a.state
+	a.state = MysisStateStopped
+	a.ctx = nil
+	a.cancel = nil
 	a.mu.Unlock()
 
+	// Update store (if fails, in-memory state already correct)
+	if err := a.store.UpdateMysisState(a.id, store.MysisStateStopped); err != nil {
+		log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to persist Stopped state")
+		// Continue anyway - in-memory state is authoritative
+	}
+
+	// Emit state change event (TUI will update immediately)
+	a.emitStateChange(oldState, MysisStateStopped)
+
 	// Wait for current turn to finish with timeout
+	// Goroutine will see state=Stopped and exit cleanly
 	done := make(chan struct{})
 	go func() {
 		a.turnMu.Lock()
@@ -300,25 +318,7 @@ func (m *Mysis) Stop() error {
 		// Continue with cleanup even if turn didn't complete
 	}
 
-	a.mu.Lock()
-	if a.state != MysisStateRunning {
-		a.mu.Unlock()
-		return nil
-	}
-	a.cancel = nil
-	a.ctx = nil
-
-	oldState := a.state
-	a.state = MysisStateStopped
-	a.mu.Unlock()
-
-	// Update store
-	if err := a.store.UpdateMysisState(a.id, store.MysisStateStopped); err != nil {
-		return err
-	}
-
-	// Emit state change event
-	a.emitStateChange(oldState, MysisStateStopped)
+	// Release resources
 	a.releaseCurrentAccount()
 
 	// Close provider HTTP client
