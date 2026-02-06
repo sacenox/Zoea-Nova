@@ -15,6 +15,16 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// openCodeRequest is a custom request struct to ensure stream:false is serialized
+// The openai.ChatCompletionRequest has omitempty on Stream, which omits false values
+type openCodeRequest struct {
+	Model       string                         `json:"model"`
+	Messages    []openai.ChatCompletionMessage `json:"messages"`
+	Tools       []openai.Tool                  `json:"tools,omitempty"`
+	Temperature float32                        `json:"temperature,omitempty"`
+	Stream      bool                           `json:"stream"` // NO omitempty - always serialize
+}
+
 // OpenCodeProvider implements the Provider interface for OpenCode Zen.
 type OpenCodeProvider struct {
 	client      *openai.Client
@@ -143,7 +153,15 @@ func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message
 }
 
 func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (*openaiChatResponse, error) {
-	body, err := json.Marshal(req)
+	// Use custom struct to ensure stream:false is serialized
+	customReq := openCodeRequest{
+		Model:       req.Model,
+		Messages:    req.Messages,
+		Tools:       req.Tools,
+		Temperature: req.Temperature,
+		Stream:      req.Stream,
+	}
+	body, err := json.Marshal(customReq)
 	if err != nil {
 		return nil, err
 	}
