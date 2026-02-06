@@ -288,8 +288,6 @@ func (m *Mysis) Stop() error {
 	// This closes the race window where setError() could override with Errored
 	oldState := a.state
 	a.state = MysisStateStopped
-	a.ctx = nil
-	a.cancel = nil
 	a.mu.Unlock()
 
 	// Update store (if fails, in-memory state already correct)
@@ -302,7 +300,8 @@ func (m *Mysis) Stop() error {
 	a.emitStateChange(oldState, MysisStateStopped)
 
 	// Wait for current turn to finish with timeout
-	// Goroutine will see state=Stopped and exit cleanly
+	// IMPORTANT: Don't clear ctx/cancel until AFTER turn completes
+	// Otherwise SendMessageFrom gets nil ctx and creates uncanceled Background context
 	done := make(chan struct{})
 	go func() {
 		a.turnMu.Lock()
@@ -317,6 +316,12 @@ func (m *Mysis) Stop() error {
 		log.Warn().Str("mysis", a.name).Msg("Stop timeout - forcing shutdown")
 		// Continue with cleanup even if turn didn't complete
 	}
+
+	// Clear context references AFTER turn completes
+	a.mu.Lock()
+	a.ctx = nil
+	a.cancel = nil
+	a.mu.Unlock()
 
 	// Release resources
 	a.releaseCurrentAccount()
