@@ -355,3 +355,11 @@ func toOllamaTools(tools []Tool) []ollamaReqTool {
 	}
 	return result
 }
+
+// Close closes idle HTTP connections
+func (p *OllamaProvider) Close() error {
+	if p.httpClient != nil {
+		p.httpClient.CloseIdleConnections()
+	}
+	return nil
+}

@@ -223,3 +223,11 @@ func (p *OpenCodeProvider) Stream(ctx context.Context, messages []Message) (<-ch
 
 	return ch, nil
 }
+
+// Close closes idle HTTP connections
+func (p *OpenCodeProvider) Close() error {
+	if p.httpClient != nil {
+		p.httpClient.CloseIdleConnections()
+	}
+	return nil
+}
