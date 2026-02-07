@@ -13,9 +13,6 @@
 
 ---
 
-- Server added session_id recently, ensure it's in context
-- Investigate claim -> login loop.
-
 - REGRESSION: broadcast doesn't start idle myses. test coverage gap!!
 
 - include most recent comander broadcast if exits in nudges.
