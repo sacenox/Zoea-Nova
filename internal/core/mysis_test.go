@@ -762,40 +762,6 @@ func TestExtractLatestToolLoopHelper(t *testing.T) {
 	}
 }
 
-func TestMysisContextCompactionNonSnapshot(t *testing.T) {
-	t.Skip("Obsolete: Tests old non-snapshot compaction. Loop composition doesn't use compaction.")
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, _ := s.CreateMysis("compaction-non-snapshot", "mock", "test-model", 0.7)
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
-
-	for i := 0; i < 2; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "travel", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, fmt.Sprintf("[TOOL_CALLS]call_%d:travel:{}", i), "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, fmt.Sprintf(`call_%d:{"ship_id":"ship_%d"}`, i, i), "", "")
-	}
-
-	memories, err := mysis.getContextMemories()
-	if err != nil {
-		t.Fatalf("getContextMemories() error: %v", err)
-	}
-
-	shipResults := 0
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
-			shipResults++
-		}
-	}
-
-	if shipResults != 2 {
-		t.Fatalf("expected 2 travel results to be kept, got %d", shipResults)
-	}
-}
-
 func TestComputeMemoryStats(t *testing.T) {
 	m := &Mysis{}
 
@@ -2225,12 +2191,15 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("broadcast_with_unknown_sender", func(t *testing.T) {
-		stored, _ := s.CreateMysis("unknown-sender", "mock", "test-model", 0.7)
+		stored, _ := s.CreateMysis("receiver-mysis", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
 		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-		// Add a broadcast with a non-existent sender ID
-		s.AddMemory("nonexistent-mysis-id", store.MemoryRoleUser, store.MemorySourceBroadcast, "Test broadcast", "", "nonexistent-mysis-id")
+		// Add a broadcast with a sender ID that will be deleted (becomes "unknown")
+		sender, _ := s.CreateMysis("temp-sender", "mock", "test-model", 0.7)
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Test broadcast", "", sender.ID)
+		// Delete the sender so it becomes "Unknown"
+		s.DeleteMysis(sender.ID)
 
 		prompt := mysis.buildSystemPrompt()
 
@@ -2265,4 +2234,100 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 			t.Error("expected broadcast content in prompt")
 		}
 	})
+}
+// TestSendEphemeralMessage_ErroredState tests sending ephemeral message to errored mysis.
+func TestSendEphemeralMessage_ErroredState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("errored-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Set mysis to errored state
+	mysis.mu.Lock()
+	mysis.state = MysisStateErrored
+	mysis.mu.Unlock()
+
+	// Attempt to send ephemeral message
+	err = mysis.SendEphemeralMessage("Test message", store.MemorySourceDirect)
+
+	if err == nil {
+		t.Fatal("expected error when sending to errored mysis")
+	}
+
+	expectedErrMsg := "mysis errored - press 'r' to relaunch"
+	if !strings.Contains(err.Error(), expectedErrMsg) {
+		t.Errorf("expected error containing %q, got: %v", expectedErrMsg, err)
+	}
+}
+
+// TestSendEphemeralMessage_EmptyContent tests sending empty ephemeral message.
+func TestSendEphemeralMessage_EmptyContent(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Send empty ephemeral message (should be allowed - LLM can handle it)
+	err = mysis.SendEphemeralMessage("", store.MemorySourceDirect)
+
+	// Empty content should not cause an error - the LLM will receive it
+	if err != nil {
+		t.Errorf("unexpected error for empty content: %v", err)
+	}
+}
+
+// TestSendEphemeralMessage_MCPListToolsError tests handling of MCP tool listing errors.
+func TestSendEphemeralMessage_MCPListToolsError(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Use a mock provider that returns quickly
+	mock := provider.NewMock("mock", "response")
+	
+	// Create a failing MCP proxy
+	failingMCP := &mcp.FailingMockClient{Err: errors.New("connection refused")}
+	
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis.mcp = failingMCP
+
+	// Send ephemeral message - should handle MCP error gracefully
+	err = mysis.SendEphemeralMessage("Test", store.MemorySourceDirect)
+
+	// Should complete successfully even with MCP error (continues without tools)
+	if err == nil {
+		// Wait for async response processing
+		time.Sleep(100 * time.Millisecond)
+	}
+	
+	// Check that mysis published an error event
+	select {
+	case event := <-bus.Subscribe():
+		if event.Type != EventMysisError {
+			t.Errorf("expected EventMysisError, got %v", event.Type)
+		}
+		if event.Error == nil {
+			t.Error("expected error data in event")
+		} else if !strings.Contains(event.Error.Error, "Failed to load tools") {
+			t.Errorf("expected 'Failed to load tools' error, got: %v", event.Error.Error)
+		}
+	case <-time.After(1 * time.Second):
+		t.Error("timeout waiting for error event")
+	}
 }

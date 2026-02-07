@@ -161,12 +161,13 @@ nudgeMemory := &store.Memory{
 
 **Key properties:**
 - **NOT stored in database** - Ephemeral automation scaffolding
-- **Counted for circuit breaker** - Nudge counter increments in ticker loop
-- **Escalating prompts** - Content changes based on `nudgeFailCount`:
-  - Attempt 1: "Continue your mission..." (gentle)
-  - Attempt 2: "You need to respond..." (firm)
-  - Attempt 3: "URGENT: Respond immediately..." (urgent)
-  - After 3: Transition to idle state with error
+- **Counted for circuit breaker** - Nudge counter increments in ticker loop (see `internal/core/mysis.go:1624-1641`)
+- **Escalating prompts** - Content changes based on `nudgeFailCount` to increase urgency:
+  - Attempt 1: "Continue your mission. Check notifications and coordinate with the swarm." (gentle)
+  - Attempt 2: "You need to respond. Check your notifications and status." (firm)
+  - Attempt 3: "URGENT: Respond immediately. Check your system status." (urgent)
+  - After 3 failures: Mysis transitions to idle state with error "Failed to respond after 3 nudges"
+- **Escalation intervals** - Nudges sent every 30 seconds for idle myses, 2 minutes for wait states (see `internal/constants/constants.go:69-73`)
 
 ### Nudge Circuit Breaker
 
@@ -189,6 +190,8 @@ if shouldNudge(time.Now()) {
 - Reset to 0 on successful LLM response (line 616)
 - Prevents idle Myses from looping indefinitely
 - Forces transition to idle state after 3 failed nudges
+
+For state machine transitions related to nudge failures, see [MYSIS_STATE_MACHINE.md](MYSIS_STATE_MACHINE.md#state-transitions).
 
 ### Nudge Intervals
 

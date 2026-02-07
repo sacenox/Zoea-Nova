@@ -145,3 +145,48 @@ func TestClientClose(t *testing.T) {
 		t.Errorf("second Close() error: %v", err)
 	}
 }
+
+// TestClientInitializeRetry verifies Initialize retries on failure.
+func TestClientInitializeRetry(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			// Fail first attempt
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// Succeed on second attempt
+		var req Request
+		json.NewDecoder(r.Body).Decode(&req)
+
+		if req.Method == "initialize" {
+			result := map[string]interface{}{
+				"protocolVersion": "2024-11-05",
+				"capabilities":    map[string]interface{}{},
+				"serverInfo":      map[string]string{"name": "test", "version": "1.0"},
+			}
+			data, _ := json.Marshal(result)
+			resp := &Response{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result:  data,
+			}
+			json.NewEncoder(w).Encode(resp)
+		} else if req.Method == "notifications/initialized" {
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	_, err := client.Initialize(context.Background(), map[string]interface{}{"name": "test-client"})
+	if err != nil {
+		t.Fatalf("Initialize() should succeed after retry, got error: %v", err)
+	}
+
+	if attempts < 2 {
+		t.Errorf("expected at least 2 attempts, got %d", attempts)
+	}
+}

@@ -409,7 +409,7 @@ func (m Model) renderStatusBar() string {
 	// Style the status bar
 	barStyle := lipgloss.NewStyle().
 		Background(colorBorder).
-		Foreground(colorPrimary).
+		Foreground(colorBrand).
 		Width(m.width)
 
 	bar := leftSegment +
