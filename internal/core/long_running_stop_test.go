@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -339,6 +340,10 @@ func TestStopWithQueuedMessages(t *testing.T) {
 	err := mysis.SendMessage("after-stop", store.MemorySourceDirect)
 	if err == nil {
 		t.Error("expected error sending message to stopped mysis")
+	} else {
+		if !strings.Contains(err.Error(), "stopped") || !strings.Contains(err.Error(), "relaunch") {
+			t.Errorf("expected error about stopped state requiring relaunch, got: %v", err)
+		}
 	}
 }
 
