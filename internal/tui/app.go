@@ -522,6 +522,9 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.NewMysis):
 		m.input.SetMode(InputModeNewMysis, "")
+		m.inputStage = InputStageName // Reset to name stage
+		m.pendingMysisName = ""
+		m.pendingMysisProvider = ""
 		return m, m.input.Focus()
 
 	case key.Matches(msg, keys.Delete):
