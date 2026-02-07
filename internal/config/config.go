@@ -54,7 +54,7 @@ func DefaultConfig() *Config {
 			},
 			"opencode_zen": {
 				Endpoint:    "https://api.opencode.ai/v1",
-				Model:       "glm-4.7-free",
+				Model:       "gpt-5-nano",
 				Temperature: 0.7,
 				RateLimit:   10.0,
 				RateBurst:   5,
