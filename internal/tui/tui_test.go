@@ -38,13 +38,17 @@ func setupTestModel(t *testing.T) (Model, func()) {
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
 	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
-			MaxMyses: 16,
+			MaxMyses:        16,
+			DefaultProvider: "opencode_zen",
+			DefaultModel:    "gpt-5-nano",
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama": {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"ollama":       {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"opencode_zen": {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 		},
 	}
 
@@ -823,5 +827,68 @@ func TestModelRefreshTick(t *testing.T) {
 	expectedTick := m.commander.AggregateTick()
 	if m.currentTick != expectedTick {
 		t.Errorf("expected currentTick=%d after refresh, got %d", expectedTick, m.currentTick)
+	}
+}
+
+func TestMysisCreation_TwoStageFlow(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Step 1: Press 'n' to start creation
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newModel.(Model)
+
+	if m.input.Mode() != InputModeNewMysis {
+		t.Fatalf("expected InputModeNewMysis, got %v", m.input.Mode())
+	}
+	if m.inputStage != InputStageName {
+		t.Fatalf("expected InputStageName, got %v", m.inputStage)
+	}
+
+	// Step 2: Type name "test-mysis"
+	for _, r := range "test-mysis" {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
+	}
+
+	// Step 3: Press Enter (should advance to provider stage)
+	t.Logf("Before name Enter: inputValue='%s'", m.input.Value())
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	t.Logf("After name Enter: inputMode=%v, inputStage=%v, pendingName=%s",
+		m.input.Mode(), m.inputStage, m.pendingMysisName)
+
+	if m.inputStage != InputStageProvider {
+		t.Errorf("expected InputStageProvider after entering name, got %v", m.inputStage)
+	}
+	if m.pendingMysisName != "test-mysis" {
+		t.Errorf("expected pendingMysisName='test-mysis', got '%s'", m.pendingMysisName)
+	}
+
+	// Step 4: Press Enter (empty = use default provider)
+	t.Logf("Before final Enter: inputStage=%v, pendingName=%s, config.DefaultProvider=%s, inputValue='%s'",
+		m.inputStage, m.pendingMysisName, m.config.Swarm.DefaultProvider, m.input.Value())
+
+	_, hasProvider := m.config.Providers[m.config.Swarm.DefaultProvider]
+	t.Logf("Provider exists in config: %v", hasProvider)
+
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	t.Logf("After final Enter: inputMode=%v, inputStage=%v, err=%v", m.input.Mode(), m.inputStage, m.err)
+
+	// Should create mysis and reset
+	if m.input.Mode() != InputModeNone {
+		t.Errorf("expected InputModeNone after creation, got %v", m.input.Mode())
+	}
+
+	// Check mysis was created
+	myses := m.commander.ListMyses()
+	if len(myses) != 1 {
+		t.Fatalf("expected 1 mysis, got %d", len(myses))
+	}
+	if myses[0].Name() != "test-mysis" {
+		t.Errorf("expected name='test-mysis', got '%s'", myses[0].Name())
 	}
 }

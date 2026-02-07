@@ -622,15 +622,18 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Enter):
 		value := strings.TrimSpace(m.input.Value())
-		if value == "" {
-			m.input.Reset()
-			return m, nil
-		}
+
+		// Allow empty values for optional fields (provider selection)
+		// but block for required fields (handled per-mode)
 
 		var cmd tea.Cmd
 
 		switch m.input.Mode() {
 		case InputModeBroadcast:
+			if value == "" {
+				m.input.Reset()
+				return m, nil
+			}
 			// Add to history before sending
 			m.input.AddToHistory(value)
 			// Mark all running myses as loading
@@ -670,7 +673,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingMysisName = value
 				m.inputStage = InputStageProvider
-				m.input.Reset()
+				m.input.textInput.SetValue("") // Clear input but keep mode
 				m.input.textInput.Placeholder = fmt.Sprintf("Provider (empty for default: %s)...", m.config.Swarm.DefaultProvider)
 				return m, nil
 
