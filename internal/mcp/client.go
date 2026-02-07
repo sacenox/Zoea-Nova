@@ -199,7 +199,10 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments interface{
 	}
 
 	if resp.Error != nil {
-		return nil, fmt.Errorf("mcp error %d: %s", resp.Error.Code, resp.Error.Message)
+		return &ToolResult{
+			Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("Error: %s", resp.Error.Message)}},
+			IsError: true,
+		}, nil
 	}
 
 	var result ToolResult

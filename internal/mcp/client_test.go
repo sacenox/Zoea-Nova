@@ -101,3 +101,32 @@ func TestClientParseSSEResponseLargePayload(t *testing.T) {
 		t.Errorf("expected ID=3, got %v", resp.ID)
 	}
 }
+
+func TestClientCallToolErrorReturnsToolResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req Request
+		json.NewDecoder(r.Body).Decode(&req)
+
+		if req.Method != "tools/call" {
+			resp := NewErrorResponse(req.ID, 0, "unexpected method")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		resp := NewErrorResponse(req.ID, 42, "insufficient_items: Not enough Iron Ore")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	result, err := client.CallTool(context.Background(), "sell", map[string]string{"item_id": "ore_iron"})
+	if err != nil {
+		t.Fatalf("CallTool() error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("expected tool error result, got %+v", result)
+	}
+	if len(result.Content) == 0 || !strings.Contains(result.Content[0].Text, "insufficient_items") {
+		t.Fatalf("expected error message in tool result, got %+v", result)
+	}
+}
