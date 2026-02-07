@@ -56,6 +56,26 @@ or
 ./bin/zoea -offline # Run in offline mode (mock game server)
 ```
 
+## CLI Flags
+
+- `--config <path>` - Path to config file (default: `./config.toml` or `~/.zoea-nova/config.toml`)
+- `--debug` - Enable debug logging
+- `--offline` - Run in offline mode (stub MCP server)
+- `--start-swarm` - Auto-start all idle myses on launch (default: disabled)
+
+## Creating a Mysis
+
+Press `n` to create a new mysis. You'll be prompted for:
+
+1. **Name** (required) - Unique identifier for the mysis
+2. **Provider** (optional) - Leave empty to use default from config, or specify:
+   - `ollama` - Local Ollama with qwen3:8b
+   - `ollama-llama` - Local Ollama with llama3.1:8b
+   - `opencode_zen` - OpenCode Zen with gpt-5-nano
+   - `zen-pickle` - OpenCode Zen with big-pickle
+
+The model is determined by the provider's configuration in `config.toml`.
+
 ## Keyboard Shortcuts
 
 | Key     | Action                   |
