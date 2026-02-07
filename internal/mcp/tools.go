@@ -367,9 +367,12 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 				}, nil
 			}
 
-			message := fmt.Sprintf("Use the game's login tool with these credentials:\nusername: %s\npassword: %s", account.Username, account.Password)
+			data, _ := json.Marshal(map[string]string{
+				"username": account.Username,
+				"password": account.Password,
+			})
 			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: message}},
+				Content: []ContentBlock{{Type: "text", Text: string(data)}},
 			}, nil
 		},
 	)
