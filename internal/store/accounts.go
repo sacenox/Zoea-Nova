@@ -85,50 +85,36 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 }
 
 func (s *Store) ClaimAccount() (*Account, error) {
-	for attempts := 0; attempts < 5; attempts++ {
-		var username, password string
-		var createdAt time.Time
-		err := s.db.QueryRow(`
-			SELECT username, password, created_at
-			FROM accounts
-			WHERE in_use = 0
-			ORDER BY created_at ASC
-			LIMIT 1
-		`).Scan(&username, &password, &createdAt)
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no accounts available")
-		}
-		if err != nil {
-			return nil, fmt.Errorf("query available account: %w", err)
-		}
+	var username, password string
+	var createdAt time.Time
+	var lastUsedAt sql.NullTime
 
-		now := time.Now().UTC()
-		result, err := s.db.Exec(`
-			UPDATE accounts
-			SET in_use = 1, last_used_at = ?
-			WHERE username = ? AND in_use = 0
-		`, now, username)
-		if err != nil {
-			return nil, fmt.Errorf("claim account: %w", err)
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return nil, fmt.Errorf("claim account rows: %w", err)
-		}
-		if rows == 0 {
-			continue
-		}
-
-		return &Account{
-			Username:   username,
-			Password:   password,
-			InUse:      true,
-			LastUsedAt: now,
-			CreatedAt:  createdAt,
-		}, nil
+	err := s.db.QueryRow(`
+		SELECT username, password, created_at, last_used_at
+		FROM accounts
+		WHERE in_use = 0
+		ORDER BY created_at ASC
+		LIMIT 1
+	`).Scan(&username, &password, &createdAt, &lastUsedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no accounts available")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query available account: %w", err)
 	}
 
-	return nil, fmt.Errorf("no accounts available")
+	acc := &Account{
+		Username:  username,
+		Password:  password,
+		InUse:     false,
+		CreatedAt: createdAt,
+	}
+
+	if lastUsedAt.Valid {
+		acc.LastUsedAt = lastUsedAt.Time
+	}
+
+	return acc, nil
 }
 
 func (s *Store) MarkAccountInUse(username string) error {

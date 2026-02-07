@@ -57,6 +57,9 @@ Active tracking documents (frequently updated).
 ### `reports/`
 Completed implementation and analysis reports.
 
+**Recent (2026-02-07):**
+- **[ClaimAccount Race Analysis](reports/CLAIM_ACCOUNT_RACE_ANALYSIS_2026-02-07.md)** - Edge case analysis and concurrency safety validation
+
 **Recent (2026-02-06):**
 - **[Restart Errored Mysis Investigation](reports/RESTART_ERRORED_MYSIS_INVESTIGATION_2026-02-06.md)** - 10-agent async race fix
 - **[Production Stop Failure Tests](reports/PRODUCTION_STOP_FAILURE_TESTS_2026-02-06.md)** - Long-running stability tests

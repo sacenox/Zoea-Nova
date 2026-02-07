@@ -292,17 +292,31 @@ func TestAccountCRUD(t *testing.T) {
 	if claimed.Username != "crab_01" {
 		t.Errorf("expected crab_01, got %s", claimed.Username)
 	}
-
-	// Verify claimed
-	fetched, _ := s.GetAccount("crab_01")
-	if !fetched.InUse {
-		t.Error("account should be in use after claim")
+	if claimed.InUse {
+		t.Error("ClaimAccount() should NOT mark account as in_use")
 	}
 
-	// List available (should be empty)
+	// Verify NOT marked as in_use (only MarkAccountInUse should do this)
+	fetched, _ := s.GetAccount("crab_01")
+	if fetched.InUse {
+		t.Error("account should NOT be in use after ClaimAccount()")
+	}
+
+	// List available (should still have the account)
 	available, _ = s.ListAvailableAccounts()
-	if len(available) != 0 {
-		t.Errorf("expected 0 available, got %d", len(available))
+	if len(available) != 1 {
+		t.Errorf("expected 1 available, got %d", len(available))
+	}
+
+	// Now mark it in use (simulating login handler behavior)
+	if err := s.MarkAccountInUse("crab_01"); err != nil {
+		t.Fatalf("MarkAccountInUse() error: %v", err)
+	}
+
+	// Verify marked as in_use
+	fetched, _ = s.GetAccount("crab_01")
+	if !fetched.InUse {
+		t.Error("account should be in use after MarkAccountInUse()")
 	}
 
 	// Release
@@ -327,9 +341,9 @@ func TestReleaseAllAccounts(t *testing.T) {
 	s.ReleaseAccount("acc1")
 	s.ReleaseAccount("acc2")
 
-	// Claim both
-	s.ClaimAccount()
-	s.ClaimAccount()
+	// Mark both in use directly (simulating login handler behavior)
+	s.MarkAccountInUse("acc1")
+	s.MarkAccountInUse("acc2")
 
 	// Verify both in use
 	available, _ := s.ListAvailableAccounts()
@@ -346,5 +360,145 @@ func TestReleaseAllAccounts(t *testing.T) {
 	available, _ = s.ListAvailableAccounts()
 	if len(available) != 2 {
 		t.Errorf("expected 2 available, got %d", len(available))
+	}
+}
+
+func TestClaimAccount_ReturnsAvailableAccount(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	// Create and release an account
+	s.CreateAccount("crab_01", "pass123")
+	if err := s.ReleaseAccount("crab_01"); err != nil {
+		t.Fatalf("ReleaseAccount() error: %v", err)
+	}
+
+	// ClaimAccount should return the available account
+	claimed, err := s.ClaimAccount()
+	if err != nil {
+		t.Fatalf("ClaimAccount() error: %v", err)
+	}
+	if claimed.Username != "crab_01" {
+		t.Errorf("expected username=crab_01, got %s", claimed.Username)
+	}
+	if claimed.Password != "pass123" {
+		t.Errorf("expected password=pass123, got %s", claimed.Password)
+	}
+	if claimed.InUse {
+		t.Error("ClaimAccount() should return account with InUse=false")
+	}
+}
+
+func TestClaimAccount_DoesNotModifyInUseFlag(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	// Create and release an account
+	s.CreateAccount("crab_01", "pass123")
+	if err := s.ReleaseAccount("crab_01"); err != nil {
+		t.Fatalf("ReleaseAccount() error: %v", err)
+	}
+
+	// Claim the account
+	_, err := s.ClaimAccount()
+	if err != nil {
+		t.Fatalf("ClaimAccount() error: %v", err)
+	}
+
+	// Verify in_use flag remains 0 in database
+	var inUse int
+	err = s.db.QueryRow("SELECT in_use FROM accounts WHERE username = ?", "crab_01").Scan(&inUse)
+	if err != nil {
+		t.Fatalf("Query in_use error: %v", err)
+	}
+	if inUse != 0 {
+		t.Errorf("expected in_use=0 after ClaimAccount(), got %d", inUse)
+	}
+
+	// Verify GetAccount also shows InUse=false
+	fetched, err := s.GetAccount("crab_01")
+	if err != nil {
+		t.Fatalf("GetAccount() error: %v", err)
+	}
+	if fetched.InUse {
+		t.Error("account should remain not in use after ClaimAccount()")
+	}
+}
+
+func TestClaimAccount_MultipleCallsSameAccount(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	// Create and release an account
+	s.CreateAccount("crab_01", "pass123")
+	if err := s.ReleaseAccount("crab_01"); err != nil {
+		t.Fatalf("ReleaseAccount() error: %v", err)
+	}
+
+	// First claim
+	claimed1, err := s.ClaimAccount()
+	if err != nil {
+		t.Fatalf("First ClaimAccount() error: %v", err)
+	}
+	if claimed1.Username != "crab_01" {
+		t.Errorf("First claim: expected crab_01, got %s", claimed1.Username)
+	}
+
+	// Second claim should return the same account (no locking)
+	claimed2, err := s.ClaimAccount()
+	if err != nil {
+		t.Fatalf("Second ClaimAccount() error: %v", err)
+	}
+	if claimed2.Username != "crab_01" {
+		t.Errorf("Second claim: expected crab_01, got %s", claimed2.Username)
+	}
+
+	// Third claim should also work
+	claimed3, err := s.ClaimAccount()
+	if err != nil {
+		t.Fatalf("Third ClaimAccount() error: %v", err)
+	}
+	if claimed3.Username != "crab_01" {
+		t.Errorf("Third claim: expected crab_01, got %s", claimed3.Username)
+	}
+
+	// Verify account is still available
+	available, err := s.ListAvailableAccounts()
+	if err != nil {
+		t.Fatalf("ListAvailableAccounts() error: %v", err)
+	}
+	if len(available) != 1 {
+		t.Errorf("expected 1 available account after multiple claims, got %d", len(available))
+	}
+}
+
+func TestClaimAccount_FailsWhenNoAccounts(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	// Try to claim when no accounts exist
+	_, err := s.ClaimAccount()
+	if err == nil {
+		t.Fatal("expected error when no accounts exist")
+	}
+	if err.Error() != "no accounts available" {
+		t.Errorf("expected 'no accounts available' error, got: %v", err)
+	}
+}
+
+func TestClaimAccount_FailsWhenOnlyInUseAccounts(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	// Create account (in_use=1 by default)
+	s.CreateAccount("crab_01", "pass123")
+
+	// Try to claim when only in-use accounts exist
+	_, err := s.ClaimAccount()
+	if err == nil {
+		t.Fatal("expected error when only in-use accounts exist")
+	}
+	if err.Error() != "no accounts available" {
+		t.Errorf("expected 'no accounts available' error, got: %v", err)
 	}
 }
