@@ -497,3 +497,35 @@ rate_burst = %d
 		})
 	}
 }
+
+func TestLoadDefaultProviderModel(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	configContent := `
+[swarm]
+max_myses = 16
+default_provider = "ollama"
+default_model = "qwen3:8b"
+
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:8b"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.Swarm.DefaultProvider != "ollama" {
+		t.Errorf("expected default_provider=ollama, got %s", cfg.Swarm.DefaultProvider)
+	}
+
+	if cfg.Swarm.DefaultModel != "qwen3:8b" {
+		t.Errorf("expected default_model=qwen3:8b, got %s", cfg.Swarm.DefaultModel)
+	}
+}

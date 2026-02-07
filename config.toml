@@ -1,5 +1,7 @@
 [swarm]
 max_myses = 16
+default_provider = "opencode_zen"
+default_model = "gpt-5-nano"
 
 # Ollama providers (local)
 [providers.ollama]

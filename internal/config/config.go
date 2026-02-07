@@ -21,7 +21,9 @@ type Config struct {
 
 // SwarmConfig holds swarm-related settings.
 type SwarmConfig struct {
-	MaxMyses int `toml:"max_myses"`
+	MaxMyses        int    `toml:"max_myses"`
+	DefaultProvider string `toml:"default_provider"`
+	DefaultModel    string `toml:"default_model"`
 }
 
 // ProviderConfig holds LLM provider settings.
@@ -42,7 +44,9 @@ type MCPConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Swarm: SwarmConfig{
-			MaxMyses: 16,
+			MaxMyses:        16,
+			DefaultProvider: "opencode_zen",
+			DefaultModel:    "gpt-5-nano",
 		},
 		Providers: map[string]ProviderConfig{
 			"ollama": {
