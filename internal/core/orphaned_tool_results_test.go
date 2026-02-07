@@ -489,12 +489,13 @@ func TestLoopContextSlice(t *testing.T) {
 	}
 
 	// Step 7: Assertions
-	// Expected: system prompt + commander direct + ONLY third loop (1 assistant + 2 tool results)
-	// Total: 5 memories
-	expectedCount := 5
+	// With turn-aware composition:
+	// Expected: system prompt + current turn (user prompt + all 3 tool loops)
+	// Total: 11 memories (1 system + 1 user + 3 loops * 3 messages each)
+	expectedCount := 11
 	if len(memories) != expectedCount {
 		t.Errorf("Expected %d memories in context, got %d", expectedCount, len(memories))
-		t.Logf("This test SHOULD fail initially - getContextMemories doesn't implement loop slicing yet")
+		t.Logf("Turn-aware composition includes ALL tool loops within the current turn")
 		for i, m := range memories {
 			contentPreview := m.Content
 			if len(contentPreview) > 50 {
@@ -515,7 +516,7 @@ func TestLoopContextSlice(t *testing.T) {
 			memories[1].Role, memories[1].Source)
 	}
 
-	// ASSERTION 3: Only third loop tool calls should be present
+	// ASSERTION 3: ALL tool loops within current turn should be present
 	foundLoop1Calls := false
 	foundLoop2Calls := false
 	foundLoop3Calls := false
@@ -534,17 +535,17 @@ func TestLoopContextSlice(t *testing.T) {
 		}
 	}
 
-	if foundLoop1Calls {
-		t.Errorf("First tool loop calls should be excluded from context (too old)")
+	if !foundLoop1Calls {
+		t.Errorf("First tool loop calls should be included in current turn")
 	}
-	if foundLoop2Calls {
-		t.Errorf("Second tool loop calls should be excluded from context (too old)")
+	if !foundLoop2Calls {
+		t.Errorf("Second tool loop calls should be included in current turn")
 	}
 	if !foundLoop3Calls {
-		t.Errorf("Third tool loop calls should be included in context (most recent)")
+		t.Errorf("Third tool loop calls should be included in current turn")
 	}
 
-	// ASSERTION 4: Only third loop tool results should be present
+	// ASSERTION 4: ALL tool results within current turn should be present
 	foundLoop1Results := false
 	foundLoop2Results := false
 	foundLoop3Results := false
@@ -563,14 +564,14 @@ func TestLoopContextSlice(t *testing.T) {
 		}
 	}
 
-	if foundLoop1Results {
-		t.Errorf("First tool loop results should be excluded from context")
+	if !foundLoop1Results {
+		t.Errorf("First tool loop results should be included in current turn")
 	}
-	if foundLoop2Results {
-		t.Errorf("Second tool loop results should be excluded from context")
+	if !foundLoop2Results {
+		t.Errorf("Second tool loop results should be included in current turn")
 	}
 	if !foundLoop3Results {
-		t.Errorf("Third tool loop results should be included in context")
+		t.Errorf("Third tool loop results should be included in current turn")
 	}
 
 	// ASSERTION 5: Verify no orphaned tool results (all results have matching calls)
@@ -594,8 +595,12 @@ func TestLoopContextSlice(t *testing.T) {
 		}
 	}
 
-	// ASSERTION 6: Verify all expected results from loop 3 are present
+	// ASSERTION 6: Verify all expected results from ALL loops are present
 	expectedResults := map[string]bool{
+		"call_loop1_1": false,
+		"call_loop1_2": false,
+		"call_loop2_1": false,
+		"call_loop2_2": false,
 		"call_loop3_1": false,
 		"call_loop3_2": false,
 	}
@@ -618,5 +623,5 @@ func TestLoopContextSlice(t *testing.T) {
 
 	t.Logf("Total memories in full history: 11 (system + prompt + 3 loops)")
 	t.Logf("Total memories in context: %d", len(memories))
-	t.Logf("Expected context: 5 (system + prompt + last loop)")
+	t.Logf("Expected context: 11 (system + current turn with all 3 loops)")
 }

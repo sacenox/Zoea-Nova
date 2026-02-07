@@ -646,26 +646,32 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// Count zoea_list_myses tool results - should only have 1 (the latest)
+	// With turn-aware composition:
+	// - Historical context: latest tool loop from turns 0-3 (mysis-3)
+	// - Current turn: all of turn 4 (user + assistant + tool for mysis-4)
+	// So we expect 2 tool results: mysis-3 and mysis-4
 	listResults := 0
+	hasMysis3 := false
+	hasMysis4 := false
 	for _, m := range memories {
 		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-`) {
 			listResults++
+			if strings.Contains(m.Content, `"id":"mysis-3"`) {
+				hasMysis3 = true
+			}
+			if strings.Contains(m.Content, `"id":"mysis-4"`) {
+				hasMysis4 = true
+			}
 		}
 	}
-	if listResults != 1 {
-		t.Errorf("expected 1 zoea_list_myses result after compaction, got %d", listResults)
+	if listResults != 2 {
+		t.Errorf("expected 2 zoea_list_myses results (historical latest + current turn), got %d", listResults)
 	}
-
-	// Verify the latest result is kept (mysis-4, not mysis-0)
-	foundLatest := false
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-4"`) {
-			foundLatest = true
-		}
+	if !hasMysis3 {
+		t.Error("expected mysis-3 result from historical context compression")
 	}
-	if !foundLatest {
-		t.Error("expected latest zoea_list_myses result (mysis-4) to be kept")
+	if !hasMysis4 {
+		t.Error("expected mysis-4 result from current turn")
 	}
 }
 
@@ -693,19 +699,19 @@ func TestContextPromptSourcePriority(t *testing.T) {
 		expectedSender string
 	}{
 		{
-			name: "commander_direct_present",
+			name: "most_recent_message_defines_turn",
 			setupMemories: func() {
 				// Add system prompt
 				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
-				// Add commander direct message
+				// Add commander direct message (older)
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "Commander direct message", "", commanderID)
-				// Add commander broadcast (should be ignored when direct exists)
+				// Add commander broadcast (middle)
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander broadcast", "", commanderID)
-				// Add swarm broadcast (should be ignored when direct exists)
+				// Add swarm broadcast (most recent - this defines the current turn)
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast", "", swarmMysisID)
 			},
-			expectedSource: store.MemorySourceDirect,
-			expectedSender: commanderID,
+			expectedSource: store.MemorySourceBroadcast,
+			expectedSender: swarmMysisID,
 		},
 		{
 			name: "commander_broadcast_when_no_direct",
@@ -763,9 +769,8 @@ func TestContextPromptSourcePriority(t *testing.T) {
 			}
 
 			// Find the prompt source in the returned memories
-			// Note: This test currently passes because getContextMemories happens to
-			// return memories in the correct order (most recent first), which matches
-			// the priority order. The implementation will be made explicit in Task 3.
+			// With turn-aware composition, the current turn starts at the most recent user prompt.
+			// The first user message in the result is the turn boundary.
 			var foundPromptSource *store.Memory
 			for _, m := range memories {
 				if m.Role == store.MemoryRoleUser {
@@ -2029,5 +2034,94 @@ func TestFindLastUserPromptIndex(t *testing.T) {
 				t.Errorf("expected %d, got %d", tt.expected, result)
 			}
 		})
+	}
+}
+
+func TestGetContextMemories_CurrentTurnPreserved(t *testing.T) {
+	mysis, cleanup := setupTestMysis(t)
+	defer cleanup()
+
+	// Add historical turn (should be compressed)
+	err := mysis.store.AddMemory(mysis.id, store.MemoryRoleUser, store.MemorySourceDirect, "old user msg", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_old:get_status:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_old:old status", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Add current turn with multiple tool loops
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleUser, store.MemorySourceDirect, "current user msg", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	// First tool loop in current turn
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_1:login:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_1:session_id: abc123", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	// Second tool loop in current turn
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_2:get_status:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_2:status data", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories error: %v", err)
+	}
+
+	// Verify structure: current turn should have both tool loops
+	hasCurrentUser := false
+	hasLoginCall := false
+	hasLoginResult := false
+	hasStatusCall := false
+	hasStatusResult := false
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleUser && mem.Content == "current user msg" {
+			hasCurrentUser = true
+		}
+		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, "call_1:login") {
+			hasLoginCall = true
+		}
+		if mem.Role == store.MemoryRoleTool && strings.Contains(mem.Content, "call_1") && strings.Contains(mem.Content, "session_id") {
+			hasLoginResult = true
+		}
+		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, "call_2:get_status") {
+			hasStatusCall = true
+		}
+		if mem.Role == store.MemoryRoleTool && strings.Contains(mem.Content, "call_2") {
+			hasStatusResult = true
+		}
+	}
+
+	if !hasCurrentUser {
+		t.Error("Missing current user message")
+	}
+	if !hasLoginCall {
+		t.Error("Missing login tool call from current turn")
+	}
+	if !hasLoginResult {
+		t.Error("Missing login result from current turn - THIS IS THE KEY FIX")
+	}
+	if !hasStatusCall {
+		t.Error("Missing status tool call from current turn")
+	}
+	if !hasStatusResult {
+		t.Error("Missing status result from current turn")
 	}
 }

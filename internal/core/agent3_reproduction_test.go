@@ -303,7 +303,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("AddMemory commander: %v", err)
 	}
 
-	// Step 3: Add OLD tool loop (should be excluded entirely)
+	// Step 3: Add first tool loop (part of current turn, will be included)
 	// Loop 1: get_status + get_system
 	oldLoop1Assistant := constants.ToolCallStoragePrefix +
 		"call_old_1:get_status:{}" + constants.ToolCallStorageRecordDelimiter +
@@ -327,7 +327,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("AddMemory old result 2: %v", err)
 	}
 
-	// Step 4: Add another OLD tool loop (should also be excluded)
+	// Step 4: Add second tool loop (part of current turn, will be included)
 	// Loop 2: get_poi
 	oldLoop2Assistant := constants.ToolCallStoragePrefix + "call_old_3:get_poi:{}"
 
@@ -343,7 +343,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("AddMemory old result 3: %v", err)
 	}
 
-	// Step 5: Add the MOST RECENT tool loop (should be included entirely)
+	// Step 5: Add third tool loop (part of current turn, will be included)
 	// Loop 3: mine + get_cargo
 	recentLoopAssistant := constants.ToolCallStoragePrefix +
 		"call_recent_1:mine:{}" + constants.ToolCallStorageRecordDelimiter +
@@ -367,7 +367,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("AddMemory recent result 2: %v", err)
 	}
 
-	// Step 6: Get context memories using new loop composition
+	// Step 6: Get context memories using turn-aware composition
 	mysis := &Mysis{
 		id:    stored.ID,
 		name:  stored.Name,
@@ -380,7 +380,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// Step 7: Validate loop composition rules
+	// Step 7: Validate turn-aware composition rules
 	t.Logf("Context has %d memories", len(memories))
 
 	// Collect all tool call IDs present in assistant messages
@@ -424,8 +424,9 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Errorf("Under loop composition, if a tool call is excluded, ALL its results must be excluded")
 	}
 
-	// CRITICAL ASSERTION 2: Only the most recent tool loop is present
-	// Old tool calls (call_old_*) should NOT be in context
+	// CRITICAL ASSERTION 2: All tool loops within current turn are present
+	// With turn-aware composition, all loops after the user prompt should be in context
+	// Old tool calls (call_old_*) are part of the current turn and SHOULD be in context
 	oldCallsPresent := []string{}
 	for callID := range validToolCalls {
 		if strings.Contains(callID, "call_old_") {
@@ -433,8 +434,9 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		}
 	}
 
-	if len(oldCallsPresent) > 0 {
-		t.Errorf("LOOP COMPOSITION VIOLATION: Found %d old tool calls in context (should only have most recent loop): %v",
+	// Expect 3 old calls (call_old_1, call_old_2, call_old_3) since they're in current turn
+	if len(oldCallsPresent) != 3 {
+		t.Errorf("TURN COMPOSITION: Expected 3 old tool calls in current turn, found %d: %v",
 			len(oldCallsPresent), oldCallsPresent)
 	}
 

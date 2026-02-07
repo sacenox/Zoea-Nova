@@ -1454,44 +1454,38 @@ func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
 	return -1
 }
 
-// getContextMemories returns memories for LLM context using loop-based composition.
-// Composes context as: [system prompt] + [chosen prompt source] + [most recent tool loop].
-// This ensures stable, bounded context and eliminates orphaned tool sequencing.
+// getContextMemories returns memories for LLM context with turn-aware composition.
+// Composes context as: [system prompt] + [historical context] + [current turn].
 //
 // Returns:
 //   - []*store.Memory: Composed context slice ready for provider conversion
 //   - error: Database error from GetRecentMemories or GetSystemMemory
 //
-// Context Composition:
+// Context Composition Strategy:
 //  1. System prompt (if available) - provides mysis identity and mission
-//  2. Prompt source (by priority) - the user message that triggers this LLM turn
-//     - Commander direct message (highest priority)
-//     - Commander broadcast
-//     - Swarm broadcast
-//     - Synthetic nudge (if no prompt found)
-//  3. Latest tool loop (if any) - most recent tool call + all its results
+//  2. Historical context - memories before the current turn (compressed via extractLatestToolLoop)
+//  3. Current turn - ALL memories from the last user prompt onward (uncompressed)
 //
-// Behavior:
-//   - Fetches up to constants.MaxContextMessages (20) recent memories
-//   - Creates synthetic nudge if no valid prompt source exists
-//   - Nudge memory is NOT stored in database (temporary, in-memory only)
-//   - Nudge counter increment happens in caller (handleLLMResponse)
+// Turn Boundary:
+//   - "Current turn" starts at the most recent user-initiated prompt (direct message, broadcast, or nudge)
+//   - Everything from that prompt forward is included in full to preserve multi-step tool reasoning
+//   - Historical turns (before current turn boundary) are compressed to save context
 //
 // Rationale:
+//   - Multi-step tool calling (login → get_status → get_notifications) requires complete tool history
+//   - Historical turns can be compressed without breaking current reasoning
+//   - Preserves session_id and other tool results from within the current turn
+//   - Prevents orphaned tool calls by keeping complete tool loops together
 //
-//	Loop-based composition solves the orphaned tool result problem:
-//	- Sliding window (MaxContextMessages) can split tool call/result pairs
-//	- By extracting only the latest complete loop, we guarantee proper pairing
-//	- Bounded context (3 components max) keeps token usage predictable
-//	- Stable structure prevents OpenAI API errors from malformed sequences
-//
-// Example context:
+// Example context for multi-step turn:
 //
 //	[
 //	  {role: system, content: "You are Mysis Alpha..."},
 //	  {role: user, source: direct, content: "Check ship status"},
-//	  {role: assistant, content: "[TOOL_CALLS]call_1:get_ship:{}"},
-//	  {role: tool, content: "Ship health: 100%"}
+//	  {role: assistant, content: "[TOOL_CALLS]call_1:login:{}"},
+//	  {role: tool, content: "call_1:session_id: abc123"},
+//	  {role: assistant, content: "[TOOL_CALLS]call_2:get_status:{\"session_id\":\"abc123\"}"},
+//	  {role: tool, content: "call_2:Ship health: 100%"}
 //	]
 func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// Get all recent memories
@@ -1500,8 +1494,10 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		return nil, err
 	}
 
-	// Build context: [system] + [prompt source] + [latest tool loop]
-	result := make([]*store.Memory, 0, 10) // Pre-allocate for typical size
+	// Find current turn boundary
+	turnBoundaryIdx := m.findLastUserPromptIndex(allMemories)
+
+	result := make([]*store.Memory, 0, 20) // Pre-allocate for typical size
 
 	// Step 1: Add system prompt (if available)
 	system, err := m.store.GetSystemMemory(m.id)
@@ -1509,14 +1505,24 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		result = append(result, system)
 	}
 
-	// Step 2: Select and add prompt source by priority
-	// Priority: commander direct → last commander broadcast → last swarm broadcast → nudge
-	promptSource := m.selectPromptSource(allMemories)
+	// Step 2: Add historical context (before current turn)
+	if turnBoundaryIdx > 0 {
+		historicalMemories := allMemories[:turnBoundaryIdx]
+		// Apply compression to historical turns - extract only latest tool loop
+		historicalToolLoop := m.extractLatestToolLoop(historicalMemories)
+		if len(historicalToolLoop) > 0 {
+			result = append(result, historicalToolLoop...)
+		}
+	}
 
-	if promptSource == nil {
-		// No prompt source found - generate synthetic nudge
+	// Step 3: Add current turn (from last user prompt onward)
+	if turnBoundaryIdx >= 0 {
+		// Include ALL messages from current turn without compression
+		currentTurnMemories := allMemories[turnBoundaryIdx:]
+		result = append(result, currentTurnMemories...)
+	} else {
+		// No user prompt found - generate synthetic nudge
 		// Note: Nudge counter increment happens in caller (handleLLMResponse)
-		// We create a temporary memory that is NOT stored in database
 		nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
 		nudgeMemory := &store.Memory{
 			Role:      store.MemoryRoleUser,
@@ -1526,14 +1532,6 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 			CreatedAt: time.Now(),
 		}
 		result = append(result, nudgeMemory)
-	} else {
-		result = append(result, promptSource)
-	}
-
-	// Step 3: Extract and add the most recent tool loop (if any)
-	toolLoop := m.extractLatestToolLoop(allMemories)
-	if len(toolLoop) > 0 {
-		result = append(result, toolLoop...)
 	}
 
 	return result, nil
