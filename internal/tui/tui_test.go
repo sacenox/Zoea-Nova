@@ -39,6 +39,8 @@ func setupTestModel(t *testing.T) (Model, func()) {
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
 	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
 	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
+	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("zen-pickle", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
@@ -49,12 +51,14 @@ func setupTestModel(t *testing.T) (Model, func()) {
 		Providers: map[string]config.ProviderConfig{
 			"ollama":       {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 			"opencode_zen": {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"zen-nano":     {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"zen-pickle":   {Endpoint: "http://mock", Model: "big-pickle", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 		},
 	}
 
 	commander := core.NewCommander(s, reg, bus, cfg)
 
-	model := New(commander, s, eventCh, false)
+	model := New(commander, s, eventCh, false, cfg)
 	model.width = 80
 	model.height = 24
 
@@ -891,4 +895,82 @@ func TestMysisCreation_TwoStageFlow(t *testing.T) {
 	if myses[0].Name() != "test-mysis" {
 		t.Errorf("expected name='test-mysis', got '%s'", myses[0].Name())
 	}
+}
+
+func TestMysisCreation_ZenNanoProvider(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Press 'n'
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newModel.(Model)
+
+	// Enter name
+	for _, r := range "zen-test" {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
+	}
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Enter provider "zen-nano"
+	for _, r := range "zen-nano" {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
+	}
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Should succeed
+	if m.err != nil {
+		t.Fatalf("unexpected error: %v (available providers: %v)", m.err, getProviderNames(m.config))
+	}
+
+	myses := m.commander.ListMyses()
+	if len(myses) != 1 {
+		t.Fatalf("expected 1 mysis, got %d", len(myses))
+	}
+}
+
+func TestMysisCreation_ZenPickleProvider(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Press 'n'
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newModel.(Model)
+
+	// Enter name
+	for _, r := range "pickle-test" {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
+	}
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Enter provider "zen-pickle"
+	for _, r := range "zen-pickle" {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newModel.(Model)
+	}
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Should succeed
+	if m.err != nil {
+		t.Fatalf("unexpected error: %v", m.err)
+	}
+
+	myses := m.commander.ListMyses()
+	if len(myses) != 1 {
+		t.Fatalf("expected 1 mysis, got %d", len(myses))
+	}
+}
+
+func getProviderNames(cfg *config.Config) []string {
+	var names []string
+	for name := range cfg.Providers {
+		names = append(names, name)
+	}
+	return names
 }

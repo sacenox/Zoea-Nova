@@ -681,7 +681,12 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 				// Validate provider exists
 				if _, ok := m.config.Providers[provider]; !ok {
-					m.err = fmt.Errorf("provider '%s' not found in config", provider)
+					// Debug: show available providers
+					var available []string
+					for p := range m.config.Providers {
+						available = append(available, p)
+					}
+					m.err = fmt.Errorf("provider '%s' not found. Available: %v", provider, available)
 					m.resetInput()
 					m.refreshMysisList()
 					return m, nil
