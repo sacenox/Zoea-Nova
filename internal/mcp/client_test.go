@@ -130,3 +130,18 @@ func TestClientCallToolErrorReturnsToolResult(t *testing.T) {
 		t.Fatalf("expected error message in tool result, got %+v", result)
 	}
 }
+
+// TestClientClose verifies Close() is idempotent and returns nil.
+func TestClientClose(t *testing.T) {
+	client := NewClient("http://localhost:3000")
+
+	// First close should succeed
+	if err := client.Close(); err != nil {
+		t.Errorf("first Close() error: %v", err)
+	}
+
+	// Second close should also succeed (idempotent)
+	if err := client.Close(); err != nil {
+		t.Errorf("second Close() error: %v", err)
+	}
+}

@@ -341,7 +341,7 @@ func TestCommanderBroadcastToIdleMyses(t *testing.T) {
 		}
 	}
 
-	// Verify messages were stored (even though myses are idle)
+	// Verify messages were stored (even though myses were idle)
 	memories1, err := cmd.Store().GetMemories(mysis1.ID())
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
@@ -356,6 +356,23 @@ func TestCommanderBroadcastToIdleMyses(t *testing.T) {
 	}
 	if len(memories2) == 0 {
 		t.Error("broadcast should be stored for idle mysis2")
+	}
+
+	// NEW: Verify myses auto-started (transitioned from idle to running)
+	// Wait up to 1 second for state transition
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if mysis1.State() == MysisStateRunning && mysis2.State() == MysisStateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if mysis1.State() != MysisStateRunning {
+		t.Errorf("mysis1 should auto-start on broadcast, got state %s", mysis1.State())
+	}
+	if mysis2.State() != MysisStateRunning {
+		t.Errorf("mysis2 should auto-start on broadcast, got state %s", mysis2.State())
 	}
 }
 

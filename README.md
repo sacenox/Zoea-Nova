@@ -81,22 +81,24 @@ The model is determined by the provider's configuration in `config.toml`.
 
 ## Keyboard Shortcuts
 
-| Key     | Action                   |
-| ------- | ------------------------ |
-| `n`     | Create new Mysis         |
-| `b`     | Broadcast message to all |
-| `m`     | Message selected Mysis   |
-| `r`     | Relaunch Mysis           |
-| `s`     | Stop Mysis               |
-| `d`     | Delete Mysis             |
-| `c`     | Configure Mysis          |
-| `Enter` | Focus on selected Mysis  |
-| `Esc`   | Return to dashboard      |
-| `v`     | Toggle verbose JSON (focus) |
-| `k / ↑` | Navigate up / Scroll up  |
-| `j / ↓` | Navigate down / Scroll down |
-| `?`     | Show help                |
-| `q`     | Quit                     |
+| Key       | Action                      |
+| --------- | --------------------------- |
+| `n`       | Create new Mysis            |
+| `b`       | Broadcast message to all    |
+| `m`       | Message selected Mysis      |
+| `r`       | Relaunch Mysis              |
+| `s`       | Stop Mysis                  |
+| `d`       | Delete Mysis                |
+| `c`       | Configure Mysis             |
+| `Enter`   | Focus on selected Mysis     |
+| `Esc`     | Return to dashboard         |
+| `v`       | Toggle verbose JSON (focus) |
+| `k / ↑`   | Navigate up / Scroll up     |
+| `j / ↓`   | Navigate down / Scroll down |
+| `PgUp`    | Page up (fast scroll)       |
+| `PgDn`    | Page down (fast scroll)     |
+| `?`       | Show help                   |
+| `q`       | Quit                        |
 
 ## Known Issues
 

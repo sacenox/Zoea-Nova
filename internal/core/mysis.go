@@ -977,13 +977,22 @@ func (m *Mysis) QueueBroadcast(content string, senderID string) error {
 		Timestamp: time.Now(),
 	})
 
-	// Trigger async processing (nudge the mysis to process the new message)
-	select {
-	case a.nudgeCh <- struct{}{}:
-		// Nudge sent successfully
-	default:
-		// Channel full or mysis not listening, that's OK
-		// The mysis will pick up the message on its next turn
+	// If mysis is idle, auto-start it (broadcasts should wake idle myses)
+	if state == MysisStateIdle {
+		if err := a.Start(); err != nil {
+			// Log warning but don't fail the broadcast
+			// The message is already stored and will be processed when manually started
+			log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to auto-start idle mysis on broadcast")
+		}
+	} else {
+		// Mysis is running - nudge it to process the new message
+		select {
+		case a.nudgeCh <- struct{}{}:
+			// Nudge sent successfully
+		default:
+			// Channel full or mysis not listening, that's OK
+			// The mysis will pick up the message on its next turn
+		}
 	}
 
 	return nil

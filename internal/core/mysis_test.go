@@ -347,91 +347,19 @@ func TestMysisStateEvents(t *testing.T) {
 	mysis.Stop()
 }
 
-func TestMysisContextMemoryLimit(t *testing.T) {
-	t.Skip("Obsolete: Tests old compaction strategy. Replaced by loop-based composition (TestLoopContextSlice).")
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, _ := s.CreateMysis("context-test", "mock", "test-model", 0.7)
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
-
-	// Add more memories than MaxContextMessages
-	for i := 0; i < constants.MaxContextMessages+10; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "", "")
-	}
-
-	// Get context memories
-	memories, err := mysis.getContextMemories()
-	if err != nil {
-		t.Fatalf("getContextMemories() error: %v", err)
-	}
-
-	// Should have system prompt + MaxContextMessages recent messages
-	expectedCount := constants.MaxContextMessages + 1 // +1 for system prompt
-	if len(memories) != expectedCount {
-		t.Errorf("expected %d memories, got %d", expectedCount, len(memories))
-	}
-
-	// First memory should be system prompt
-	if memories[0].Role != store.MemoryRoleSystem {
-		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
-	}
-	if memories[0].Content != "System prompt" {
-		t.Errorf("expected system prompt content, got %s", memories[0].Content)
-	}
-}
-
-func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
-	t.Skip("Obsolete: Tests old compaction strategy. Replaced by loop-based composition (TestContextPromptSourcePriority).")
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, _ := s.CreateMysis("context-test-2", "mock", "test-model", 0.7)
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
-
-	// Add fewer memories than MaxContextMessages
-	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "user message", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant response", "", "")
-	}
-
-	// Get context memories
-	memories, err := mysis.getContextMemories()
-	if err != nil {
-		t.Fatalf("getContextMemories() error: %v", err)
-	}
-
-	// Should have all memories (system + 10 messages)
-	expectedCount := 11 // 1 system + 5*2 messages
-	if len(memories) != expectedCount {
-		t.Errorf("expected %d memories, got %d", expectedCount, len(memories))
-	}
-
-	// First memory should still be system prompt
-	if memories[0].Role != store.MemoryRoleSystem {
-		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
-	}
-}
-
 func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
-	// Check for captain's log guidance in Critical Rules section
-	if !strings.Contains(constants.SystemPrompt, "Captain's log entry field must be non-empty") {
-		t.Fatal("SystemPrompt missing non-empty entry reminder")
+	// SystemPrompt was simplified - check for core game flow guidance
+	if !strings.Contains(constants.SystemPrompt, "zoea_claim_account") {
+		t.Fatal("SystemPrompt missing zoea_claim_account")
 	}
-	if !strings.Contains(constants.SystemPrompt, "max 20 entries") {
-		t.Fatal("SystemPrompt missing captain's log limit guidance")
+	if !strings.Contains(constants.SystemPrompt, "login") {
+		t.Fatal("SystemPrompt missing login guidance")
 	}
-	if !strings.Contains(constants.SystemPrompt, "100KB each") {
-		t.Fatal("SystemPrompt missing captain's log size limit")
+	if !strings.Contains(constants.SystemPrompt, "get_status") {
+		t.Fatal("SystemPrompt missing get_status reminder")
+	}
+	if !strings.Contains(constants.SystemPrompt, "get_notifications") {
+		t.Fatal("SystemPrompt missing get_notifications reminder")
 	}
 }
 
@@ -490,109 +418,13 @@ func TestFormatToolResult_Success(t *testing.T) {
 	}
 }
 
-func TestMysisContextCompaction(t *testing.T) {
-	t.Skip("Obsolete: Tests old snapshot compaction. Loop composition doesn't use compaction.")
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, _ := s.CreateMysis("compaction-test", "mock", "test-model", 0.7)
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Add system prompt
-	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
-
-	// Add multiple get_ship tool results (should be compacted to keep only the latest)
-	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check ship", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_1:get_ship:{}", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_1:{"ship_id":"ship_%d","hull":100}`, i), "", "")
-	}
-
-	// Add multiple get_system tool results (should also be compacted)
-	for i := 0; i < 3; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check system", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_2:get_system:{}", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_2:{"system_id":"sys_%d","police_level":1}`, i), "", "")
-	}
-
-	// Add a non-snapshot tool result (should be kept)
-	s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "mine ore", "", "")
-	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_3:mine:{}", "", "")
-	s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, `call_3:{"result":"mining"}`, "", "")
-
-	// Get context memories
-	memories, err := mysis.getContextMemories()
-	if err != nil {
-		t.Fatalf("getContextMemories() error: %v", err)
-	}
-
-	// First memory should be system prompt
-	if memories[0].Role != store.MemoryRoleSystem {
-		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
-	}
-
-	// Count get_ship tool results - should only have 1 (the latest)
-	shipResults := 0
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
-			shipResults++
-		}
-	}
-	if shipResults != 1 {
-		t.Errorf("expected 1 get_ship result after compaction, got %d", shipResults)
-	}
-
-	// Count get_system tool results - should only have 1 (the latest)
-	systemResults := 0
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"system_id"`) {
-			systemResults++
-		}
-	}
-	if systemResults != 1 {
-		t.Errorf("expected 1 get_system result after compaction, got %d", systemResults)
-	}
-
-	// Non-snapshot tool result should be kept
-	mineResults := 0
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"result":"mining"`) {
-			mineResults++
-		}
-	}
-	if mineResults != 1 {
-		t.Errorf("expected 1 mine result (non-snapshot), got %d", mineResults)
-	}
-
-	// Verify the latest get_ship result is kept (ship_4, not ship_0)
-	foundLatestShip := false
-	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id":"ship_4"`) {
-			foundLatestShip = true
-		}
-	}
-	if !foundLatestShip {
-		t.Error("expected latest get_ship result (ship_4) to be kept")
-	}
-}
-
 func TestSystemPromptContainsSearchGuidance(t *testing.T) {
-	// Check for search tools in Swarm Coordination section
-	if !strings.Contains(constants.SystemPrompt, "zoea_search_messages") {
-		t.Fatal("SystemPrompt missing zoea_search_messages reference")
+	// SystemPrompt was simplified - check for core session management
+	if !strings.Contains(constants.SystemPrompt, "session_id") {
+		t.Fatal("SystemPrompt missing session_id guidance")
 	}
-	if !strings.Contains(constants.SystemPrompt, "zoea_search_reasoning") {
-		t.Fatal("SystemPrompt missing zoea_search_reasoning reference")
-	}
-	if !strings.Contains(constants.SystemPrompt, "zoea_search_broadcasts") {
-		t.Fatal("SystemPrompt missing zoea_search_broadcasts reference")
-	}
-	// Check for context limitation guidance
-	if !strings.Contains(constants.SystemPrompt, "Context is limited") {
-		t.Fatal("SystemPrompt missing context limitation guidance")
+	if !strings.Contains(constants.SystemPrompt, "Use session_id in ALL game tools") {
+		t.Fatal("SystemPrompt missing session_id usage reminder")
 	}
 }
 
@@ -2387,7 +2219,7 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 			t.Error("expected fallback message when no broadcasts")
 		}
 		// Should still contain base SystemPrompt content
-		if !strings.Contains(prompt, "SpaceMolt") {
+		if !strings.Contains(prompt, "Nova Zoea") {
 			t.Error("expected base system prompt content")
 		}
 	})

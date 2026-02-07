@@ -517,3 +517,48 @@ func TestRegistry_ListReturnsConfigKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestMockProviderClose verifies Close() is idempotent and returns nil.
+func TestMockProviderClose(t *testing.T) {
+	mock := NewMock("test", "response")
+
+	// First close should succeed
+	if err := mock.Close(); err != nil {
+		t.Errorf("first Close() error: %v", err)
+	}
+
+	// Second close should also succeed (idempotent)
+	if err := mock.Close(); err != nil {
+		t.Errorf("second Close() error: %v", err)
+	}
+}
+
+// TestOllamaProviderClose verifies Close() is idempotent and returns nil.
+func TestOllamaProviderClose(t *testing.T) {
+	provider := NewOllama("http://localhost:11434", "llama3")
+
+	// First close should succeed
+	if err := provider.Close(); err != nil {
+		t.Errorf("first Close() error: %v", err)
+	}
+
+	// Second close should also succeed (idempotent)
+	if err := provider.Close(); err != nil {
+		t.Errorf("second Close() error: %v", err)
+	}
+}
+
+// TestOpenCodeProviderClose verifies Close() is idempotent and returns nil.
+func TestOpenCodeProviderClose(t *testing.T) {
+	provider := NewOpenCode("https://api.test.com", "model", "key")
+
+	// First close should succeed
+	if err := provider.Close(); err != nil {
+		t.Errorf("first Close() error: %v", err)
+	}
+
+	// Second close should also succeed (idempotent)
+	if err := provider.Close(); err != nil {
+		t.Errorf("second Close() error: %v", err)
+	}
+}
