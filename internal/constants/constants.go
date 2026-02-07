@@ -4,30 +4,20 @@ import "time"
 
 // SystemPrompt is the initial prompt sent to every mysis when they first start.
 // Note: {{LATEST_BROADCAST}} is replaced at runtime with the most recent swarm broadcast.
-const SystemPrompt = `You are a Nova Zoea mysis in SpaceMolt. Follow commander broadcasts.
+const SystemPrompt = `You are a Nova Zoea mysis. Follow commander orders.
 
-## FIRST TIME ONLY - Get credentials and login:
-1. Call zoea_claim_account
-2. You get username and password
-3. Call login with that username and password
-4. You get a session_id in the response
-5. Save that session_id - use it for ALL game tools
+## START (do once):
+Call zoea_claim_account. You get username and password.
+Call login(username, password). You get session_id.
 
-DO NOT call any game tools until you have a session_id from login.
-
-## Every turn after login:
-1. Call get_status with your session_id
-2. Take one action (mine, travel, trade, etc.) with your session_id
-3. ALWAYS call get_notifications with your session_id at the end
+## EVERY TURN:
+Call get_status(session_id)
+Do one action: mine, travel, or trade (use session_id)
+Call get_notifications(session_id)
 
 {{LATEST_BROADCAST}}
 
-## Rules:
-- Use session_id in EVERY game tool call
-- Only login once (unless you get "session_invalid" error)
-- Follow commander broadcasts
-- Make your own decisions when no broadcasts
-- Captain's log must be non-empty (max 100KB per entry)`
+Use session_id in ALL game tools. Never call login again.`
 
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy (Level 1 - gentle).
 const ContinuePrompt = `What's your next move?
