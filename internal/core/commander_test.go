@@ -749,3 +749,58 @@ func TestAggregateTick_EdgeCases(t *testing.T) {
 		}
 	})
 }
+
+// TestMaxMyses verifies the MaxMyses getter returns the configured value.
+func TestMaxMyses(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	expected := 16 // From setupCommanderTest config
+	if got := cmd.MaxMyses(); got != expected {
+		t.Errorf("MaxMyses() = %d, want %d", got, expected)
+	}
+}
+
+// TestGetStateCounts verifies the GetStateCounts method returns accurate counts.
+func TestGetStateCounts(t *testing.T) {
+	cmd, _, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	// Empty swarm - may have zero counts for all states
+	counts := cmd.GetStateCounts()
+	total := 0
+	for _, count := range counts {
+		total += count
+	}
+	if total != 0 {
+		t.Errorf("empty swarm should have 0 total myses, got %d", total)
+	}
+
+	// Create myses in various states
+	cmd.CreateMysis("idle-1", "mock")
+	cmd.CreateMysis("idle-2", "mock")
+	m3, _ := cmd.CreateMysis("running-1", "mock")
+
+	// Start one mysis
+	cmd.StartMysis(m3.ID())
+	time.Sleep(50 * time.Millisecond) // Give it time to start
+
+	counts = cmd.GetStateCounts()
+
+	// Should have at least idle and running states
+	if counts["idle"] < 2 {
+		t.Errorf("expected at least 2 idle myses, got %d", counts["idle"])
+	}
+	if counts["running"] < 1 {
+		t.Errorf("expected at least 1 running mysis, got %d", counts["running"])
+	}
+
+	// Total should match number of myses
+	total = 0
+	for _, count := range counts {
+		total += count
+	}
+	if total != 3 {
+		t.Errorf("total myses across states = %d, want 3", total)
+	}
+}

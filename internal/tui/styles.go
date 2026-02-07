@@ -24,22 +24,19 @@ var (
 	colorTool      = lipgloss.Color("#FFCC00") // Yellow/gold for tool calls
 
 	// Semantic colors
-	colorWarning = lipgloss.Color("#FF6600") // Warning orange
 	colorError   = lipgloss.Color("#FF3366") // Error red-pink
 	colorSuccess = lipgloss.Color("#00FF66") // Success green
 	colorMuted   = lipgloss.Color("#5555AA") // Muted purple-gray
 
 	// Backgrounds - deep space with purple undertones
-	colorBg       = lipgloss.Color("#08080F") // Deep space black
-	colorBgAlt    = lipgloss.Color("#101018") // Slightly lighter
-	colorBgPanel  = lipgloss.Color("#14141F") // Panel background
-	colorBorder   = lipgloss.Color("#2A2A55") // Purple-tinted border
-	colorBorderHi = lipgloss.Color("#4040AA") // Highlighted border
+	colorBg      = lipgloss.Color("#08080F") // Deep space black
+	colorBgAlt   = lipgloss.Color("#101018") // Slightly lighter
+	colorBgPanel = lipgloss.Color("#14141F") // Panel background
+	colorBorder  = lipgloss.Color("#2A2A55") // Purple-tinted border
 
 	// Legacy aliases for compatibility
 	colorPrimary   = colorBrand
 	colorSecondary = colorTeal
-	colorAccent    = colorTeal
 )
 
 // Styles - Retro-futuristic command center aesthetic

@@ -296,7 +296,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		t.Fatalf("AddMemory system: %v", err)
 	}
 
-	// Step 2: Add commander message (prompt source)
+	// Step 2: Add commander message (current turn start)
 	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect,
 		"Check your status and mine some resources", "", "")
 	if err != nil {

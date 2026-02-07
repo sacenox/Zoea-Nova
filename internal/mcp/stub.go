@@ -65,10 +65,6 @@ func (c *StubClient) ListTools(ctx context.Context) ([]Tool, error) {
 func (c *StubClient) CallTool(ctx context.Context, name string, arguments interface{}) (*ToolResult, error) {
 	var content string
 
-	// Use a simple incrementing tick counter for offline mode
-	// In a real implementation, this would come from the game server
-	stubTick := 42
-
 	switch name {
 	case "get_status":
 		content = `{
@@ -125,8 +121,6 @@ func (c *StubClient) CallTool(ctx context.Context, name string, arguments interf
 			IsError: true,
 		}, nil
 	}
-
-	_ = stubTick // Reserved for future use (incrementing tick counter)
 
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: content}},

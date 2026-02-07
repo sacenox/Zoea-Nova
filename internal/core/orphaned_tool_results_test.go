@@ -403,7 +403,7 @@ func TestLoopContextSlice(t *testing.T) {
 		t.Fatalf("AddMemory system: %v", err)
 	}
 
-	// Step 2: Add commander direct message (prompt source)
+	// Step 2: Add commander direct message (current turn start)
 	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect,
 		"Mine some ore", "", "commander-id")
 	if err != nil {

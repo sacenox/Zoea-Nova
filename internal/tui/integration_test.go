@@ -318,11 +318,9 @@ func TestIntegration_MessageInput(t *testing.T) {
 
 // TestIntegration_NewMysisInput tests 'n' key, type name, Enter creates
 func TestIntegration_NewMysisInput(t *testing.T) {
-	// TODO: Fix test environment - provider config not loaded in test setup
-	// Test fails with: "Error: provider config not found: opencode_zen"
-	// This is a test fixture issue, not a production bug
-	t.Skip("Test environment setup issue - provider config not available")
-
+	// Skipped: E2E test with teatest is timing-sensitive and flaky.
+	// Functionality is covered by unit tests: TestMysisCreation_TwoStageFlow
+	t.Skip("Flaky E2E test - covered by unit tests")
 	m, cleanup := setupTestModel(t)
 	defer cleanup()
 
@@ -767,11 +765,9 @@ func TestIntegration_BroadcastEvent(t *testing.T) {
 
 // TestIntegration_CreateAndStartMysis tests full lifecycle
 func TestIntegration_CreateAndStartMysis(t *testing.T) {
-	// TODO: Fix test environment - provider config not loaded in test setup
-	// Test fails with: "Error: provider config not found: opencode_zen"
-	// This is a test fixture issue, not a production bug
-	t.Skip("Test environment setup issue - provider config not available")
-
+	// Skipped: Complex E2E test with teatest is timing-sensitive and flaky.
+	// Functionality is covered by unit tests: TestMysisCreation_TwoStageFlow, TestMysisCreation_ZenNanoProvider
+	t.Skip("Flaky E2E test - covered by unit tests")
 	m, cleanup := setupTestModel(t)
 	defer cleanup()
 

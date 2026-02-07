@@ -406,3 +406,17 @@ func (p *Proxy) LocalToolCount() int {
 	defer p.mu.RUnlock()
 	return len(p.localTools)
 }
+
+// Close closes the upstream client connection if available.
+func (p *Proxy) Close() error {
+	p.mu.RLock()
+	upstream := p.upstream
+	p.mu.RUnlock()
+
+	if upstream != nil {
+		if closer, ok := upstream.(interface{ Close() error }); ok {
+			return closer.Close()
+		}
+	}
+	return nil
+}

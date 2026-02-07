@@ -502,3 +502,41 @@ func TestClaimAccount_FailsWhenOnlyInUseAccounts(t *testing.T) {
 		t.Errorf("expected 'no accounts available' error, got: %v", err)
 	}
 }
+
+// TestStoreDB verifies the DB getter returns the underlying sql.DB.
+func TestStoreDB(t *testing.T) {
+	s, cleanup := setupStoreTest(t)
+	defer cleanup()
+
+	db := s.DB()
+	if db == nil {
+		t.Fatal("DB() returned nil")
+	}
+
+	// Verify the DB is functional by querying it
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM myses").Scan(&count)
+	if err != nil {
+		t.Fatalf("DB query failed: %v", err)
+	}
+
+	// Initially should have 0 myses
+	if count != 0 {
+		t.Errorf("expected 0 myses in new DB, got %d", count)
+	}
+
+	// Create a mysis and verify the DB reflects it
+	_, err = s.CreateMysis("test-mysis", "mock", "mock-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	err = db.QueryRow("SELECT COUNT(*) FROM myses").Scan(&count)
+	if err != nil {
+		t.Fatalf("DB query failed: %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("expected 1 mysis after CreateMysis, got %d", count)
+	}
+}

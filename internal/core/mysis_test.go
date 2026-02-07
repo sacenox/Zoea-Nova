@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -675,7 +677,7 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	}
 }
 
-func TestContextPromptSourcePriority(t *testing.T) {
+func TestGetContextMemories_CurrentTurnBoundary(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
@@ -699,7 +701,7 @@ func TestContextPromptSourcePriority(t *testing.T) {
 		expectedSender string
 	}{
 		{
-			name: "most_recent_message_defines_turn",
+			name: "current_turn_start",
 			setupMemories: func() {
 				// Add system prompt
 				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -707,7 +709,7 @@ func TestContextPromptSourcePriority(t *testing.T) {
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "Commander direct message", "", commanderID)
 				// Add commander broadcast (middle)
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander broadcast", "", commanderID)
-				// Add swarm broadcast (most recent - this defines the current turn)
+				// Add swarm broadcast (most recent - this starts the current turn)
 				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast", "", swarmMysisID)
 			},
 			expectedSource: store.MemorySourceBroadcast,
@@ -768,14 +770,14 @@ func TestContextPromptSourcePriority(t *testing.T) {
 				t.Fatalf("getContextMemories() error: %v", err)
 			}
 
-			// Find the prompt source in the returned memories
+			// Find the current turn boundary in the returned memories
 			// With turn-aware composition, the current turn starts at the most recent user prompt.
-			// The first user message in the result is the turn boundary.
+			// The first user message in the result marks the turn boundary.
 			var foundPromptSource *store.Memory
 			for _, m := range memories {
 				if m.Role == store.MemoryRoleUser {
 					foundPromptSource = m
-					break // Take the first user message as the prompt source
+					break // Take the first user message as the turn boundary
 				}
 			}
 
@@ -795,9 +797,9 @@ func TestContextPromptSourcePriority(t *testing.T) {
 					t.Error("expected nudge content to be non-empty")
 				}
 			} else {
-				// Should find the correct prompt source
+				// Should find the correct turn boundary
 				if foundPromptSource == nil {
-					t.Fatal("expected to find a prompt source, but got none")
+					t.Fatal("expected to find a turn boundary, but got none")
 				}
 
 				if foundPromptSource.Source != tt.expectedSource {
@@ -1639,6 +1641,206 @@ func TestCanAcceptMessages(t *testing.T) {
 	}
 }
 
+// TestExecuteToolCall_ErrorPaths tests error handling in executeToolCall
+func TestExecuteToolCall_ErrorPaths(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	t.Run("nil_mcp_proxy", func(t *testing.T) {
+		stored, _ := s.CreateMysis("nil-proxy-test", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Call executeToolCall with nil proxy
+		tc := provider.ToolCall{
+			ID:        "call_1",
+			Name:      "test_tool",
+			Arguments: json.RawMessage(`{}`),
+		}
+
+		result, err := mysis.executeToolCall(context.Background(), nil, tc)
+
+		// Should return error result (not error), as per MCP design
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+		if !result.IsError {
+			t.Error("expected IsError=true when proxy is nil")
+		}
+		if !strings.Contains(result.Content[0].Text, "MCP not configured") {
+			t.Errorf("expected 'MCP not configured' error, got: %s", result.Content[0].Text)
+		}
+	})
+
+	t.Run("tool_call_timeout", func(t *testing.T) {
+		stored, _ := s.CreateMysis("timeout-test", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Create a context with very short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+		defer cancel()
+		time.Sleep(10 * time.Millisecond) // Ensure timeout fires
+
+		proxy := mcp.NewProxy(nil)
+		tc := provider.ToolCall{
+			ID:        "call_1",
+			Name:      "get_status",
+			Arguments: json.RawMessage(`{}`),
+		}
+
+		result, err := mysis.executeToolCall(ctx, proxy, tc)
+
+		// When tool is not found, MCP returns an error result (not an error)
+		// This is testing that executeToolCall handles missing tools gracefully
+		if err != nil {
+			t.Errorf("expected no error (tool not found returns error result), got: %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+		if !result.IsError {
+			t.Error("expected IsError=true for tool not found")
+		}
+	})
+
+	t.Run("invalid_tool_arguments", func(t *testing.T) {
+		stored, _ := s.CreateMysis("invalid-args-test", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		proxy := mcp.NewProxy(nil)
+		// Register a tool that validates arguments
+		proxy.RegisterTool(
+			mcp.Tool{
+				Name:        "strict_tool",
+				Description: "Tool with strict arg validation",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"required_field":{"type":"string"}},"required":["required_field"]}`),
+			},
+			func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
+				var params struct {
+					RequiredField string `json:"required_field"`
+				}
+				if err := json.Unmarshal(args, &params); err != nil {
+					return &mcp.ToolResult{
+						Content: []mcp.ContentBlock{{Type: "text", Text: "invalid JSON"}},
+						IsError: true,
+					}, nil
+				}
+				if params.RequiredField == "" {
+					return &mcp.ToolResult{
+						Content: []mcp.ContentBlock{{Type: "text", Text: "missing required_field"}},
+						IsError: true,
+					}, nil
+				}
+				return &mcp.ToolResult{
+					Content: []mcp.ContentBlock{{Type: "text", Text: "success"}},
+				}, nil
+			},
+		)
+
+		tc := provider.ToolCall{
+			ID:        "call_1",
+			Name:      "strict_tool",
+			Arguments: json.RawMessage(`{}`), // Missing required field
+		}
+
+		result, err := mysis.executeToolCall(context.Background(), proxy, tc)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+		if !result.IsError {
+			t.Error("expected IsError=true for invalid arguments")
+		}
+	})
+
+	t.Run("mcp_call_tool_error", func(t *testing.T) {
+		stored, _ := s.CreateMysis("mcp-error-test", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		proxy := mcp.NewProxy(nil)
+		// Register a tool that returns an error
+		proxy.RegisterTool(
+			mcp.Tool{
+				Name:        "error_tool",
+				Description: "Tool that fails",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+			},
+			func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
+				return nil, fmt.Errorf("tool execution failed")
+			},
+		)
+
+		tc := provider.ToolCall{
+			ID:        "call_1",
+			Name:      "error_tool",
+			Arguments: json.RawMessage(`{}`),
+		}
+
+		result, err := mysis.executeToolCall(context.Background(), proxy, tc)
+
+		// executeToolCall should propagate the error
+		if err == nil {
+			t.Error("expected error from tool execution")
+		}
+		if !strings.Contains(err.Error(), "tool execution failed") {
+			t.Errorf("expected 'tool execution failed' error, got: %v", err)
+		}
+		// Result should be nil when handler returns error
+		if result != nil {
+			t.Errorf("expected nil result on error, got: %v", result)
+		}
+	})
+
+	t.Run("tool_result_parsing_with_empty_content", func(t *testing.T) {
+		stored, _ := s.CreateMysis("parse-test", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		proxy := mcp.NewProxy(nil)
+		// Register a tool that returns empty content
+		proxy.RegisterTool(
+			mcp.Tool{
+				Name:        "empty_tool",
+				Description: "Tool with empty result",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+			},
+			func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
+				return &mcp.ToolResult{
+					Content: []mcp.ContentBlock{}, // Empty content
+				}, nil
+			},
+		)
+
+		tc := provider.ToolCall{
+			ID:        "call_1",
+			Name:      "empty_tool",
+			Arguments: json.RawMessage(`{}`),
+		}
+
+		result, err := mysis.executeToolCall(context.Background(), proxy, tc)
+
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+		// Should handle empty content gracefully
+		if result.IsError {
+			t.Error("empty content should not be an error")
+		}
+	})
+}
+
 func TestSendEphemeralMessage_IdleState(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -2120,4 +2322,115 @@ func TestGetContextMemories_OnlyHistoricalTurns(t *testing.T) {
 	if !hasOldUser {
 		t.Error("Expected historical user message to be included as current turn")
 	}
+}
+
+// TestMysisName verifies the Name getter returns the mysis name.
+func TestMysisName(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	mock := provider.NewMock("mock", "response")
+
+	expectedName := "test-mysis-name"
+	stored, err := s.CreateMysis(expectedName, "mock", "mock-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	if got := mysis.Name(); got != expectedName {
+		t.Errorf("Name() = %q, want %q", got, expectedName)
+	}
+}
+
+// TestMysisCreatedAt verifies the CreatedAt getter returns the creation timestamp.
+func TestMysisCreatedAt(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	mock := provider.NewMock("mock", "response")
+
+	beforeCreate := time.Now().Add(-time.Second)
+	stored, err := s.CreateMysis("test-mysis-time", "mock", "mock-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+	afterCreate := time.Now().Add(time.Second)
+
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	got := mysis.CreatedAt()
+	if got.Before(beforeCreate) || got.After(afterCreate) {
+		t.Errorf("CreatedAt() = %v, want between %v and %v", got, beforeCreate, afterCreate)
+	}
+}
+
+// TestBuildSystemPrompt_EdgeCases tests buildSystemPrompt error handling
+func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	t.Run("no_broadcasts_fallback", func(t *testing.T) {
+		stored, _ := s.CreateMysis("no-broadcasts", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Build system prompt with no broadcasts
+		prompt := mysis.buildSystemPrompt()
+
+		// Should contain fallback message
+		if !strings.Contains(prompt, "No commander directives yet") {
+			t.Error("expected fallback message when no broadcasts")
+		}
+		if !strings.Contains(prompt, "Grow more powerful while awaiting instructions") {
+			t.Error("expected fallback message when no broadcasts")
+		}
+		// Should still contain base SystemPrompt content
+		if !strings.Contains(prompt, "SpaceMolt") {
+			t.Error("expected base system prompt content")
+		}
+	})
+
+	t.Run("broadcast_with_unknown_sender", func(t *testing.T) {
+		stored, _ := s.CreateMysis("unknown-sender", "mock", "test-model", 0.7)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Add a broadcast with a non-existent sender ID
+		s.AddMemory("nonexistent-mysis-id", store.MemoryRoleUser, store.MemorySourceBroadcast, "Test broadcast", "", "nonexistent-mysis-id")
+
+		prompt := mysis.buildSystemPrompt()
+
+		// Should handle unknown sender gracefully
+		if !strings.Contains(prompt, "Unknown") {
+			t.Error("expected 'Unknown' sender name for non-existent sender")
+		}
+		// Should still include broadcast content
+		if !strings.Contains(prompt, "Test broadcast") {
+			t.Error("expected broadcast content in prompt")
+		}
+	})
+
+	t.Run("broadcast_with_valid_sender", func(t *testing.T) {
+		sender, _ := s.CreateMysis("sender-mysis", "mock", "test-model", 0.7)
+		receiver, _ := s.CreateMysis("receiver-mysis", "mock", "test-model", 0.7)
+
+		mock := provider.NewMock("mock", "response")
+		receiverMysis := NewMysis(receiver.ID, receiver.Name, receiver.CreatedAt, mock, s, bus)
+
+		// Add a broadcast from sender
+		s.AddMemory(receiver.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Attack coordinates: X=100, Y=200", "", sender.ID)
+
+		prompt := receiverMysis.buildSystemPrompt()
+
+		// Should include sender name
+		if !strings.Contains(prompt, "sender-mysis") {
+			t.Error("expected sender name in prompt")
+		}
+		// Should include broadcast content
+		if !strings.Contains(prompt, "Attack coordinates") {
+			t.Error("expected broadcast content in prompt")
+		}
+	})
 }

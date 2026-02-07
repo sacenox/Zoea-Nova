@@ -21,29 +21,6 @@ func TestMysis_ShouldNudge_Idle(t *testing.T) {
 	}
 }
 
-// TestMysis_ShouldNudge_Traveling_InFuture tests nudges during travel.
-func TestMysis_ShouldNudge_Traveling_InFuture(t *testing.T) {
-	t.Skip("Conflicts with TestMysis_ActivityStateTransitions/traveling_future_no_nudge - needs review")
-	m := &Mysis{
-		activityState: ActivityStateTraveling,
-		activityUntil: time.Now().Add(30 * time.Second), // Still traveling
-	}
-
-	now := time.Now()
-
-	if !m.shouldNudge(now) {
-		t.Error("Expected nudge while traveling (activity until time in future)")
-	}
-
-	if m.activityState != ActivityStateTraveling {
-		t.Errorf("Expected activity state traveling to remain, got %s", m.activityState)
-	}
-
-	if m.activityUntil.IsZero() {
-		t.Error("Expected activityUntil to remain set")
-	}
-}
-
 // TestMysis_ShouldNudge_Traveling_Arrived tests nudge after arrival.
 func TestMysis_ShouldNudge_Traveling_Arrived(t *testing.T) {
 	m := &Mysis{
@@ -64,29 +41,6 @@ func TestMysis_ShouldNudge_Traveling_Arrived(t *testing.T) {
 
 	if !m.activityUntil.IsZero() {
 		t.Error("Expected activityUntil cleared to zero time")
-	}
-}
-
-// TestMysis_ShouldNudge_Cooldown_Active tests nudges during cooldown.
-func TestMysis_ShouldNudge_Cooldown_Active(t *testing.T) {
-	t.Skip("Conflicts with TestMysis_ActivityStateTransitions/cooldown_future_no_nudge - needs review")
-	m := &Mysis{
-		activityState: ActivityStateCooldown,
-		activityUntil: time.Now().Add(10 * time.Second), // Cooldown active
-	}
-
-	now := time.Now()
-
-	if !m.shouldNudge(now) {
-		t.Error("Expected nudge during active cooldown")
-	}
-
-	if m.activityState != ActivityStateCooldown {
-		t.Errorf("Expected activity state cooldown to remain, got %s", m.activityState)
-	}
-
-	if m.activityUntil.IsZero() {
-		t.Error("Expected activityUntil to remain set")
 	}
 }
 
