@@ -1,5 +1,8 @@
 # Zoea Nova Development Workflow
 
+**Version:** 1.0  
+**Last updated:** 2026-02-07
+
 ## Purpose
 
 This document defines the standard workflow for complex refactoring and architectural changes in Zoea Nova. It codifies the process used successfully for the nudge-to-encouragement system migration (commit 82df0ce, -785 lines, 11 agents coordinated).
@@ -19,6 +22,7 @@ Do NOT use for:
 - Documentation-only changes
 - Dependency updates
 - Configuration tweaks
+- You aren't confident in the approach
 
 ---
 
@@ -28,12 +32,17 @@ Do NOT use for:
 
 **Goal:** Create single source of truth before touching code.
 
+**Estimated time:** 30-60 minutes
+
+**Abort if:** Can't define clear truth table after 90 minutes (problem too complex/unclear)
+
 **Steps:**
 
 1. **Analyze the problem**
    - What's broken or needs changing?
    - What's the root cause?
    - What are the constraints?
+   - How is it expected to work (do we have an existing truth table in our architecture: `documentation/architecture`?)
 
 2. **Create truth table**
    - Document all possible states
@@ -66,7 +75,14 @@ Do NOT use for:
 
 **Goal:** Execute changes efficiently using coordinated agent fleet.
 
-**Minimum agents:** 3 (recommended: 5-6 for large changes)
+**Estimated time:** 30-90 minutes (depending on agent count and complexity)
+
+**Agent count by change size:**
+- Small refactor (5-10 files): 3 agents minimum
+- Medium refactor (10-20 files): 5-6 agents recommended
+- Large refactor (20+ files): 6-8 agents, consider splitting into sub-workflows
+
+**Abort if:** >50% agents report blocking dependencies (task breakdown needs revision)
 
 **Steps:**
 
@@ -87,6 +103,8 @@ Do NOT use for:
    - Use task tool with clear instructions
    - Reference the truth table document
    - Specify what NOT to change (avoid conflicts)
+   - Use separate git branches per agent if changes overlap
+   - Ask for test coverage when applicable
    - Request specific deliverables (summary with line numbers)
 
 3. **Monitor agent completion**
@@ -104,6 +122,10 @@ Do NOT use for:
 
 **Goal:** Verify agent work integrates correctly and matches truth table.
 
+**Estimated time:** 20-40 minutes
+
+**Abort if:** >20 compilation errors after integration (indicates fundamental design issue)
+
 **Steps:**
 
 1. **Check for conflicts**
@@ -112,6 +134,10 @@ Do NOT use for:
    - Check for missing dependencies
 
 2. **Verify truth table compliance**
+   - Use Grep tool to find each state transition
+   - Trace code path for each scenario
+   - Run targeted tests for each row
+   - Document verification in checklist
    - For each row in truth table:
      - Find corresponding code
      - Verify behavior matches spec
@@ -143,7 +169,11 @@ Do NOT use for:
 
 **Goal:** Find issues the first agent pass missed.
 
-**Minimum review agents:** 3 (independent perspectives)
+**Estimated time:** 30-45 minutes
+
+**Review agents:** 3-5 (3 minimum, 5 for large changes, independent perspectives)
+
+**Abort if:** Review agents find architectural flaws (not bugs) - indicates design needs revision
 
 **Steps:**
 
@@ -180,7 +210,11 @@ Do NOT use for:
 
 **Goal:** Implement fixes for issues found in regression analysis.
 
+**Estimated time:** 20-60 minutes (depends on issue complexity)
+
 **Approach:** Multiple agents with different solutions (if complex)
+
+**Abort if:** All 3 fix agents fail to solve issue (problem needs redesign)
 
 **Steps:**
 
@@ -188,11 +222,14 @@ Do NOT use for:
    - Launch 3 agents with same requirements
    - Each agent implements independent solution
    - Compare approaches:
-     - Code simplicity
+     - Truth table compliance (eliminates non-compliant)
+     - Code simplicity (prefer simpler)
+     - Test coverage (prefer better tested)
      - Performance
      - Maintainability
      - Risk level
-   - Choose best solution or merge ideas
+   - Choose best solution (ask user if tied)
+   - Never merge incompatible approaches
 
 2. **For simple fixes:**
    - Implement directly
@@ -213,6 +250,10 @@ Do NOT use for:
 ### Phase 6: User Review and Commit
 
 **Goal:** Get user approval and create clean commit history.
+
+**Estimated time:** 15-30 minutes
+
+**Abort if:** User finds critical missing functionality (scope was incomplete)
 
 **Steps:**
 
@@ -253,13 +294,22 @@ Do NOT use for:
 
 A successful workflow execution should achieve:
 
+**Process metrics:**
+- Phase 1 completion: <90 minutes
+- Agent coordination: <3 conflicts requiring manual merge
+- Review findings: <5 critical issues found
+- Fix iterations: <2 rounds needed
+- Total time: <4 hours for medium refactor
+
+**Quality metrics:**
 1. **Correctness:** All truth table scenarios verified in code
 2. **Completeness:** No missing edge cases or half-implemented features
-3. **Test coverage:** All new behavior has tests, obsolete tests removed
+3. **Test coverage:** No decrease from baseline, all new behavior has tests
 4. **Documentation:** Truth table doc created, outdated comments cleaned
-5. **Code quality:** Net negative lines (removed complexity)
-6. **Build status:** All tests passing, clean compilation
-7. **Efficiency:** Parallel agents complete in fraction of sequential time
+5. **Code quality:** Net negative lines preferred (removed complexity)
+6. **Build status:** All tests passing, zero warnings
+7. **User approval:** First-try acceptance
+8. **Efficiency:** Parallel agents complete in fraction of sequential time
 
 ---
 
@@ -282,6 +332,49 @@ A successful workflow execution should achieve:
 - Clean up as you go (remove obsolete code immediately)
 - Split commits by logical concern
 - Write architecture docs that match implementation
+
+---
+
+## Handling Scope Changes
+
+**If scope changes during Phase 1-2:**
+- STOP all agents
+- Update truth table
+- Get user re-approval
+- Restart from Phase 2
+
+**If scope changes during Phase 3-5:**
+- Document new scope in TODO
+- Complete current workflow
+- Start new workflow for additional scope
+
+**Never:** Mix scope changes into in-flight workflow
+
+---
+
+## Rollback Procedure
+
+**If workflow fails mid-execution:**
+
+1. **Assess damage:**
+   - Run `git status` to see uncommitted changes
+   - Run `git diff --stat` to see scope
+   - Check if any agents are still running
+
+2. **Clean rollback:**
+   - `git restore .` (discard all changes)
+   - `git clean -fd` (remove untracked files)
+   - Verify with `make build && make test`
+
+3. **Document failure:**
+   - Add to KNOWN_ISSUES.md
+   - Note what went wrong
+   - Note what was learned
+
+4. **Restart decision:**
+   - If truth table was wrong: Fix table, restart Phase 1
+   - If agent coordination failed: Adjust task breakdown, restart Phase 2
+   - If architectural flaw found: Escalate to user, new design needed
 
 ---
 
@@ -408,33 +501,15 @@ Use this checklist for each workflow execution:
 
 ## Workflow Evolution
 
-This workflow will evolve based on experience. Future improvements:
+This workflow will evolve based on experience. After using this workflow multiple times to build confidence in the process, consider:
 
 - [ ] Add metrics tracking (agent count, time per phase, bugs found)
 - [ ] Refine agent task templates (reusable prompts)
-- [ ] Optimize agent count (minimum effective team size)
 - [ ] Improve review agent focus areas (coverage matrix)
 - [ ] Streamline fix agent comparison (scoring rubric)
+- [ ] Create decision tree for when to use which phase
 
 ---
 
-## Notes for Revision
-
-**User requested:** Review and refine this workflow for general use
-
-**Questions to address:**
-- Optimal agent count per phase?
-- How to handle mid-flight scope changes?
-- When to abort and restart vs push through?
-- How to handle conflicting agent solutions?
-- Metrics for "is this working well"?
-
-**Future additions:**
-- Phase timing guidelines (how long should each phase take?)
-- Agent prompt templates for common tasks
-- Decision tree for when to use which phase
-- Rollback procedure if workflow fails mid-execution
-
----
-
-Last updated: 2026-02-07
+**Version:** 1.0  
+**Last updated:** 2026-02-07
