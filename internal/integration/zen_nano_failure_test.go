@@ -35,7 +35,7 @@ func TestZenNanoWithProductionConfig(t *testing.T) {
 	}
 
 	// Step 4: Check API key
-	apiKey := creds.GetAPIKey("opencode")
+	apiKey := creds.GetAPIKey("opencode_zen")
 	t.Logf("API key exists: %v (length: %d)", apiKey != "", len(apiKey))
 
 	// Step 5: Run EXACT initProviders code from main.go
@@ -51,7 +51,7 @@ func TestZenNanoWithProductionConfig(t *testing.T) {
 			registeredCount++
 			t.Logf("Registered Ollama: %s", name)
 		} else if provCfg.Endpoint == "https://opencode.ai/zen/v1" {
-			apiKey := creds.GetAPIKey("opencode")
+			apiKey := creds.GetAPIKey("opencode_zen")
 			if apiKey != "" {
 				factory := provider.NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)
