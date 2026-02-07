@@ -2381,3 +2381,219 @@ waitForResponse:
 		t.Errorf("expected state=stopped after Stop(), got %s", mysis.State())
 	}
 }
+
+// TestBroadcastSlidingWindowBug tests that broadcasts outside the 20-message
+// sliding window still keep myses running (don't trigger idle state).
+//
+// Bug: When a mysis processes a broadcast and generates 20+ messages,
+// the original broadcast is pushed out of the GetRecentMemories(20) window.
+// This causes findLastUserPromptIndex to return -1, triggering synthetic
+// encouragements and eventual idle state.
+//
+// Expected: Mysis should stay running because broadcast exists in DB.
+// Reference: MESSAGE_FORMAT_GUARANTEES.md line 44
+func TestBroadcastSlidingWindowBug(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create mysis
+	stored, err := s.CreateMysis("window-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Send broadcast (message #1)
+	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Explore the universe!", "", "commander-id")
+	if err != nil {
+		t.Fatalf("AddMemory(broadcast) error: %v", err)
+	}
+
+	// Simulate 25 messages (push broadcast out of 20-message window)
+	// Pattern: assistant response + tool call + tool result (repeated)
+	for i := 0; i < 8; i++ {
+		// Assistant response
+		err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, fmt.Sprintf("Response %d", i), "", "")
+		if err != nil {
+			t.Fatalf("AddMemory(assistant) error: %v", err)
+		}
+
+		// Tool call (stored as assistant message with tool call prefix)
+		toolCall := fmt.Sprintf("[TOOL_CALLS]call_%d:get_status:{}", i)
+		err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCall, "", "")
+		if err != nil {
+			t.Fatalf("AddMemory(tool call) error: %v", err)
+		}
+
+		// Tool result
+		toolResult := fmt.Sprintf("call_%d:Status OK", i)
+		err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool, toolResult, "", "")
+		if err != nil {
+			t.Fatalf("AddMemory(tool result) error: %v", err)
+		}
+	}
+
+	// Verify we have 25 messages total (1 broadcast + 24 from loop)
+	allMemories, err := s.GetMemories(stored.ID)
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
+	}
+	if len(allMemories) != 25 {
+		t.Fatalf("expected 25 messages, got %d", len(allMemories))
+	}
+
+	// Verify broadcast is message #1 (oldest)
+	if allMemories[0].Source != store.MemorySourceBroadcast {
+		t.Fatalf("expected first message to be broadcast, got source=%s", allMemories[0].Source)
+	}
+
+	// Create mysis instance
+	mock := provider.NewMock("mock", "Continuing mission...")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Call getContextMemories - this should find the broadcast even though
+	// it's outside the 20-message sliding window
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// Check if broadcast is in context
+	foundBroadcast := false
+	foundCorrectBroadcast := false
+	for _, m := range memories {
+		if m.Source == store.MemorySourceBroadcast {
+			foundBroadcast = true
+			if m.Content == "Explore the universe!" {
+				foundCorrectBroadcast = true
+			}
+			break
+		}
+	}
+
+	if !foundBroadcast {
+		t.Error("REGRESSION: broadcast not in context despite existing in DB - mysis will incorrectly go idle")
+	}
+
+	if !foundCorrectBroadcast {
+		t.Error("Wrong broadcast in context - expected 'Explore the universe!'")
+	}
+
+	// Verify encouragementCount is 0 (not incremented)
+	mysis.mu.RLock()
+	count := mysis.encouragementCount
+	mysis.mu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 when broadcast exists, got %d", count)
+	}
+
+	// Verify no synthetic encouragement was added
+	foundSynthetic := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleUser && m.Source == store.MemorySourceSystem {
+			if strings.Contains(m.Content, "Continue your mission") {
+				foundSynthetic = true
+				break
+			}
+		}
+	}
+
+	if foundSynthetic {
+		t.Error("synthetic encouragement added despite broadcast existing - will cause incorrect idle state")
+	}
+}
+
+// TestNewMysisInheritsGlobalBroadcast tests that a new mysis created after
+// a broadcast was sent inherits the global swarm mission.
+//
+// Bug: New myses created after broadcasts have no broadcast in their memories.
+// GetMostRecentBroadcast(mysisID) returns nil, causing idle state.
+//
+// Expected: New mysis should inherit most recent global broadcast.
+// Reference: Issue reported by user - "new mysis went idle despite commander broadcast"
+func TestNewMysisInheritsGlobalBroadcast(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Step 1: Create first mysis and send it a broadcast
+	mysis1, err := s.CreateMysis("existing-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis(1) error: %v", err)
+	}
+
+	// Send broadcast to first mysis (simulates commander broadcast)
+	err = s.AddMemory(mysis1.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Explore the universe!", "", "commander-id")
+	if err != nil {
+		t.Fatalf("AddMemory(broadcast) error: %v", err)
+	}
+
+	// Step 2: Create second mysis AFTER the broadcast (simulates new mysis joining swarm)
+	mysis2, err := s.CreateMysis("new-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis(2) error: %v", err)
+	}
+
+	// Verify new mysis has no broadcasts in its own memories
+	mysis2Memories, err := s.GetMemories(mysis2.ID)
+	if err != nil {
+		t.Fatalf("GetMemories(mysis2) error: %v", err)
+	}
+
+	hasBroadcast := false
+	for _, m := range mysis2Memories {
+		if m.Source == store.MemorySourceBroadcast {
+			hasBroadcast = true
+			break
+		}
+	}
+
+	if hasBroadcast {
+		t.Fatal("Test setup error: new mysis should not have broadcast in its own memories")
+	}
+
+	// Step 3: Create mysis instance and call getContextMemories
+	mock := provider.NewMock("mock", "Continuing mission...")
+	mysisInstance := NewMysis(mysis2.ID, mysis2.Name, mysis2.CreatedAt, mock, s, bus)
+
+	memories, err := mysisInstance.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// Step 4: Verify the global broadcast was inherited
+	foundGlobalBroadcast := false
+	for _, m := range memories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "Explore the universe!" {
+			foundGlobalBroadcast = true
+			break
+		}
+	}
+
+	if !foundGlobalBroadcast {
+		t.Error("REGRESSION: new mysis did not inherit global broadcast - will incorrectly go idle")
+	}
+
+	// Step 5: Verify encouragementCount is 0 (not incremented)
+	mysisInstance.mu.RLock()
+	count := mysisInstance.encouragementCount
+	mysisInstance.mu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 when global broadcast inherited, got %d", count)
+	}
+
+	// Step 6: Verify no synthetic encouragement was added
+	foundSynthetic := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleUser && m.Source == store.MemorySourceSystem {
+			if strings.Contains(m.Content, "Continue your mission") {
+				foundSynthetic = true
+				break
+			}
+		}
+	}
+
+	if foundSynthetic {
+		t.Error("synthetic encouragement added despite global broadcast existing")
+	}
+}

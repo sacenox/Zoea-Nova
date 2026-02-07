@@ -228,6 +228,61 @@ func (s *Store) GetRecentBroadcasts(limit int) ([]*BroadcastMessage, error) {
 	return messages, rows.Err()
 }
 
+// GetMostRecentBroadcast retrieves the most recent broadcast message for a specific mysis.
+// If no broadcast exists for this mysis, falls back to the most recent broadcast in the
+// entire system (global swarm mission). This ensures new myses inherit the current mission.
+// Returns nil only if no broadcasts exist anywhere in the system.
+func (s *Store) GetMostRecentBroadcast(mysisID string) (*Memory, error) {
+	var m Memory
+	var senderID sql.NullString
+
+	// First, try to find a broadcast for this specific mysis
+	err := s.db.QueryRow(`
+		SELECT id, mysis_id, role, source, sender_id, content, reasoning, created_at
+		FROM memories
+		WHERE mysis_id = ? AND source = 'broadcast'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, mysisID).Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &senderID, &m.Content, &m.Reasoning, &m.CreatedAt)
+
+	if err == nil {
+		// Found a broadcast for this mysis
+		if senderID.Valid {
+			m.SenderID = senderID.String
+		}
+		return &m, nil
+	}
+
+	if err != sql.ErrNoRows {
+		// Real database error
+		return nil, fmt.Errorf("query mysis-specific broadcast: %w", err)
+	}
+
+	// No broadcast for this mysis - fall back to most recent global broadcast
+	// This handles new myses created after a broadcast was sent
+	err = s.db.QueryRow(`
+		SELECT id, mysis_id, role, source, sender_id, content, reasoning, created_at
+		FROM memories
+		WHERE source = 'broadcast'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`).Scan(&m.ID, &m.MysisID, &m.Role, &m.Source, &senderID, &m.Content, &m.Reasoning, &m.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		// No broadcasts anywhere in the system
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query global broadcast: %w", err)
+	}
+	if senderID.Valid {
+		m.SenderID = senderID.String
+	}
+
+	// Return the global broadcast (with original mysis_id preserved for tracking)
+	return &m, nil
+}
+
 // SearchMemories searches memories for a mysis by content text.
 // Returns memories where content contains the query string (case-sensitive).
 func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error) {

@@ -13,6 +13,12 @@
 
 ---
 
+- Myses appear running, but network indicator shows idle, this should be impossible. Specially with 4 myses.
+
+- sending direct message to mysis doesn't reset the message input box. Needs test coverage and fix.
+
+- remove zoea_list_mysis()
+
 - Investigate no content from AI messages in coversation log. only happens ocasionally.
 
 ```
@@ -48,8 +54,6 @@
  [58 more]                                                                                                            █
  last reply was the sale of 10 Iron Ore, earning 40 credits and 1 XP.                                                 █
 ```
-
-- sending direct message to mysis doesn't reset the message input box. Needs test coverage and fix.
 
 > RELEASE CUTOFF ----~ 8< ~---- STOP HERE **DON'T TOUCH** ----~ 8< ~----
 

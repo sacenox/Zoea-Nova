@@ -168,16 +168,23 @@ Mysis active again
 
 ### Primary Implementation
 
-**`internal/core/mysis.go:getContextMemories()`** (lines 1427-1482)
+**`internal/core/mysis.go:getContextMemories()`** (lines 1169-1268)
 - Checks for real user messages via `findLastUserPromptIndex()`
-- Adds synthetic message if none found (lines 1461-1478)
+- **Sliding Window Protection:** If no user message found in recent 20 messages, checks for broadcast in full DB
+- Adds synthetic message only if no broadcast exists anywhere
 - **This is the only place synthetic messages are added**
+
+**`internal/store/memories.go:GetMostRecentBroadcast()`** (lines 233-286)
+- Retrieves most recent broadcast for a mysis from full database
+- **Global fallback:** If no broadcast for this mysis, returns most recent broadcast from any mysis
+- Used to prevent idle state when broadcasts exist outside sliding window
+- Ensures new myses inherit current swarm mission
 
 ### Counter Management
 
-**Increment:** In `getContextMemories()` when synthetic message added
+**Increment:** In `getContextMemories()` when synthetic message added (no broadcast exists)
 ```go
-// After adding synthetic message (line 1478)
+// After adding synthetic message
 a.mu.Lock()
 a.encouragementCount++
 count := a.encouragementCount
@@ -188,9 +195,14 @@ if count >= 3 {
 }
 ```
 
-**Reset:** When real user message arrives
+**Reset:** When real user message arrives OR when broadcast found in DB
 ```go
-// In QueueBroadcast (line 955) and SendMessageFrom (line 739)
+// In QueueBroadcast (line 719) and SendMessageFrom (line 392)
+a.mu.Lock()
+a.encouragementCount = 0
+a.mu.Unlock()
+
+// Also in getContextMemories when broadcast found outside sliding window (line 1211)
 a.mu.Lock()
 a.encouragementCount = 0
 a.mu.Unlock()
@@ -218,6 +230,50 @@ The OpenAI Chat Completions API requires:
 4. **Tool results follow tool calls** - Handled by tool loop logic
 
 The encouragement system ensures requirement #2. The other requirements are satisfied by normal conversation flow and provider message conversion.
+
+---
+
+## Sliding Window Protection
+
+### The Problem
+
+Context is limited to the most recent 20 messages (`MaxContextMessages = 20`). When a mysis processes a broadcast and generates 20+ messages (assistant responses, tool calls, tool results), the original broadcast is pushed out of the sliding window.
+
+**Example:**
+1. Broadcast stored: "Explore the universe!" (message #1)
+2. Mysis processes it, generates 24 messages (8 iterations × 3 messages each)
+3. Total: 25 messages in database
+4. `GetRecentMemories(20)` returns only messages #6-25
+5. Broadcast (message #1) is excluded
+6. `findLastUserPromptIndex` returns -1 (no user message found)
+7. Synthetic encouragement added, counter increments
+8. After 3 iterations: mysis incorrectly goes idle despite having mission directive
+
+### The Solution
+
+When `findLastUserPromptIndex` returns -1 (no user message in sliding window), `getContextMemories` performs a secondary check:
+
+1. Query database for most recent broadcast: `GetMostRecentBroadcast(mysisID)`
+2. If broadcast exists (even outside window OR from another mysis), include it in context
+3. Reset encouragement counter to 0
+4. Mysis continues running with mission directive
+
+**Code Location:** `internal/core/mysis.go:1203-1225`
+
+**Global Fallback:** `GetMostRecentBroadcast` has two-tier lookup:
+1. First, search for broadcasts sent to this specific mysis
+2. If none found, search for most recent broadcast in entire system (global swarm mission)
+3. This ensures new myses created after a broadcast inherit the current mission
+
+**Benefits:**
+- Ensures autonomous operation: myses stay running as long as broadcasts exist
+- New myses inherit swarm mission: no idle state for late joiners
+- Minimal token cost: adds 1 broadcast message to context
+- Maintains truth table guarantees: broadcasts always keep myses running
+
+**Test Coverage:** 
+- `TestBroadcastSlidingWindowBug` (internal/core/mysis_test.go:2397)
+- `TestNewMysisInheritsGlobalBroadcast` (internal/core/mysis_test.go:2507)
 
 ---
 

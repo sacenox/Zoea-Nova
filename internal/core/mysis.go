@@ -1200,37 +1200,74 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		currentTurnMemories := allMemories[turnBoundaryIdx:]
 		result = append(result, currentTurnMemories...)
 	} else {
-		// No user prompt found - add synthetic encouragement message
-		// Include recent tool loop to maintain conversation continuity
-		historicalToolLoop := m.extractLatestToolLoop(allMemories)
-		if len(historicalToolLoop) > 0 {
-			result = append(result, historicalToolLoop...)
+		// No user prompt found in sliding window
+		// Check if a broadcast exists in DB (even if outside the 20-message window)
+		// This ensures myses stay running when they have mission directives
+		broadcast, err := m.store.GetMostRecentBroadcast(m.id)
+		if err != nil {
+			// Database error - return error to caller rather than treating as "no broadcast"
+			return nil, fmt.Errorf("check for broadcast: %w", err)
 		}
 
-		// Then add synthetic encouragement message
-		nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
-		nudgeMemory := &store.Memory{
-			Role:      store.MemoryRoleUser,
-			Source:    store.MemorySourceSystem,
-			Content:   nudgeContent,
-			SenderID:  "",
-			CreatedAt: time.Now(),
-		}
-		result = append(result, nudgeMemory)
+		if broadcast != nil {
+			// Broadcast exists! Include it to keep mysis running
+			// Reset encouragement counter since we have a real user message
+			m.mu.Lock()
+			m.encouragementCount = 0
+			m.mu.Unlock()
 
-		// Increment encouragement counter since we added synthetic message
-		m.mu.Lock()
-		m.encouragementCount++
-		count := m.encouragementCount
-		m.mu.Unlock()
+			// Include recent tool loop for continuity
+			historicalToolLoop := m.extractLatestToolLoop(allMemories)
+			if len(historicalToolLoop) > 0 {
+				result = append(result, historicalToolLoop...)
+			}
 
-		// If 3 encouragements sent, prepare to idle (will be checked in loop)
-		if count >= 3 {
-			// Store that we hit limit - the loop will handle state transition
-			log.Warn().
-				Str("mysis", m.name).
-				Int("count", count).
-				Msg("Encouragement limit reached - mysis should idle")
+			// Check if broadcast is already in allMemories (edge case protection)
+			alreadyInContext := false
+			for _, mem := range allMemories {
+				if mem.ID == broadcast.ID {
+					alreadyInContext = true
+					break
+				}
+			}
+
+			// Add the broadcast as the user prompt (if not already present)
+			if !alreadyInContext {
+				result = append(result, broadcast)
+			}
+		} else {
+			// No broadcast exists - add synthetic encouragement message
+			// Include recent tool loop to maintain conversation continuity
+			historicalToolLoop := m.extractLatestToolLoop(allMemories)
+			if len(historicalToolLoop) > 0 {
+				result = append(result, historicalToolLoop...)
+			}
+
+			// Then add synthetic encouragement message
+			nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
+			nudgeMemory := &store.Memory{
+				Role:      store.MemoryRoleUser,
+				Source:    store.MemorySourceSystem,
+				Content:   nudgeContent,
+				SenderID:  "",
+				CreatedAt: time.Now(),
+			}
+			result = append(result, nudgeMemory)
+
+			// Increment encouragement counter since we added synthetic message
+			m.mu.Lock()
+			m.encouragementCount++
+			count := m.encouragementCount
+			m.mu.Unlock()
+
+			// If 3 encouragements sent, prepare to idle (will be checked in loop)
+			if count >= 3 {
+				// Store that we hit limit - the loop will handle state transition
+				log.Warn().
+					Str("mysis", m.name).
+					Int("count", count).
+					Msg("Encouragement limit reached - mysis should idle")
+			}
 		}
 	}
 
