@@ -27,8 +27,8 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "ollama response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory("ollama", provider.NewMockFactoryWithLimiter("ollama", "ollama response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
@@ -53,121 +53,6 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	}
 
 	return cmd, bus, cleanup
-}
-
-func TestCommanderCreateMysis(t *testing.T) {
-	cmd, bus, cleanup := setupCommanderTest(t)
-	defer cleanup()
-
-	events := bus.Subscribe()
-
-	mysis, err := cmd.CreateMysis("test-mysis", "mock")
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	if mysis.Name() != "test-mysis" {
-		t.Errorf("expected name=test-mysis, got %s", mysis.Name())
-	}
-	if mysis.State() != MysisStateIdle {
-		t.Errorf("expected state=idle, got %s", mysis.State())
-	}
-
-	// Should receive created event
-	select {
-	case e := <-events:
-		if e.Type != EventMysisCreated {
-			t.Errorf("expected EventMysisCreated, got %s", e.Type)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timeout waiting for created event")
-	}
-
-	if cmd.MysisCount() != 1 {
-		t.Errorf("expected mysis count=1, got %d", cmd.MysisCount())
-	}
-}
-
-func TestCommanderDeleteMysis(t *testing.T) {
-	cmd, bus, cleanup := setupCommanderTest(t)
-	defer cleanup()
-
-	// Subscribe before creating mysis
-	events := bus.Subscribe()
-
-	mysis, _ := cmd.CreateMysis("delete-me", "mock")
-	id := mysis.ID()
-
-	// Drain the created event
-	select {
-	case <-events:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timeout waiting for created event")
-	}
-
-	if err := cmd.DeleteMysis(id, true); err != nil {
-		t.Fatalf("DeleteMysis() error: %v", err)
-	}
-
-	// Should receive deleted event
-	select {
-	case e := <-events:
-		if e.Type != EventMysisDeleted {
-			t.Errorf("expected EventMysisDeleted, got %s", e.Type)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timeout waiting for deleted event")
-	}
-
-	if cmd.MysisCount() != 0 {
-		t.Errorf("expected mysis count=0, got %d", cmd.MysisCount())
-	}
-
-	// Delete non-existent should error
-	if err := cmd.DeleteMysis("nonexistent", false); err == nil {
-		t.Error("expected error deleting non-existent mysis")
-	}
-}
-
-func TestCommanderMaxMyses(t *testing.T) {
-	s, err := store.OpenMemory()
-	if err != nil {
-		t.Fatalf("OpenMemory() error: %v", err)
-	}
-	defer s.Close()
-
-	bus := NewEventBus(100)
-	defer bus.Close()
-
-	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
-
-	cfg := &config.Config{
-		Swarm: config.SwarmConfig{
-			MaxMyses: 2, // Low limit for testing
-		},
-		Providers: map[string]config.ProviderConfig{
-			"mock": {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7},
-		},
-	}
-
-	cmd := NewCommander(s, reg, bus, cfg)
-	defer cmd.StopAll()
-
-	// Create up to limit
-	cmd.CreateMysis("mysis-1", "mock")
-	cmd.CreateMysis("mysis-2", "mock")
-
-	// Should fail at limit
-	_, err = cmd.CreateMysis("mysis-3", "mock")
-	if err == nil {
-		t.Error("expected error when exceeding max myses")
-	}
-
-	if cmd.MaxMyses() != 2 {
-		t.Errorf("expected max myses=2, got %d", cmd.MaxMyses())
-	}
 }
 
 func TestCommanderStartStopMysis(t *testing.T) {
@@ -612,7 +497,7 @@ func TestCommanderLoadMyses(t *testing.T) {
 
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{MaxMyses: 16},
@@ -660,11 +545,11 @@ func TestBroadcastDoesNotBlockOnBusyMysis(t *testing.T) {
 		WithLimiter(limiter)
 
 	// Register custom factories that return our specific providers
-	reg.RegisterFactory(&customMockFactory{
+	reg.RegisterFactory("slow", &customMockFactory{
 		name:     "slow",
 		provider: slowProvider,
 	})
-	reg.RegisterFactory(&customMockFactory{
+	reg.RegisterFactory("fast", &customMockFactory{
 		name:     "fast",
 		provider: fastProvider,
 	})

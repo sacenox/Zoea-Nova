@@ -54,7 +54,7 @@ func TestCommanderSendMessageAsync(t *testing.T) {
 	defer cleanup()
 
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "response", limiter))
+	c.registry.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "response", limiter))
 
 	mysis, _ := c.CreateMysis("async-mysis", "mock")
 
@@ -100,8 +100,8 @@ func TestCommanderBroadcastAsync(t *testing.T) {
 
 	// Use separate mocks to avoid any potential contention
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock1", "response1", limiter))
-	c.registry.RegisterFactory(provider.NewMockFactoryWithLimiter("mock2", "response2", limiter))
+	c.registry.RegisterFactory("mock1", provider.NewMockFactoryWithLimiter("mock1", "response1", limiter))
+	c.registry.RegisterFactory("mock2", provider.NewMockFactoryWithLimiter("mock2", "response2", limiter))
 
 	a1, err := c.CreateMysis("m1", "mock1")
 	if err != nil {

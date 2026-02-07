@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -232,18 +233,19 @@ func initLogging(debug bool) error {
 func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Registry {
 	registry := provider.NewRegistry()
 
-	// Register Ollama provider
-	if ollCfg, ok := cfg.Providers["ollama"]; ok {
-		factory := provider.NewOllamaFactory(ollCfg.Endpoint, ollCfg.RateLimit, ollCfg.RateBurst)
-		registry.RegisterFactory(factory)
-	}
-
-	// Register OpenCode Zen provider
-	if zenCfg, ok := cfg.Providers["opencode_zen"]; ok {
-		apiKey := creds.GetAPIKey("opencode_zen")
-		if apiKey != "" {
-			factory := provider.NewOpenCodeFactory(zenCfg.Endpoint, apiKey, zenCfg.RateLimit, zenCfg.RateBurst)
-			registry.RegisterFactory(factory)
+	for name, provCfg := range cfg.Providers {
+		// Detect provider type by endpoint
+		if strings.Contains(provCfg.Endpoint, "localhost:11434") || strings.Contains(provCfg.Endpoint, "/ollama") {
+			// Ollama-based provider
+			factory := provider.NewOllamaFactory(provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			registry.RegisterFactory(name, factory)
+		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
+			// OpenCode-based provider
+			apiKey := creds.GetAPIKey("opencode")
+			if apiKey != "" {
+				factory := provider.NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				registry.RegisterFactory(name, factory)
+			}
 		}
 	}
 

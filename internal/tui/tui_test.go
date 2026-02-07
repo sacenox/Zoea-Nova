@@ -37,10 +37,10 @@ func setupTestModel(t *testing.T) (Model, func()) {
 
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("zen-pickle", "mock response", limiter))
+	reg.RegisterFactory("ollama", provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
+	reg.RegisterFactory("opencode_zen", provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
+	reg.RegisterFactory("zen-nano", provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
+	reg.RegisterFactory("zen-pickle", provider.NewMockFactoryWithLimiter("zen-pickle", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{

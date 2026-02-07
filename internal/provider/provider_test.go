@@ -15,8 +15,8 @@ func TestRegistry(t *testing.T) {
 	reg := NewRegistry()
 
 	// Register mock providers
-	reg.RegisterFactory(NewMockFactory("provider1", "response1"))
-	reg.RegisterFactory(NewMockFactory("provider2", "response2"))
+	reg.RegisterFactory("provider1", NewMockFactory("provider1", "response1"))
+	reg.RegisterFactory("provider2", NewMockFactory("provider2", "response2"))
 
 	// Get existing provider
 	p, err := reg.Create("provider1", "model", 0.7)
@@ -401,5 +401,119 @@ func TestMockProviderRateLimit(t *testing.T) {
 	elapsed := time.Since(start)
 	if elapsed < 180*time.Millisecond {
 		t.Fatalf("expected rate limiting delay, got %v", elapsed)
+	}
+}
+
+func TestRegistry_MultipleProvidersWithSameFactory(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register two providers using same factory type
+	factory1 := NewMockFactory("mock1", "response1")
+	factory2 := NewMockFactory("mock2", "response2")
+
+	registry.RegisterFactory("provider-one", factory1)
+	registry.RegisterFactory("provider-two", factory2)
+
+	// Should be able to create both
+	p1, err := registry.Create("provider-one", "model1", 0.7)
+	if err != nil {
+		t.Fatalf("Create provider-one failed: %v", err)
+	}
+
+	p2, err := registry.Create("provider-two", "model2", 0.7)
+	if err != nil {
+		t.Fatalf("Create provider-two failed: %v", err)
+	}
+
+	// Should be different instances
+	if p1 == p2 {
+		t.Error("Expected different provider instances")
+	}
+
+	// Verify correct responses
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+
+	resp1, err := p1.Chat(ctx, messages)
+	if err != nil {
+		t.Fatalf("p1.Chat() error: %v", err)
+	}
+	if resp1 != "response1" {
+		t.Errorf("expected response1, got %s", resp1)
+	}
+
+	resp2, err := p2.Chat(ctx, messages)
+	if err != nil {
+		t.Fatalf("p2.Chat() error: %v", err)
+	}
+	if resp2 != "response2" {
+		t.Errorf("expected response2, got %s", resp2)
+	}
+}
+
+func TestRegistry_ConfigKeyOverridesFactoryName(t *testing.T) {
+	registry := NewRegistry()
+
+	// Factory has internal name "ollama", but register it with config key "ollama-llama"
+	factory := NewMockFactory("ollama", "llama-response")
+	registry.RegisterFactory("ollama-llama", factory)
+
+	// Should be accessible by config key, not factory name
+	p, err := registry.Create("ollama-llama", "llama3.1:8b", 0.7)
+	if err != nil {
+		t.Fatalf("Create ollama-llama failed: %v", err)
+	}
+
+	ctx := context.Background()
+	messages := []Message{{Role: "user", Content: "Hi"}}
+	resp, err := p.Chat(ctx, messages)
+	if err != nil {
+		t.Fatalf("Chat() error: %v", err)
+	}
+	if resp != "llama-response" {
+		t.Errorf("expected llama-response, got %s", resp)
+	}
+
+	// Should NOT be accessible by factory name
+	_, err = registry.Create("ollama", "model", 0.7)
+	if !errors.Is(err, ErrProviderNotFound) {
+		t.Errorf("expected ErrProviderNotFound for factory name, got %v", err)
+	}
+}
+
+func TestRegistry_ListReturnsConfigKeys(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register with config keys
+	registry.RegisterFactory("zen-nano", NewMockFactory("opencode_zen", "nano"))
+	registry.RegisterFactory("zen-pickle", NewMockFactory("opencode_zen", "pickle"))
+	registry.RegisterFactory("ollama-llama", NewMockFactory("ollama", "llama"))
+	registry.RegisterFactory("ollama-qwen", NewMockFactory("ollama", "qwen"))
+
+	names := registry.List()
+	if len(names) != 4 {
+		t.Fatalf("expected 4 providers, got %d", len(names))
+	}
+
+	// Should contain config keys, not factory names
+	expectedKeys := map[string]bool{
+		"zen-nano":     false,
+		"zen-pickle":   false,
+		"ollama-llama": false,
+		"ollama-qwen":  false,
+	}
+
+	for _, name := range names {
+		if _, ok := expectedKeys[name]; ok {
+			expectedKeys[name] = true
+		} else {
+			t.Errorf("unexpected provider name: %s", name)
+		}
+	}
+
+	for key, found := range expectedKeys {
+		if !found {
+			t.Errorf("expected config key %s not found in list", key)
+		}
 	}
 }

@@ -27,7 +27,7 @@ func setupTickTest(t *testing.T) (*Commander, *store.Store, *EventBus, func()) {
 
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory(provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{

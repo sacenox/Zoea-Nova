@@ -81,8 +81,8 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) RegisterFactory(f ProviderFactory) {
-	r.factories[f.Name()] = f
+func (r *Registry) RegisterFactory(name string, f ProviderFactory) {
+	r.factories[name] = f
 }
 
 func (r *Registry) Create(name, model string, temperature float64) (Provider, error) {
