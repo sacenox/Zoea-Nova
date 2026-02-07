@@ -4,10 +4,10 @@ This document describes the valid Mysis lifecycle states and the transitions bet
 
 ## States
 
-- `idle`: Not running. Set on creation and when a mysis fails 3 nudges; requires a commander message/broadcast to resume.
-- `running`: Active and eligible for nudges; waiting between loop iterations.
-- `stopped`: Explicitly stopped by user action.
-- `errored`: Provider or MCP failures after retries; recorded as `lastError`.
+- `idle`: Not running, but accepts messages. Messages are stored and processed when started. Set on creation and when a mysis fails 3 nudges; requires a commander message/broadcast or explicit start to resume processing.
+- `running`: Active and eligible for nudges; waiting between loop iterations. Accepts messages.
+- `stopped`: Explicitly stopped by user action. Rejects messages until relaunched.
+- `errored`: Provider or MCP failures after retries; recorded as `lastError`. Rejects messages until relaunched.
 
 ## Activity (not a state)
 
@@ -56,7 +56,18 @@ stateDiagram-v2
 - Triggered after 3 failed nudges with no progress.
 - Transitions to `idle` and signals that manual attention is needed.
 
+## Message Acceptance
+
+Messages can be sent to Myses in `idle` and `running` states:
+
+- **`idle`**: Accepts messages. Messages are stored and will be processed when the Mysis is started.
+- **`running`**: Accepts messages. Messages are processed immediately.
+- **`stopped`**: Rejects messages with error "mysis stopped - press 'r' to relaunch"
+- **`errored`**: Rejects messages with error "mysis errored - press 'r' to relaunch"
+
+User-initiated stop (`stopped` state) and error conditions (`errored` state) require explicit relaunch before messages can be sent.
+
 ## Notes
 
 - State updates are persisted via `store.UpdateMysisState`.
-- `running` is the only state that accepts new messages.
+- Messages are accepted in `idle` and `running` states; rejected in `stopped` and `errored` states.
