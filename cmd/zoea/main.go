@@ -160,7 +160,7 @@ func main() {
 	eventCh := bus.Subscribe()
 
 	// Create and run TUI
-	model := tui.New(commander, s, eventCh, *startSwarm)
+	model := tui.New(commander, s, eventCh, *startSwarm, cfg)
 
 	// Set cleanup callback to close event bus before quit
 	model.SetOnQuit(func() {
