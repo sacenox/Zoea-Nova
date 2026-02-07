@@ -23,7 +23,7 @@ Zoea-Nova is a high-performance command center designed to orchestrate massive s
 - **Tool Calling**: Myses use MCP to interact with SpaceMolt (mine, trade, navigate, etc.)
 - **Focus Mode**: View detailed conversation logs for any Mysis
 - **Provider Flexibility**: Use local Ollama or remote OpenCode Zen models per-Mysis
-- **Context Compression**: Sliding window keeps LLM context small for fast inference while full history remains searchable (see [documentation](documentation/CONTEXT_COMPRESSION.md))
+- **Context Compression**: Sliding window keeps LLM context small for fast inference while full history remains searchable (see [documentation](documentation/architecture/CONTEXT_COMPRESSION.md))
 - **Memory Search**: Myses can search past messages and broadcasts to recall older information
 
 ## Terminology
@@ -61,7 +61,7 @@ or
 - `--config <path>` - Path to config file (default: `./config.toml` or `~/.zoea-nova/config.toml`)
 - `--debug` - Enable debug logging
 - `--offline` - Run in offline mode (stub MCP server)
-- `--start-swarm` - Auto-start all idle myses on launch (default: disabled)
+- `--start-swarm` - Auto-start all idle myses on launch (excludes errored myses; default: disabled)
 
 ## Creating a Mysis
 
@@ -70,8 +70,11 @@ Press `n` to create a new mysis. You'll be prompted for:
 1. **Name** (required) - Unique identifier for the mysis
 2. **Provider** (optional) - Leave empty to use default from config, or specify:
    - `ollama` - Local Ollama with qwen3:8b
+   - `ollama-qwen` - Local Ollama with qwen3:8b
+   - `ollama-qwen-small` - Local Ollama with qwen3:4b
    - `ollama-llama` - Local Ollama with llama3.1:8b
-   - `opencode_zen` - OpenCode Zen with gpt-5-nano
+   - `opencode_zen` - OpenCode Zen with gpt-5-nano (default)
+   - `zen-nano` - OpenCode Zen with gpt-5-nano
    - `zen-pickle` - OpenCode Zen with big-pickle
 
 The model is determined by the provider's configuration in `config.toml`.
@@ -90,6 +93,8 @@ The model is determined by the provider's configuration in `config.toml`.
 | `Enter` | Focus on selected Mysis  |
 | `Esc`   | Return to dashboard      |
 | `v`     | Toggle verbose JSON (focus) |
+| `k / ↑` | Navigate up / Scroll up  |
+| `j / ↓` | Navigate down / Scroll down |
 | `?`     | Show help                |
 | `q`     | Quit                     |
 

@@ -23,7 +23,7 @@ var helpItems = []helpItem{
 	{"Tab / Shift+Tab", "Navigate myses"},
 	{"Enter", "Focus selected mysis"},
 	{"Esc", "Back / Cancel"},
-	{"↑ / ↓", "Scroll / Browse history"},
+	{"↑ / ↓ / k / j", "Scroll / Browse history"},
 	{"PgUp / PgDn", "Scroll page"},
 	{"G / End", "Go to bottom"},
 	{"?", "Toggle help"},

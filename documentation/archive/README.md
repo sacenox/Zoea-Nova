@@ -18,6 +18,37 @@ This directory contains documentation that:
 
 ## Categories
 
+### Completed Plans (2026-02-04 to 2026-02-07)
+Implementation plans that were executed and completed.
+
+- **2026-02-07-loop-context-checklist.md** - Completed
+- **2026-02-07-loop-context-composition.md** - Completed
+- **2026-02-07-loop-context-parallel-workflow.md** - Completed
+- **2026-02-07-loop-context-README.md** - Completed
+- **2026-02-07-loop-context-workflow-diagram.md** - Completed
+- **2026-02-06-goroutine-cleanup-fixes.md** - Completed
+- **2026-02-05-broadcast-sender-tracking.md** - Completed
+- **2026-02-05-context-size-logging.md** - Completed
+- **2026-02-04-captains-log-bug.md** - Completed
+- **2026-02-04-context-compaction-plan.md** - Completed
+- **2026-02-04-remove-tool-payload-bloat.md** - Completed
+
+### Resolved Investigations (2026-02-06 to 2026-02-07)
+Investigations that identified and resolved specific issues.
+
+- **OPENCODE_ZEN_API_TESTS_2026-02-06.md** - System-only message bug confirmed
+- **OPENCODE_ZEN_BUG_VERDICT_2026-02-06.md** - API limitation verified
+- **AGENT6_REAL_PROVIDER_RACE_INVESTIGATION.md** - Race condition resolved
+
+### Restart Bug Investigation Reports (2026-02-06)
+Series of reports investigating async race conditions during mysis restart.
+
+- **RESTART_BUG_INDEX.md** - Investigation coordination
+- **AGENT7_GOROUTINE_CLEANUP_VERIFICATION.md** - Cleanup order verified
+- **AGENT_3_RACE_REPRODUCTION_REPORT.md** - Race condition reproduced
+- **TIMING_TEST_REPORT.md** - Timing analysis
+- **STATE_MACHINE_TEST_REPORT.md** - State transition analysis
+
 ### Superseded Investigations
 Investigations that led to implementations (code now shipped).
 
@@ -77,4 +108,4 @@ Early development phase reports (no longer relevant for current work).
 
 ---
 
-Last updated: 2026-02-06
+Last updated: 2026-02-07

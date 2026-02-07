@@ -4,11 +4,45 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## High Priority
 
-None currently.
+### State Machine / Broadcast System
+- [ ] **REGRESSION: Broadcast doesn't start idle myses** - Broadcasting to idle myses doesn't trigger Start()
+  - **Impact:** Idle myses don't respond to broadcasts
+  - **Root Cause:** State machine allows broadcasts to idle state (commit f7797cc) without triggering Start()
+  - **Action:** Verify behavior, add test coverage, fix
+  - **Test Coverage Gap:** No integration test for broadcast → idle → running transition
 
 ## Medium Priority
 
+### Prompt System
+- [ ] **Myses idle despite pending broadcasts** - Myses transition to idle even when broadcasts are queued
+  - **Impact:** Broadcasts not consumed as user messages, lost communication
+  - **Root Cause:** ContinuePrompt doesn't check broadcast queue before idling
+  - **Action:** Modify idle transition logic to check message queue
+
+### Testing / Concurrency
+- [ ] **TestStateTransition_Running_To_Idle hangs** - Test hangs during cleanup
+  - **Location:** `internal/core/state_machine_test.go:260`
+  - **Skip Reason:** "Goroutine not exiting after idle transition"
+  - **Action:** Investigate potential goroutine leak in idle transition
+
 ## Low Priority
+
+### TUI / Rendering
+- [ ] **Exit splash screen** - Display branding, connection cleanup status, and animated loading bar during shutdown
+  - **Trigger:** User presses q/ESC/CTRL+C
+  - **Purpose:** Provide visual feedback during graceful shutdown
+  - **Needs:** Splash screen design with loading animation
+
+- [ ] **Inconsistent JSON rendering in tool messages** - Some tool results render as raw text with tool call ID prefix
+  - **Example:** `chatcmpl-tool-XXX:{"player": {...}}` instead of tree view
+  - **Location:** `internal/tui/focus.go` - `renderLogEntry()`
+  - **Action:** Audit JSON detection logic for consistency
+
+### Testing / Coverage
+- [ ] **TUI integration tests skipped (config setup)** - Two tests skipped due to missing provider config
+  - **Tests:** `TestIntegration_NewMysisInput`, `TestIntegration_CreateAndStartMysis`
+  - **Root Cause:** Tests need temp config file after DefaultConfig() removal (commit 068a5a6)
+  - **Action:** Update tests to use setupTUITest() pattern from tui_test.go:32-56
 
 ### Provider Reliability
 - [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
@@ -16,9 +50,7 @@ None currently.
   - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
   - **Recent evidence (2026-02-05):** Ollama logs show prompt truncation (`limit=32768`, `prompt=41611`) followed by bursts of `400` responses on `/v1/chat/completions` and one `500` response. No corresponding errors in `~/.zoea-nova/zoea.log`.
 
-
 ### Documentation & Tooling
-
 - [ ] **Add plan enforcement command** - OpenCode slash command to require plan/todo creation before implementation
   - **Purpose:** Enforce workflow discipline for complex changes
 
@@ -27,7 +59,7 @@ None currently.
 
 ### Operations
 - [ ] **Validate game server API changes** - Monitor and validate MCP and SpaceMolt game server updates for breaking changes
-  - **Reference:** `documentation/KNOWN_SERVER_ISSUES.md`
+  - **Reference:** `documentation/current/KNOWN_SERVER_ISSUES.md`
   - **Process:** Periodic checks against upstream API
 
 ---
@@ -38,7 +70,7 @@ None currently.
 
 - [x] **Testing coverage expansion** (2026-02-05) - Added config validation tests (11 subtests), provider error handling tests, HTTP mocking for tool calls, MCP proxy tests, and concurrent write benchmark (p50: 0.3ms, p99: 1.9ms).
 
-- [x] **Memory growth analysis** (2026-02-05) - Documented memory growth rate (279 memories/hour, 0.96 MB/hour DB growth). DB size is not a concern for v1. See `documentation/MEMORY_GROWTH_REPORT.md`.
+- [x] **Memory growth analysis** (2026-02-05) - Documented memory growth rate (279 memories/hour, 0.96 MB/hour DB growth). DB size is not a concern for v1. See `documentation/reports/MEMORY_GROWTH_REPORT.md`.
 
 - [x] **Ollama reliability investigation** (2026-02-05) - Analyzed 24h of Ollama logs. Found 65 HTTP 500s, 19 HTTP 400s, 3 prompt truncations, 23 client disconnects. Evidence documented in KNOWN_ISSUES.md for future investigation.
 
@@ -52,6 +84,12 @@ None currently.
 
 - [x] **Tool payload bloat removal** (2026-02-04) - Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
 
-- [x] **Context snapshot compaction** (2026-02-04) - Implemented snapshot compaction in `getContextMemories()` to keep only most recent result for each snapshot tool (get_ship, get_system, get_poi, get_nearby, get_cargo, zoea_swarm_status, zoea_list_myses). Added search tool reminders to SystemPrompt and ContinuePrompt. See `documentation/CONTEXT_COMPRESSION.md` for details.
+- [x] **Context snapshot compaction** (2026-02-04) - Implemented snapshot compaction in `getContextMemories()` to keep only most recent result for each snapshot tool (get_ship, get_system, get_poi, get_nearby, get_cargo, zoea_swarm_status, zoea_list_myses). Added search tool reminders to SystemPrompt and ContinuePrompt. See `documentation/architecture/CONTEXT_COMPRESSION.md` for details.
 
-- [x] **Database reset with account backup** - Added `make db-reset-accounts` target to safely wipe database while preserving account credentials via export/import cycle.
+- [x] **Database reset with account backup** (2026-02-05) - Added `make db-reset-accounts` target to safely wipe database while preserving account credentials via export/import cycle.
+
+- [x] **Goroutine cleanup on exit** (2026-02-06) - Fixed terminal hangs and errored state on quit. Implemented complete goroutine cleanup with timeouts, WaitGroup tracking, and graceful shutdown sequence. See `documentation/plans/2026-02-06-goroutine-cleanup-fixes.md`.
+
+- [x] **OpenCode Zen 500 errors** (2026-02-07) - Fixed system-only message crashes, added Stream parameter, improved message merging, added validation. See `documentation/reports/OPENCODE_ZEN_FIX_2026-02-07.md`.
+
+- [x] **Session ID claim→login loops** (2026-02-07) - Fixed infinite loops caused by session_required errors. Added prompt reinforcement and error message interception. See `documentation/reports/SESSION_ID_LOOP_FIX_IMPLEMENTATION_2026-02-07.md`.

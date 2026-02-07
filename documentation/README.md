@@ -33,6 +33,7 @@ Core system design and architectural decisions.
 - **[Context Compression](architecture/CONTEXT_COMPRESSION.md)** - Memory management and sliding window
 - **[Rate Limiting](architecture/RATE_LIMITING_PLAN.md)** - Provider rate limiting strategy
 - **[Offline Mode](architecture/OFFLINE_MODE.md)** - Stub MCP server for development
+- **[OpenAI Compatibility](architecture/OPENAI_COMPATIBILITY.md)** - OpenAI API compliance and provider guidelines
 
 ### `guides/`
 How-to guides and reference material for developers and users.
@@ -58,6 +59,25 @@ Active tracking documents (frequently updated).
 Completed implementation and analysis reports.
 
 **Recent (2026-02-07):**
+- **[Cleanup Execution Plan](reports/CLEANUP_EXECUTION_PLAN_2026-02-07.md)** - Phase 1 user-facing docs and quick wins
+- **[Dead Code Audit](reports/DEAD_CODE_AUDIT_2026-02-07.md)** - Unused code identification and removal
+- **[Documentation Accuracy Audit](reports/DOCUMENTATION_ACCURACY_AUDIT_2026-02-07.md)** - Verification of docs against codebase
+- **[Documentation Organization Audit](reports/DOCUMENTATION_ORGANIZATION_AUDIT_2026-02-07.md)** - Structure and navigation improvements
+- **[Hardcoded Config Audit](reports/HARDCODED_CONFIG_AUDIT_2026-02-07.md)** - Configuration consistency check
+- **[Import Cleanup](reports/IMPORT_CLEANUP_2026-02-07.md)** - Unused import removal
+- **[Known Issues Consolidation](reports/KNOWN_ISSUES_CONSOLIDATION_2026-02-07.md)** - Issue tracking organization
+- **[LLM Behavior Analysis Session ID](reports/LLM_BEHAVIOR_ANALYSIS_SESSION_ID_2026-02-07.md)** - Session ID error investigation
+- **[Login Flow Verification](reports/LOGIN_FLOW_VERIFICATION_2026-02-07.md)** - Account claiming flow analysis
+- **[Loop Context Composition](reports/LOOP_CONTEXT_COMPOSITION_IMPLEMENTATION_2026-02-07.md)** - Context building refactor
+- **[OpenCode Zen Fix](reports/OPENCODE_ZEN_FIX_2026-02-07.md)** - System-only message crash fix
+- **[Outdated Tests Audit](reports/OUTDATED_TESTS_AUDIT_2026-02-07.md)** - Comprehensive test cleanup recommendations
+- **[Prompt Reconstruction Tool](reports/PROMPT_RECONSTRUCTION_TOOL_2026-02-07.md)** - Debug tool for LLM prompt analysis
+- **[Session ID Error Message Audit](reports/SESSION_ID_ERROR_MESSAGE_AUDIT_2026-02-07.md)** - Error message improvement analysis
+- **[Session ID Loop Fix](reports/SESSION_ID_LOOP_FIX_IMPLEMENTATION_2026-02-07.md)** - Infinite loop fix for session errors
+- **[Skipped Tests Audit](reports/SKIPPED_TESTS_AUDIT_2026-02-07.md)** - Analysis of t.Skip() tests
+- **[Test Coverage Gaps](reports/TEST_COVERAGE_GAPS_2026-02-07.md)** - Missing test identification
+- **[TODO Organization](reports/TODO_ORGANIZATION_2026-02-07.md)** - Task tracking cleanup
+- **[Turn-Aware Context](reports/TURN_AWARE_CONTEXT_IMPLEMENTATION_2026-02-07.md)** - Context management improvements
 - **[ClaimAccount Race Analysis](reports/CLAIM_ACCOUNT_RACE_ANALYSIS_2026-02-07.md)** - Edge case analysis and concurrency safety validation
 
 **Recent (2026-02-06):**
@@ -81,19 +101,9 @@ Completed implementation and analysis reports.
 ### `plans/`
 Implementation plans for features and fixes.
 
-**2026-02-06:**
-- **[Goroutine Cleanup Fixes](plans/2026-02-06-goroutine-cleanup-fixes.md)** - 8-phase cleanup plan
-
 **2026-02-05:**
-- **[Broadcast Sender Tracking](plans/2026-02-05-broadcast-sender-tracking.md)**
-- **[Context Size Logging](plans/2026-02-05-context-size-logging.md)**
 - **[Statusbar Tick Timestamps](plans/2026-02-05-statusbar-tick-timestamps.md)**
 - **[TUI Enhancements](plans/2026-02-05-tui-enhancements.md)**
-
-**2026-02-04:**
-- **[Captain's Log Bug](plans/2026-02-04-captains-log-bug.md)**
-- **[Context Compaction](plans/2026-02-04-context-compaction-plan.md)**
-- **[Tool Payload Bloat](plans/2026-02-04-remove-tool-payload-bloat.md)**
 
 **Milestone Plans:**
 - **[UI Fixes for RC](plans/ui-fixes-for-rc.md)**
@@ -112,6 +122,31 @@ See `investigations/README.md` for details.
 
 ### `archive/`
 Historical investigations and reports (completed, superseded, or obsolete).
+
+**Completed Plans (2026-02-04 to 2026-02-07):**
+- **[Loop Context Checklist](archive/2026-02-07-loop-context-checklist.md)** - Completed
+- **[Loop Context Composition](archive/2026-02-07-loop-context-composition.md)** - Completed
+- **[Loop Context Parallel Workflow](archive/2026-02-07-loop-context-parallel-workflow.md)** - Completed
+- **[Loop Context README](archive/2026-02-07-loop-context-README.md)** - Completed
+- **[Loop Context Workflow Diagram](archive/2026-02-07-loop-context-workflow-diagram.md)** - Completed
+- **[Goroutine Cleanup Fixes](archive/2026-02-06-goroutine-cleanup-fixes.md)** - Completed
+- **[Broadcast Sender Tracking](archive/2026-02-05-broadcast-sender-tracking.md)** - Completed
+- **[Context Size Logging](archive/2026-02-05-context-size-logging.md)** - Completed
+- **[Captain's Log Bug](archive/2026-02-04-captains-log-bug.md)** - Completed
+- **[Context Compaction](archive/2026-02-04-context-compaction-plan.md)** - Completed
+- **[Tool Payload Bloat](archive/2026-02-04-remove-tool-payload-bloat.md)** - Completed
+
+**Resolved Investigations (2026-02-06 to 2026-02-07):**
+- **[OpenCode Zen API Tests](archive/OPENCODE_ZEN_API_TESTS_2026-02-06.md)** - System-only message bug confirmed
+- **[OpenCode Zen Bug Verdict](archive/OPENCODE_ZEN_BUG_VERDICT_2026-02-06.md)** - API limitation verified
+- **[Real Provider Race Investigation](archive/AGENT6_REAL_PROVIDER_RACE_INVESTIGATION.md)** - Race condition resolved
+
+**Restart Bug Investigation Reports (2026-02-06):**
+- **[Restart Bug Index](archive/RESTART_BUG_INDEX.md)** - Investigation coordination
+- **[Goroutine Cleanup Verification](archive/AGENT7_GOROUTINE_CLEANUP_VERIFICATION.md)** - Cleanup order verified
+- **[Race Reproduction Report](archive/AGENT_3_RACE_REPRODUCTION_REPORT.md)** - Race condition reproduced
+- **[Timing Test Report](archive/TIMING_TEST_REPORT.md)** - Timing analysis
+- **[State Machine Test Report](archive/STATE_MACHINE_TEST_REPORT.md)** - State transition analysis
 
 **Superseded Investigations:**
 - **[Auto-Scroll Investigation](archive/AUTO_SCROLL_INVESTIGATION.md)** - Replaced by reports/SMART_AUTO_SCROLL_IMPLEMENTATION.md
@@ -196,4 +231,4 @@ Historical investigations and reports (completed, superseded, or obsolete).
 
 ---
 
-Last updated: 2026-02-06
+Last updated: 2026-02-07

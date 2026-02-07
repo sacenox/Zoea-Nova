@@ -1,8 +1,12 @@
 # Known SpaceMolt Server Issues
 
-This document tracks known issues with the upstream SpaceMolt MCP server API. We do not modify or validate the game server's API behavior. Issues are documented here, and we improve prompts and error handling instead.
+This document tracks known issues with upstream APIs (SpaceMolt MCP server, OpenCode Zen). We do not modify or validate external API behavior. Issues are documented here, and we improve prompts, error handling, and workarounds instead.
 
-## captains_log_add: empty_entry Error
+---
+
+## SpaceMolt MCP Server Issues
+
+### captains_log_add: empty_entry Error
 
 **Issue:** The `captains_log_add` tool returns an `empty_entry` error when:
 - The `entry` field is an empty string
@@ -18,7 +22,9 @@ This document tracks known issues with the upstream SpaceMolt MCP server API. We
 - System prompt includes explicit examples of correct usage
 - Error messages provide actionable guidance when this error occurs
 
-## ~~get_notifications: Missing current_tick Field~~ ✅ RESOLVED
+---
+
+### ~~get_notifications: Missing current_tick Field~~ ✅ RESOLVED
 
 **Status:** ✅ **RESOLVED** in server v0.44.4
 
@@ -53,3 +59,68 @@ Prior to v0.44.4, the `get_notifications` endpoint did not return tick informati
 For historical investigation details, see:
 - `documentation/investigations/GET_NOTIFICATIONS_API_INVESTIGATION.md`
 - `documentation/investigations/TICK_INVESTIGATION_FINDINGS.md`
+
+---
+
+## OpenCode Zen API Issues
+
+### OpenCode Zen: System-Only Message Crash
+
+**Issue:** The OpenCode Zen API returns a 500 Internal Server Error when request messages contain ONLY system messages (no user or assistant turns).
+
+**Server Response:**
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "error",
+    "message": "Cannot read properties of undefined (reading 'prompt_tokens')"
+  }
+}
+```
+
+**Root Cause:**
+OpenCode Zen's token counting logic fails when response metadata is missing or in unexpected format. The API attempts to read token counts from an undefined object, indicating an unhandled null/undefined case in their response parsing.
+
+**Related Issue:**
+OpenCode GitHub Issue #8228: Similar token counting crash with Gemini models
+- URL: https://github.com/anomalyco/opencode/issues/8228
+- Error: `"Cannot read properties of undefined (reading 'promptTokenCount')"`
+- Status: OPEN (as of 2026-02-07)
+
+**Workaround:**
+Zoea Nova implements fallback logic in `internal/provider/openai_common.go`:
+- Detects system-only message arrays
+- Appends fallback user message: `{"role": "user", "content": "Continue."}`
+- Prevents hitting the upstream API bug
+
+**Implementation:**
+```go
+// If only system messages remain, add a dummy user message
+if allMessagesAreSystem {
+    messages = append(messages, openAIMessage{
+        Role:    "user",
+        Content: "Continue.",
+    })
+}
+```
+
+**Status:** ✅ **WORKAROUND IMPLEMENTED**
+
+**Resolution Date:** 2026-02-07  
+**Implementation:** Commit `9348f50` - fix: improve system message merging to preserve conversation
+
+**Impact on Zoea Nova:**
+- OpenCode Zen provider sends valid API requests
+- Conversation history preserved correctly
+- Message validation prevents invalid API calls
+- Provider coverage: 87.0%
+
+**Monitoring:**
+- Watch OpenCode issue tracker for upstream fix
+- Keep workaround in place until server-side bug is resolved
+- No Zoea Nova code changes needed if upstream fixes issue
+
+For implementation details, see:
+- `documentation/investigations/OPENCODE_ZEN_BUG_VERDICT_2026-02-06.md`
+- `documentation/reports/OPENCODE_ZEN_FIX_2026-02-07.md`

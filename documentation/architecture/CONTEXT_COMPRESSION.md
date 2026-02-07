@@ -22,7 +22,8 @@ Without compression, Mysis context grows unbounded:
 ├─────────────────────────────────────────────────────┤
 │  [1] System Prompt (always first)                   │
 ├─────────────────────────────────────────────────────┤
-│  [2] Prompt Source (chosen by priority)             │
+│  [2] Current Turn Start                              │
+│      Selected by recency (most recent wins):        │
 │      • Commander direct message                     │
 │      • Last commander broadcast                     │
 │      • Last swarm broadcast                         │
@@ -54,12 +55,14 @@ The most recent loop slice is always included in context to maintain tool-callin
 
 ### Prompt Source Priority
 
-Prompt sources are user messages that drive Mysis behavior. Priority order:
+Prompt sources are user messages that drive Mysis behavior and mark the start of the current turn. Selection order (most recent message wins):
 
-1. **Commander direct message** (`source="direct"`) - Highest priority, always used if present
+1. **Commander direct message** (`source="direct"`) - Direct command from user
 2. **Last commander broadcast** (`source="broadcast"`, `sender_id=""`) - Commander identified by empty sender_id
 3. **Last swarm broadcast** (`source="broadcast"`, `sender_id!=""`) - Most recent broadcast from another Mysis
 4. **Synthetic nudge** (generated, not stored) - Fallback when no prompt sources exist
+
+See [Terminology](#terminology) for definitions of turn boundaries and context composition.
 
 ### Context Composition Algorithm
 
@@ -78,14 +81,14 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
         result.append(system)
     }
     
-    // Step 2: Select prompt source by priority
-    promptSource := selectPromptSource(allMemories)
-    if promptSource == nil {
+    // Step 2: Find current turn boundary (most recent user message)
+    turnStart := selectPromptSource(allMemories)
+    if turnStart == nil {
         // Generate synthetic nudge (not stored in DB)
         nudge := createEphemeralNudge()
         result.append(nudge)
     } else {
-        result.append(promptSource)
+        result.append(turnStart)
     }
     
     // Step 3: Extract latest tool loop
@@ -312,8 +315,8 @@ func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, 
 
 The loop slice model has minimal tuning surface:
 
-- **`MaxContextMessages`**: Scanning window for finding prompt sources and tool loops. Larger values increase DB query cost but provide more history to search. Default: 20 messages (~2 server ticks).
-- **Prompt source priority**: Fixed order defined by game design (commander > broadcasts > nudge).
+- **`MaxContextMessages`**: Scanning window for finding turn boundaries and tool loops. Larger values increase DB query cost but provide more history to search. Default: 20 messages (~2 server ticks).
+- **Turn boundary selection**: Most recent user message wins (commander direct > commander broadcast > swarm broadcast > nudge).
 - **Nudge intervals**: Control how often idle Myses are prompted. Faster intervals increase responsiveness but may interrupt LLM processing.
 
 ## Migration Notes
