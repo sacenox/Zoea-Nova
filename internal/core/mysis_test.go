@@ -812,98 +812,6 @@ func TestContextPromptSourcePriority(t *testing.T) {
 	}
 }
 
-func TestSelectPromptSourceHelper(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, err := s.CreateMysis("helper-test", "mock", "test-model", 0.7)
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	tests := []struct {
-		name           string
-		memories       []*store.Memory
-		expectedSource store.MemorySource
-		expectedSender string
-		expectNil      bool
-	}{
-		{
-			name:      "nil_memories",
-			memories:  nil,
-			expectNil: true,
-		},
-		{
-			name:      "empty_memories",
-			memories:  []*store.Memory{},
-			expectNil: true,
-		},
-		{
-			name: "only_system_messages",
-			memories: []*store.Memory{
-				{Role: store.MemoryRoleSystem, Source: store.MemorySourceSystem, Content: "System"},
-				{Role: store.MemoryRoleAssistant, Source: store.MemorySourceLLM, Content: "Response"},
-			},
-			expectNil: true,
-		},
-		{
-			name: "direct_message_priority",
-			memories: []*store.Memory{
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceDirect, Content: "Direct", SenderID: "cmd"},
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Broadcast", SenderID: ""},
-			},
-			expectedSource: store.MemorySourceDirect,
-			expectedSender: "cmd",
-		},
-		{
-			name: "commander_broadcast_when_no_direct",
-			memories: []*store.Memory{
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Commander broadcast", SenderID: ""},
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast", SenderID: "mysis-1"},
-			},
-			expectedSource: store.MemorySourceBroadcast,
-			expectedSender: "",
-		},
-		{
-			name: "swarm_broadcast_when_no_commander",
-			memories: []*store.Memory{
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast 1", SenderID: "mysis-1"},
-				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast 2", SenderID: "mysis-2"},
-			},
-			expectedSource: store.MemorySourceBroadcast,
-			expectedSender: "mysis-1",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := mysis.selectPromptSource(tt.memories)
-
-			if tt.expectNil {
-				if result != nil {
-					t.Errorf("expected nil, got %+v", result)
-				}
-				return
-			}
-
-			if result == nil {
-				t.Fatal("expected non-nil result, got nil")
-			}
-
-			if result.Source != tt.expectedSource {
-				t.Errorf("expected source=%s, got %s", tt.expectedSource, result.Source)
-			}
-
-			if result.SenderID != tt.expectedSender {
-				t.Errorf("expected sender_id=%s, got %s", tt.expectedSender, result.SenderID)
-			}
-		})
-	}
-}
-
 func TestExtractLatestToolLoopHelper(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -2123,5 +2031,93 @@ func TestGetContextMemories_CurrentTurnPreserved(t *testing.T) {
 	}
 	if !hasStatusResult {
 		t.Error("Missing status result from current turn")
+	}
+}
+
+func TestGetContextMemories_NoUserPrompt(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("no-prompt-test", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Add only system and assistant messages (no user prompt)
+	err := s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "assistant msg", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories error: %v", err)
+	}
+
+	// Should generate synthetic nudge when no user prompt exists
+	hasNudge := false
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleUser && mem.Source == store.MemorySourceSystem {
+			hasNudge = true
+			break
+		}
+	}
+
+	if !hasNudge {
+		t.Error("Expected synthetic nudge when no user prompt exists")
+	}
+}
+
+func TestGetContextMemories_OnlyHistoricalTurns(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("historical-test", "mock", "test-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Add system prompt
+	err := s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Add complete historical turn
+	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "old msg", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "old response", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories error: %v", err)
+	}
+
+	// Should include system + historical context (user+assistant from last turn)
+	if len(memories) < 2 {
+		t.Fatalf("Expected at least 2 memories (system + historical), got %d", len(memories))
+	}
+
+	if memories[0].Role != store.MemoryRoleSystem {
+		t.Error("First memory should be system")
+	}
+
+	// Last user message should be included as current turn
+	hasOldUser := false
+	for _, mem := range memories {
+		if mem.Content == "old msg" {
+			hasOldUser = true
+		}
+	}
+
+	if !hasOldUser {
+		t.Error("Expected historical user message to be included as current turn")
 	}
 }
