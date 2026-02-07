@@ -42,7 +42,7 @@ func TestCreateMysisWithZenNano(t *testing.T) {
 
 	// Mock credentials with API key
 	creds := &config.Credentials{}
-	creds.SetAPIKey("opencode", "test-api-key-12345")
+	creds.SetAPIKey("opencode_zen", "test-api-key-12345")
 
 	// Run EXACT initProviders logic
 	for name, provCfg := range cfg.Providers {
@@ -53,8 +53,8 @@ func TestCreateMysisWithZenNano(t *testing.T) {
 			registry.RegisterFactory(name, factory)
 			t.Logf("  ✓ Registered as Ollama: %s", name)
 		} else if provCfg.Endpoint == "https://opencode.ai/zen/v1" {
-			apiKey := creds.GetAPIKey("opencode")
-			t.Logf("  API key for opencode: %s", apiKey)
+			apiKey := creds.GetAPIKey("opencode_zen")
+			t.Logf("  API key for opencode_zen: %s", apiKey)
 			if apiKey != "" {
 				factory := provider.NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)

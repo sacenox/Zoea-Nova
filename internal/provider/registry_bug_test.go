@@ -31,7 +31,7 @@ func TestZenNanoRegistration(t *testing.T) {
 	// Simulate initProviders logic from main.go
 	registry := NewRegistry()
 	creds := &config.Credentials{}
-	creds.SetAPIKey("opencode", "test-api-key")
+	creds.SetAPIKey("opencode_zen", "test-api-key")
 
 	// This is EXACTLY what initProviders does
 	for name, provCfg := range cfg.Providers {
@@ -40,7 +40,7 @@ func TestZenNanoRegistration(t *testing.T) {
 			registry.RegisterFactory(name, factory)
 			t.Logf("Registered Ollama provider: %s", name)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
-			apiKey := creds.GetAPIKey("opencode")
+			apiKey := creds.GetAPIKey("opencode_zen")
 			if apiKey != "" {
 				factory := NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)
