@@ -82,7 +82,7 @@ func (c *Client) send(ctx context.Context, req *Request) (*Response, error) {
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return nil, &HTTPError{Status: httpResp.StatusCode, Body: string(respBody)}
+		return nil, fmt.Errorf("http error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	// Capture session ID from response if present

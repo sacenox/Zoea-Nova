@@ -183,14 +183,6 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 		lastErr = err
 	}
 
-	var httpErr *HTTPError
-	if errors.As(lastErr, &httpErr) && httpErr.Status == 429 {
-		return &ToolResult{
-			Content: []ContentBlock{{Type: "text", Text: httpErr.Error()}},
-			IsError: true,
-		}, nil
-	}
-
 	return nil, fmt.Errorf("%w: %v", ErrToolRetryExhausted, lastErr)
 }
 

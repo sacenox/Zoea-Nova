@@ -240,14 +240,12 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		if resp.StatusCode == 429 || resp.StatusCode == 500 || resp.StatusCode == 502 ||
 			resp.StatusCode == 503 || resp.StatusCode == 504 {
 			payload, _ := io.ReadAll(resp.Body)
-			rateHeaders := opencodeRateLimitHeaders(resp.Header)
 			lastErr = fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
 
 			log.Warn().
 				Str("provider", "opencode_zen").
 				Int("status", resp.StatusCode).
 				Int("attempt", attempt+1).
-				Interface("rate_limit_headers", rateHeaders).
 				Str("body", string(payload)).
 				Msg("OpenCode retryable error")
 
@@ -361,40 +359,6 @@ func opencodeEndpointForModel(model string) string {
 	default:
 		return opencodeChatCompletionsEndpoint
 	}
-}
-
-func opencodeRateLimitHeaders(header http.Header) map[string]string {
-	if header == nil {
-		return nil
-	}
-
-	keys := []string{
-		"Retry-After",
-		"X-RateLimit-Limit",
-		"X-RateLimit-Remaining",
-		"X-RateLimit-Reset",
-		"X-RateLimit-Reset-Requests",
-		"X-RateLimit-Reset-Tokens",
-		"X-RateLimit-Limit-Requests",
-		"X-RateLimit-Limit-Tokens",
-		"X-RateLimit-Remaining-Requests",
-		"X-RateLimit-Remaining-Tokens",
-		"X-Request-Id",
-		"OpenAI-Request-Id",
-	}
-
-	result := make(map[string]string)
-	for _, key := range keys {
-		if value := header.Get(key); value != "" {
-			result[key] = value
-		}
-	}
-
-	if len(result) == 0 {
-		return nil
-	}
-
-	return result
 }
 
 // Close closes idle HTTP connections

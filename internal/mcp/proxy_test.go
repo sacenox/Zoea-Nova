@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
@@ -148,21 +147,5 @@ func TestProxyAuthInterceptionLogout(t *testing.T) {
 	}
 	if len(accounts.released) != 1 || accounts.released[0] != "pilot" {
 		t.Fatalf("expected account released for pilot, got %+v", accounts.released)
-	}
-}
-
-func TestProxyCallToolUpstreamRateLimitReturnsToolResult(t *testing.T) {
-	upstream := &mockUpstream{err: &HTTPError{Status: 429, Body: "Rate limited. Too many requests"}}
-	proxy := NewProxy(upstream)
-
-	result, err := proxy.CallTool(context.Background(), CallerContext{}, "rate_limited_tool", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result == nil || !result.IsError {
-		t.Fatalf("expected error ToolResult, got %+v", result)
-	}
-	if len(result.Content) == 0 || !strings.Contains(result.Content[0].Text, "http error 429") {
-		t.Fatalf("expected 429 text, got %+v", result)
 	}
 }

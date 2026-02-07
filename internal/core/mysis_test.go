@@ -529,13 +529,48 @@ func TestMysisContextCompaction(t *testing.T) {
 		t.Errorf("expected first memory to be system prompt, got %s", memories[0].Role)
 	}
 
+	// Count get_ship tool results - should only have 1 (the latest)
+	shipResults := 0
 	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool {
-			t.Fatalf("expected no tool memories in context, found: %s", m.Content)
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
+			shipResults++
 		}
-		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
-			t.Fatalf("expected no assistant tool-call memories in context, found: %s", m.Content)
+	}
+	if shipResults != 1 {
+		t.Errorf("expected 1 get_ship result after compaction, got %d", shipResults)
+	}
+
+	// Count get_system tool results - should only have 1 (the latest)
+	systemResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"system_id"`) {
+			systemResults++
 		}
+	}
+	if systemResults != 1 {
+		t.Errorf("expected 1 get_system result after compaction, got %d", systemResults)
+	}
+
+	// Non-snapshot tool result should be kept
+	mineResults := 0
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"result":"mining"`) {
+			mineResults++
+		}
+	}
+	if mineResults != 1 {
+		t.Errorf("expected 1 mine result (non-snapshot), got %d", mineResults)
+	}
+
+	// Verify the latest get_ship result is kept (ship_4, not ship_0)
+	foundLatestShip := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id":"ship_4"`) {
+			foundLatestShip = true
+		}
+	}
+	if !foundLatestShip {
+		t.Error("expected latest get_ship result (ship_4) to be kept")
 	}
 }
 
@@ -607,13 +642,27 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
+
+	// Count zoea_list_myses tool results - should only have 1 (the latest)
+	listResults := 0
 	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool {
-			t.Fatalf("expected no tool memories in context, found: %s", m.Content)
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-`) {
+			listResults++
 		}
-		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
-			t.Fatalf("expected no assistant tool-call memories in context, found: %s", m.Content)
+	}
+	if listResults != 1 {
+		t.Errorf("expected 1 zoea_list_myses result after compaction, got %d", listResults)
+	}
+
+	// Verify the latest result is kept (mysis-4, not mysis-0)
+	foundLatest := false
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-4"`) {
+			foundLatest = true
 		}
+	}
+	if !foundLatest {
+		t.Error("expected latest zoea_list_myses result (mysis-4) to be kept")
 	}
 }
 
@@ -637,13 +686,16 @@ func TestMysisContextCompactionNonSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
+
+	shipResults := 0
 	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool {
-			t.Fatalf("expected no tool memories in context, found: %s", m.Content)
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"ship_id"`) {
+			shipResults++
 		}
-		if m.Role == store.MemoryRoleAssistant && strings.HasPrefix(m.Content, constants.ToolCallStoragePrefix) {
-			t.Fatalf("expected no assistant tool-call memories in context, found: %s", m.Content)
-		}
+	}
+
+	if shipResults != 2 {
+		t.Fatalf("expected 2 travel results to be kept, got %d", shipResults)
 	}
 }
 
