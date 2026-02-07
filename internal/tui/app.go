@@ -105,13 +105,8 @@ type EventMsg struct {
 }
 
 // New creates a new TUI model.
-func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event, startSwarm bool) Model {
-	// Load config (use default path resolution)
-	cfg, err := config.Load("")
-	if err != nil {
-		// Use defaults if load fails
-		cfg = config.DefaultConfig()
-	}
+func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event, startSwarm bool, cfg *config.Config) Model {
+	// Use provided config (already loaded in main.go)
 
 	// Initialize spinner with hexagonal theme (matching logo)
 	sp := spinner.New()

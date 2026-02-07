@@ -24,10 +24,16 @@ func setupCommanderAsyncTest(t *testing.T) (*Commander, *store.Store, *EventBus,
 
 	bus := NewEventBus(100)
 	reg := provider.NewRegistry()
-	cfg := config.DefaultConfig()
-	cfg.Providers["mock"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
-	cfg.Providers["mock1"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
-	cfg.Providers["mock2"] = config.ProviderConfig{Model: "test-model", Temperature: 0.7}
+	cfg := &config.Config{
+		Swarm: config.SwarmConfig{
+			MaxMyses: 16,
+		},
+		Providers: map[string]config.ProviderConfig{
+			"mock":  {Model: "test-model", Temperature: 0.7},
+			"mock1": {Model: "test-model", Temperature: 0.7},
+			"mock2": {Model: "test-model", Temperature: 0.7},
+		},
+	}
 
 	c := NewCommander(s, reg, bus, cfg)
 

@@ -8,16 +8,7 @@ import (
 	"testing"
 )
 
-func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-
-	if cfg.Swarm.MaxMyses != 16 {
-		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
-	}
-	if _, ok := cfg.Providers["ollama"]; !ok {
-		t.Error("expected ollama provider in defaults")
-	}
-}
+// TestDefaultConfig removed - config file is now required
 
 func TestLoadFromFile(t *testing.T) {
 	// Create temp config file
@@ -31,6 +22,9 @@ max_myses = 32
 [providers.ollama]
 endpoint = "http://custom:11434"
 model = "mistral"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
 
 [mcp]
 upstream = "https://custom.mcp/endpoint"
@@ -60,10 +54,15 @@ func TestLoadWithTemperature(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	content := `
+[swarm]
+max_myses = 16
+
 [providers.ollama]
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
 temperature = 0.5
+rate_limit = 2.0
+rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -84,9 +83,13 @@ func TestLoadWithRateLimit(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	content := `
+[swarm]
+max_myses = 16
+
 [providers.ollama]
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
+temperature = 0.7
 rate_limit = 3.5
 rate_burst = 4
 `
@@ -156,6 +159,27 @@ model = ""
 }
 
 func TestLoadWithEnvOverrides(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[swarm]
+max_myses = 16
+
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
+
+[mcp]
+upstream = "https://default.mcp/endpoint"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
 	// Set env vars
 	os.Setenv("ZOEA_MAX_MYSES", "10")
 	os.Setenv("ZOEA_MCP_ENDPOINT", "https://env.mcp/endpoint")
@@ -164,7 +188,7 @@ func TestLoadWithEnvOverrides(t *testing.T) {
 		os.Unsetenv("ZOEA_MCP_ENDPOINT")
 	}()
 
-	cfg, err := Load("")
+	cfg, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -178,14 +202,12 @@ func TestLoadWithEnvOverrides(t *testing.T) {
 }
 
 func TestLoadNonExistentFile(t *testing.T) {
-	cfg, err := Load("/nonexistent/path/config.toml")
-	if err != nil {
-		t.Fatalf("Load() should not error for non-existent file: %v", err)
+	_, err := Load("/nonexistent/path/config.toml")
+	if err == nil {
+		t.Fatal("Load() should error for non-existent file")
 	}
-
-	// Should return defaults
-	if cfg.Swarm.MaxMyses != 16 {
-		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
+	if !strings.Contains(err.Error(), "config file not found") {
+		t.Errorf("expected 'config file not found' error, got %v", err)
 	}
 }
 
@@ -261,9 +283,15 @@ func TestLoadEnvOverridePrecedence(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	content := `
+[swarm]
+max_myses = 16
+
 [providers.ollama]
 endpoint = "http://file-endpoint"
 model = "file-model"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -290,7 +318,23 @@ model = "file-model"
 }
 
 func TestLoadIgnoresInvalidEnvOverrides(t *testing.T) {
-	defaults := DefaultConfig()
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `
+[swarm]
+max_myses = 16
+
+[providers.ollama]
+endpoint = "http://localhost:11434"
+model = "qwen3:4b"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
 
 	os.Setenv("ZOEA_MAX_MYSES", "not-a-number")
 	os.Setenv("ZOEA_OLLAMA_TEMPERATURE", "bad")
@@ -303,22 +347,23 @@ func TestLoadIgnoresInvalidEnvOverrides(t *testing.T) {
 		os.Unsetenv("ZOEA_OLLAMA_RATE_BURST")
 	}()
 
-	cfg, err := Load("")
+	cfg, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Swarm.MaxMyses != defaults.Swarm.MaxMyses {
-		t.Errorf("expected max_myses=%d, got %d", defaults.Swarm.MaxMyses, cfg.Swarm.MaxMyses)
+	// Invalid env overrides should be ignored, file values should remain
+	if cfg.Swarm.MaxMyses != 16 {
+		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
 	}
-	if cfg.Providers["ollama"].Temperature != defaults.Providers["ollama"].Temperature {
-		t.Errorf("expected temperature=%v, got %v", defaults.Providers["ollama"].Temperature, cfg.Providers["ollama"].Temperature)
+	if cfg.Providers["ollama"].Temperature != 0.7 {
+		t.Errorf("expected temperature=0.7, got %v", cfg.Providers["ollama"].Temperature)
 	}
-	if cfg.Providers["ollama"].RateLimit != defaults.Providers["ollama"].RateLimit {
-		t.Errorf("expected rate_limit=%v, got %v", defaults.Providers["ollama"].RateLimit, cfg.Providers["ollama"].RateLimit)
+	if cfg.Providers["ollama"].RateLimit != 2.0 {
+		t.Errorf("expected rate_limit=2.0, got %v", cfg.Providers["ollama"].RateLimit)
 	}
-	if cfg.Providers["ollama"].RateBurst != defaults.Providers["ollama"].RateBurst {
-		t.Errorf("expected rate_burst=%d, got %d", defaults.Providers["ollama"].RateBurst, cfg.Providers["ollama"].RateBurst)
+	if cfg.Providers["ollama"].RateBurst != 3 {
+		t.Errorf("expected rate_burst=3, got %d", cfg.Providers["ollama"].RateBurst)
 	}
 }
 
@@ -511,6 +556,9 @@ default_model = "qwen3:8b"
 [providers.ollama]
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
+temperature = 0.7
+rate_limit = 2.0
+rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)

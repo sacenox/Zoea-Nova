@@ -40,41 +40,11 @@ type MCPConfig struct {
 	Upstream string `toml:"upstream"`
 }
 
-// DefaultConfig returns a configuration with sensible defaults.
-func DefaultConfig() *Config {
-	return &Config{
-		Swarm: SwarmConfig{
-			MaxMyses:        16,
-			DefaultProvider: "opencode_zen",
-			DefaultModel:    "gpt-5-nano",
-		},
-		Providers: map[string]ProviderConfig{
-			"ollama": {
-				Endpoint:    "http://localhost:11434",
-				Model:       "llama3",
-				Temperature: 0.7,
-				RateLimit:   2.0,
-				RateBurst:   3,
-			},
-			"opencode_zen": {
-				Endpoint:    "https://api.opencode.ai/v1",
-				Model:       "gpt-5-nano",
-				Temperature: 0.7,
-				RateLimit:   10.0,
-				RateBurst:   5,
-			},
-		},
-		MCP: MCPConfig{
-			Upstream: "https://game.spacemolt.com/mcp",
-		},
-	}
-}
-
 // Load reads configuration from a TOML file and applies environment variable overrides.
 func Load(path string) (*Config, error) {
-	defaults := DefaultConfig()
-	cfg := DefaultConfig()
-	var meta toml.MetaData
+	cfg := &Config{
+		Providers: make(map[string]ProviderConfig),
+	}
 
 	// Config file is required
 	if path == "" {
@@ -87,13 +57,10 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Load from file
-	decoded, err := toml.DecodeFile(path, cfg)
+	_, err := toml.DecodeFile(path, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
-	meta = decoded
-
-	applyProviderDefaults(cfg, defaults, meta)
 
 	// Apply environment variable overrides
 	applyEnvOverrides(cfg)
@@ -163,38 +130,6 @@ func validateEndpoint(value string) error {
 		return errors.New("missing scheme or host")
 	}
 	return nil
-}
-
-func applyProviderDefaults(cfg *Config, defaults *Config, meta toml.MetaData) {
-	if cfg == nil || defaults == nil {
-		return
-	}
-
-	for name, fallback := range defaults.Providers {
-		current, ok := cfg.Providers[name]
-		if !ok {
-			cfg.Providers[name] = fallback
-			continue
-		}
-
-		if !meta.IsDefined("providers", name, "endpoint") {
-			current.Endpoint = fallback.Endpoint
-		}
-		if !meta.IsDefined("providers", name, "model") {
-			current.Model = fallback.Model
-		}
-		if !meta.IsDefined("providers", name, "temperature") {
-			current.Temperature = fallback.Temperature
-		}
-		if !meta.IsDefined("providers", name, "rate_limit") {
-			current.RateLimit = fallback.RateLimit
-		}
-		if !meta.IsDefined("providers", name, "rate_burst") {
-			current.RateBurst = fallback.RateBurst
-		}
-
-		cfg.Providers[name] = current
-	}
 }
 
 // applyEnvOverrides applies environment variable overrides to the configuration.
