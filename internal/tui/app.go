@@ -670,7 +670,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingMysisName = value
 				m.inputStage = InputStageProvider
-				m.input.textInput.SetValue("")
+				m.input.Reset()
 				m.input.textInput.Placeholder = fmt.Sprintf("Provider (empty for default: %s)...", m.config.Swarm.DefaultProvider)
 				return m, nil
 
@@ -699,6 +699,12 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.resetInput()
 				m.refreshMysisList()
+				return m, nil
+
+			default:
+				// Safety: reset if in unexpected state
+				m.err = fmt.Errorf("unexpected input stage (%d), resetting", m.inputStage)
+				m.resetInput()
 				return m, nil
 			}
 
