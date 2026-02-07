@@ -13,6 +13,23 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
+type failingUpstream struct {
+	tools   []mcp.Tool
+	callErr error
+}
+
+func (f *failingUpstream) Initialize(ctx context.Context, clientInfo map[string]interface{}) (*mcp.Response, error) {
+	return nil, nil
+}
+
+func (f *failingUpstream) ListTools(ctx context.Context) ([]mcp.Tool, error) {
+	return f.tools, nil
+}
+
+func (f *failingUpstream) CallTool(ctx context.Context, name string, arguments interface{}) (*mcp.ToolResult, error) {
+	return nil, f.callErr
+}
+
 func TestMysisToolExecution(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -193,5 +210,147 @@ func TestMysisToolError(t *testing.T) {
 
 	if !foundError {
 		t.Error("tool error not found in memories")
+	}
+}
+
+func TestMysisToolTimeoutSetsErrored(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("tool-timeout-mysis", "mock", "test-model", 0.7)
+
+	mock := provider.NewMock("mock", "Initial response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	proxy := mcp.NewProxy(nil)
+	proxy.RegisterTool(mcp.Tool{
+		Name: "timeout_tool",
+	}, func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
+		return nil, context.DeadlineExceeded
+	})
+	mysis.SetMCP(proxy)
+
+	// Start and wait for initial turn
+	events := bus.Subscribe()
+	mysis.Start()
+
+	timeout := time.After(5 * time.Second)
+	initialFinished := false
+	for !initialFinished {
+		select {
+		case e := <-events:
+			if e.Type == EventMysisResponse {
+				initialFinished = true
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for initial turn")
+		}
+	}
+
+	// Trigger tool call that times out
+	mock.WithToolCalls([]provider.ToolCall{
+		{
+			ID:        "call_timeout",
+			Name:      "timeout_tool",
+			Arguments: json.RawMessage(`{}`),
+		},
+	})
+
+	go mysis.SendMessage("Trigger timeout", store.MemorySourceDirect)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if mysis.State() == MysisStateErrored {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if state := mysis.State(); state != MysisStateErrored {
+		t.Fatalf("expected state=errored, got %s", state)
+	}
+
+	// Verify memory contains timeout error
+	foundTimeout := false
+	memories, _ := s.GetMemories(stored.ID)
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, "call_timeout") && strings.Contains(m.Content, "timed out") {
+			foundTimeout = true
+			break
+		}
+	}
+
+	if !foundTimeout {
+		t.Error("tool timeout error not found in memories")
+	}
+}
+
+func TestMysisToolRetryExhaustionSetsErrored(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, _ := s.CreateMysis("tool-retry-mysis", "mock", "test-model", 0.7)
+
+	mock := provider.NewMock("mock", "Initial response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	upstream := &failingUpstream{
+		tools:   []mcp.Tool{{Name: "upstream_tool"}},
+		callErr: errors.New("upstream unavailable"),
+	}
+	mysis.SetMCP(mcp.NewProxy(upstream))
+
+	// Start and wait for initial turn
+	events := bus.Subscribe()
+	mysis.Start()
+
+	timeout := time.After(5 * time.Second)
+	initialFinished := false
+	for !initialFinished {
+		select {
+		case e := <-events:
+			if e.Type == EventMysisResponse {
+				initialFinished = true
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for initial turn")
+		}
+	}
+
+	// Trigger upstream tool call
+	mock.WithToolCalls([]provider.ToolCall{
+		{
+			ID:        "call_retry",
+			Name:      "upstream_tool",
+			Arguments: json.RawMessage(`{}`),
+		},
+	})
+
+	go mysis.SendMessage("Trigger upstream retry", store.MemorySourceDirect)
+
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if mysis.State() == MysisStateErrored {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if state := mysis.State(); state != MysisStateErrored {
+		t.Fatalf("expected state=errored, got %s", state)
+	}
+
+	// Verify memory contains retry exhaustion error
+	foundRetry := false
+	memories, _ := s.GetMemories(stored.ID)
+	for _, m := range memories {
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, "call_retry") && strings.Contains(m.Content, "failed after retries") {
+			foundRetry = true
+			break
+		}
+	}
+
+	if !foundRetry {
+		t.Error("tool retry exhaustion error not found in memories")
 	}
 }

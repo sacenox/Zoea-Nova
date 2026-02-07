@@ -27,10 +27,11 @@ type OpenCodeFactory struct {
 }
 
 func NewOpenCodeFactory(endpoint, apiKey string, rateLimit float64, rateBurst int) *OpenCodeFactory {
+	burst := 1
 	return &OpenCodeFactory{
 		endpoint: endpoint,
 		apiKey:   apiKey,
-		limiter:  rate.NewLimiter(rate.Limit(rateLimit), rateBurst),
+		limiter:  rate.NewLimiter(rate.Limit(rateLimit), burst),
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	openai "github.com/sashabaranov/go-openai"
@@ -24,6 +25,8 @@ type OllamaProvider struct {
 	temperature float64
 	limiter     *rate.Limiter
 }
+
+var ollamaRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * time.Second}
 
 // NewOllama creates a new Ollama provider.
 // Ollama exposes an OpenAI-compatible API at /v1.
@@ -53,12 +56,6 @@ func (p *OllamaProvider) Name() string {
 
 // Chat sends messages and returns the complete response.
 func (p *OllamaProvider) Chat(ctx context.Context, messages []Message) (string, error) {
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return "", err
-		}
-	}
-
 	resp, err := p.createChatCompletion(ctx, ollamaChatRequest{
 		Model:       p.model,
 		Messages:    mergeConsecutiveSystemMessagesOllama(toOllamaMessages(messages)),
@@ -77,12 +74,6 @@ func (p *OllamaProvider) Chat(ctx context.Context, messages []Message) (string, 
 
 // ChatWithTools sends messages with available tools and returns response with potential tool calls.
 func (p *OllamaProvider) ChatWithTools(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return nil, err
-		}
-	}
-
 	resp, err := p.createChatCompletion(ctx, ollamaChatRequest{
 		Model:       p.model,
 		Messages:    mergeConsecutiveSystemMessagesOllama(toOllamaMessages(messages)),
@@ -203,29 +194,84 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 	}
 
 	url := p.baseURL + "/chat/completions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	maxRetries := len(ollamaRetryDelays)
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := ollamaRetryDelays[attempt-1]
+			log.Warn().
+				Str("provider", "ollama").
+				Int("attempt", attempt).
+				Dur("delay", delay).
+				Msg("Retrying Ollama request after transient error")
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		payload, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		if p.limiter != nil {
+			if err := p.limiter.Wait(ctx); err != nil {
+				return nil, err
+			}
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		resp, err := p.httpClient.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode == 429 || resp.StatusCode == 500 || resp.StatusCode == 502 ||
+			resp.StatusCode == 503 || resp.StatusCode == 504 {
+			payload, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+
+			log.Warn().
+				Str("provider", "ollama").
+				Int("status", resp.StatusCode).
+				Int("attempt", attempt+1).
+				Str("body", string(payload)).
+				Msg("Ollama retryable error")
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			payload, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		var decoded chatCompletionResponse
+		if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
+			return nil, fmt.Errorf("decode response: %w", err)
+		}
+
+		return &decoded, nil
 	}
 
-	var decoded chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, err
-	}
-
-	return &decoded, nil
+	log.Error().
+		Str("provider", "ollama").
+		Int("max_retries", maxRetries).
+		Err(lastErr).
+		Msg("Ollama request failed after all retries")
+	return nil, fmt.Errorf("request failed after %d retries: %w", maxRetries, lastErr)
 }
 
 // Stream sends messages and returns a channel that streams response chunks.

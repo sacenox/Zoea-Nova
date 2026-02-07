@@ -37,6 +37,25 @@ type OpenCodeProvider struct {
 	limiter     *rate.Limiter
 }
 
+var opencodeRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * time.Second}
+
+const (
+	opencodeChatCompletionsEndpoint = "/chat/completions"
+	opencodeMessagesEndpoint        = "/messages"
+	opencodeResponsesEndpoint       = "/responses"
+)
+
+var opencodeModelEndpoints = map[string]string{
+	"big-pickle":                 opencodeChatCompletionsEndpoint,
+	"gemini-3-pro":               "/models/gemini-3-pro",
+	"gemini-3-flash":             "/models/gemini-3-flash",
+	"glm-4.7-free":               opencodeChatCompletionsEndpoint,
+	"gpt-5-nano":                 opencodeResponsesEndpoint,
+	"kimi-k2.5-free":             opencodeChatCompletionsEndpoint,
+	"minimax-m2.1-free":          opencodeMessagesEndpoint,
+	"trinity-large-preview-free": opencodeChatCompletionsEndpoint,
+}
+
 // NewOpenCode creates a new OpenCode Zen provider.
 func NewOpenCode(endpoint, model, apiKey string) *OpenCodeProvider {
 	return NewOpenCodeWithTemp(endpoint, model, apiKey, 0.7, nil)
@@ -65,12 +84,6 @@ func (p *OpenCodeProvider) Name() string {
 
 // Chat sends messages and returns the complete response.
 func (p *OpenCodeProvider) Chat(ctx context.Context, messages []Message) (string, error) {
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return "", err
-		}
-	}
-
 	resp, err := p.createChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:       p.model,
 		Messages:    mergeSystemMessagesOpenAI(toOpenAIMessages(messages)),
@@ -90,12 +103,6 @@ func (p *OpenCodeProvider) Chat(ctx context.Context, messages []Message) (string
 
 // ChatWithTools sends messages with available tools and returns response with potential tool calls.
 func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return nil, err
-		}
-	}
-
 	// Convert tools to OpenAI format
 	openaiTools, err := toOpenAITools(tools)
 	if err != nil {
@@ -167,17 +174,15 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		return nil, err
 	}
 
-	url := p.baseURL + "/chat/completions"
+	url := p.baseURL + opencodeEndpointForModel(p.model)
 
 	// Retry logic for transient errors (rate limits, server outages)
-	maxRetries := 3
-	baseDelay := 1 * time.Second
+	maxRetries := len(opencodeRetryDelays)
 
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff: 1s, 2s, 4s
-			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			delay := opencodeRetryDelays[attempt-1]
 			log.Warn().
 				Str("provider", "opencode_zen").
 				Int("attempt", attempt).
@@ -188,6 +193,12 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 			case <-time.After(delay):
 			case <-ctx.Done():
 				return nil, ctx.Err()
+			}
+		}
+
+		if p.limiter != nil {
+			if err := p.limiter.Wait(ctx); err != nil {
+				return nil, err
 			}
 		}
 
@@ -292,6 +303,9 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 
 // Stream sends messages and returns a channel that streams response chunks.
 func (p *OpenCodeProvider) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
+	if opencodeEndpointForModel(p.model) != opencodeChatCompletionsEndpoint {
+		return nil, fmt.Errorf("opencode model %q does not support streaming via chat completions endpoint", p.model)
+	}
 	if p.limiter != nil {
 		if err := p.limiter.Wait(ctx); err != nil {
 			return nil, err
@@ -330,6 +344,21 @@ func (p *OpenCodeProvider) Stream(ctx context.Context, messages []Message) (<-ch
 	}()
 
 	return ch, nil
+}
+
+func opencodeEndpointForModel(model string) string {
+	if endpoint, ok := opencodeModelEndpoints[model]; ok {
+		return endpoint
+	}
+
+	switch {
+	case strings.HasPrefix(model, "gpt-"):
+		return opencodeResponsesEndpoint
+	case strings.HasPrefix(model, "claude-"):
+		return opencodeMessagesEndpoint
+	default:
+		return opencodeChatCompletionsEndpoint
+	}
 }
 
 // Close closes idle HTTP connections

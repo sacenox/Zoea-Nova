@@ -4,10 +4,15 @@ This document describes the valid Mysis lifecycle states and the transitions bet
 
 ## States
 
-- `idle`: Created or loaded but not running.
-- `running`: Processing messages and tool calls.
+- `idle`: Not running. Set on creation and when a mysis fails 3 nudges; requires a commander message/broadcast to resume.
+- `running`: Active and eligible for nudges; waiting between loop iterations.
 - `stopped`: Explicitly stopped by user action.
-- `errored`: Entered due to an error during execution or startup.
+- `errored`: Provider or MCP failures after retries; recorded as `lastError`.
+
+## Activity (not a state)
+
+- `thinking` is represented by `ActivityStateLLMCall` (not a MysisState).
+- In-game activities (traveling, cooldown, etc.) are for context/TUI only and do not block nudges.
 
 ## Diagram
 
@@ -15,6 +20,7 @@ This document describes the valid Mysis lifecycle states and the transitions bet
 stateDiagram-v2
     [*] --> idle: create or load
     idle --> running: start
+    running --> idle: 3 nudges failed
     running --> stopped: stop
     running --> errored: error
     stopped --> running: relaunch
@@ -32,7 +38,7 @@ stateDiagram-v2
 
 - Triggered by `Commander.StartMysis` (TUI `r` key).
 - Transitions to `running` from `idle`, `stopped`, or `errored`.
-- If the store update fails during start, the Mysis enters `errored`.
+- If the store update fails during start, the Mysis remains unchanged and returns an error.
 
 ### Stop
 
@@ -42,8 +48,13 @@ stateDiagram-v2
 
 ### Error
 
-- Triggered by `setErrorState` on execution failures.
-- Transitions to `errored` and records `lastError`.
+ - Triggered by `setErrorState` on execution failures (provider or MCP after retries).
+ - Transitions to `errored` and records `lastError`.
+
+### Idle (Nudge Breaker)
+
+- Triggered after 3 failed nudges with no progress.
+- Transitions to `idle` and signals that manual attention is needed.
 
 ## Notes
 

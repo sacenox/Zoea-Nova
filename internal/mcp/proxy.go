@@ -3,9 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -43,6 +45,12 @@ type Proxy struct {
 	contextHandlers map[string]ToolHandlerWithContext
 	accountStore    AccountStore
 }
+
+var (
+	ErrToolRetryExhausted = errors.New("mcp tool call failed after retries")
+)
+
+var toolRetryDelays = []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
 
 // NewProxy creates a new MCP proxy.
 func NewProxy(upstream UpstreamClient) *Proxy {
@@ -130,7 +138,7 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 			}
 		}
 
-		result, err := p.upstream.CallTool(ctx, name, args)
+		result, err := p.callUpstreamWithRetry(ctx, name, args)
 
 		if accountStore != nil && result != nil && !result.IsError {
 			p.interceptAuthTools(name, arguments, result)
@@ -143,6 +151,39 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 		Content: []ContentBlock{{Type: "text", Text: fmt.Sprintf("tool not found: %s", name)}},
 		IsError: true,
 	}, nil
+}
+
+func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args interface{}) (*ToolResult, error) {
+	var lastErr error
+	for attempt := 0; attempt <= len(toolRetryDelays); attempt++ {
+		if attempt > 0 {
+			delay := toolRetryDelays[attempt-1]
+			log.Warn().
+				Str("tool", name).
+				Int("attempt", attempt).
+				Dur("delay", delay).
+				Msg("Retrying MCP tool call after error")
+
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		result, err := p.upstream.CallTool(ctx, name, args)
+		if err == nil {
+			return result, nil
+		}
+
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
+
+		lastErr = err
+	}
+
+	return nil, fmt.Errorf("%w: %v", ErrToolRetryExhausted, lastErr)
 }
 
 func (p *Proxy) interceptAuthTools(toolName string, arguments json.RawMessage, result *ToolResult) {

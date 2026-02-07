@@ -253,6 +253,45 @@ func TestStateTransition_Running_To_Errored(t *testing.T) {
 	}
 }
 
+// TestStateTransition_Running_To_Idle tests the running → idle transition.
+// Trigger: nudge breaker (simulated)
+// Expected: State transitions to Idle, LastError is nil
+func TestStateTransition_Running_To_Idle(t *testing.T) {
+	cmd, cleanup := setupStateMachineTest(t)
+	defer cleanup()
+
+	// Create and start mysis
+	mysis, err := cmd.CreateMysis("test-running-idle", "mock")
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+
+	// Simulate nudge breaker
+	mysis.setIdle("Failed to respond after 3 nudges")
+
+	// Verify idle state
+	if state := mysis.State(); state != MysisStateIdle {
+		t.Errorf("expected state=idle, got %s", state)
+	}
+
+	if lastErr := mysis.LastError(); lastErr != nil {
+		t.Errorf("expected LastError=nil after idle transition, got %v", lastErr)
+	}
+
+	// Verify store persistence
+	stored, err := cmd.Store().GetMysis(mysis.ID())
+	if err != nil {
+		t.Fatalf("GetMysis() error: %v", err)
+	}
+	if stored.State != store.MysisStateIdle {
+		t.Errorf("expected stored state=idle, got %s", stored.State)
+	}
+}
+
 // TestStateTransition_Stopped_To_Running tests the stopped → running transition.
 // Trigger: Start() (relaunch)
 // Expected: State transitions to Running, LastError cleared

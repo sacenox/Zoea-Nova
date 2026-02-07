@@ -581,6 +581,18 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 					Message:   &MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
 					Timestamp: time.Now(),
 				})
+
+				if execErr != nil && isToolTimeout(execErr) {
+					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+					a.setError(execErr)
+					return fmt.Errorf("tool call timed out: %w", execErr)
+				}
+
+				if execErr != nil && isToolRetryExhausted(execErr) {
+					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+					a.setError(execErr)
+					return fmt.Errorf("tool call failed after retries: %w", execErr)
+				}
 			}
 
 			// Continue loop to get next LLM response
@@ -858,6 +870,18 @@ func (m *Mysis) SendEphemeralMessage(content string, source store.MemorySource) 
 					Message:   &MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
 					Timestamp: time.Now(),
 				})
+
+				if execErr != nil && isToolTimeout(execErr) {
+					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+					a.setError(execErr)
+					return fmt.Errorf("tool call timed out: %w", execErr)
+				}
+
+				if execErr != nil && isToolRetryExhausted(execErr) {
+					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+					a.setError(execErr)
+					return fmt.Errorf("tool call failed after retries: %w", execErr)
+				}
 			}
 
 			// Continue loop to get next LLM response
@@ -1097,7 +1121,13 @@ func (m *Mysis) parseStoredToolCalls(stored string) []provider.ToolCall {
 // formatToolResult formats a tool result for storage (includes ID for LLM context).
 func (m *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolResult, err error) string {
 	if err != nil {
-		return fmt.Sprintf("%s:Error calling %s: %v. Check the tool's required parameters and try again.", toolCallID, toolName, err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Sprintf("%s%sError calling %s: tool call timed out: %v", toolCallID, constants.ToolCallStorageFieldDelimiter, toolName, err)
+		}
+		if errors.Is(err, mcp.ErrToolRetryExhausted) {
+			return fmt.Sprintf("%s%sError calling %s: MCP call failed after retries: %v", toolCallID, constants.ToolCallStorageFieldDelimiter, toolName, err)
+		}
+		return fmt.Sprintf("%s%sError calling %s: %v. Check the tool's required parameters and try again.", toolCallID, constants.ToolCallStorageFieldDelimiter, toolName, err)
 	}
 
 	var texts []string
@@ -1117,6 +1147,14 @@ func (m *Mysis) formatToolResult(toolCallID, toolName string, result *mcp.ToolRe
 	}
 
 	return fmt.Sprintf("%s%s%s", toolCallID, constants.ToolCallStorageFieldDelimiter, content)
+}
+
+func isToolTimeout(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
+func isToolRetryExhausted(err error) bool {
+	return errors.Is(err, mcp.ErrToolRetryExhausted)
 }
 
 // formatToolResultDisplay formats a tool result for UI display (human-readable).
@@ -1190,6 +1228,40 @@ func (m *Mysis) setError(err error) {
 		Error:     &ErrorData{Error: err.Error()},
 		Timestamp: time.Now(),
 	})
+}
+
+func (m *Mysis) setIdle(reason string) {
+	a := m
+	a.mu.Lock()
+	oldState := a.state
+
+	if oldState == MysisStateStopped {
+		a.mu.Unlock()
+		log.Debug().Str("mysis", a.name).Str("reason", reason).Msg("Ignoring idle transition - mysis was intentionally stopped")
+		return
+	}
+
+	if oldState == MysisStateIdle {
+		a.mu.Unlock()
+		return
+	}
+
+	log.Warn().
+		Str("mysis", a.name).
+		Str("old_state", string(oldState)).
+		Str("reason", reason).
+		Msg("Mysis transitioning to idle state")
+
+	a.state = MysisStateIdle
+	a.lastError = nil
+	a.mu.Unlock()
+
+	if updateErr := a.store.UpdateMysisState(a.id, store.MysisStateIdle); updateErr != nil {
+		log.Warn().Err(updateErr).Str("mysis", a.id).Msg("Failed to update state in store")
+	}
+
+	a.emitStateChange(oldState, MysisStateIdle)
+	a.releaseCurrentAccount()
 }
 
 // getContextMemories returns memories for LLM context: system prompt + recent messages.
@@ -1449,7 +1521,7 @@ func (m *Mysis) run(ctx context.Context) {
 
 					// If we've failed 3 times, transition to error state
 					if failCount >= 3 {
-						a.setError(errors.New("Failed to respond after 3 nudges"))
+						a.setIdle("Failed to respond after 3 nudges")
 						return
 					}
 
@@ -1598,16 +1670,12 @@ func (m *Mysis) shouldNudge(now time.Time) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.activityState != ActivityStateTraveling && a.activityState != ActivityStateCooldown {
-		return true
+	if a.activityState == ActivityStateTraveling || a.activityState == ActivityStateCooldown {
+		if !a.activityUntil.IsZero() && !now.Before(a.activityUntil) {
+			a.activityState = ActivityStateIdle
+			a.activityUntil = time.Time{}
+		}
 	}
-
-	if !a.activityUntil.IsZero() && now.Before(a.activityUntil) {
-		return false
-	}
-
-	a.activityState = ActivityStateIdle
-	a.activityUntil = time.Time{}
 	return true
 }
 
