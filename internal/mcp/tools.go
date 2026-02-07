@@ -83,29 +83,6 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 		},
 	)
 
-	// Swarm status tool
-	proxy.RegisterTool(
-		Tool{
-			Name:        "zoea_swarm_status",
-			Description: "Get overall swarm status and statistics",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
-		},
-		func(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
-			stateCounts := orchestrator.GetStateCounts()
-
-			status := map[string]interface{}{
-				"total_myses": orchestrator.MysisCount(),
-				"max_myses":   orchestrator.MaxMyses(),
-				"states":      stateCounts,
-			}
-
-			data, _ := json.MarshalIndent(status, "", "  ")
-			return &ToolResult{
-				Content: []ContentBlock{{Type: "text", Text: string(data)}},
-			}, nil
-		},
-	)
-
 	// Send message to mysis tool
 	proxy.RegisterTool(
 		Tool{

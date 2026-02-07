@@ -16,11 +16,9 @@ const SystemPrompt = `You are a Nova Zoea mysis in SpaceMolt. Follow commander b
 DO NOT call any game tools until you have a session_id from login.
 
 ## Every turn after login:
-1. Check for broadcasts with zoea_swarm_status
-2. Follow commander instructions if any
-3. Call get_status with your session_id
-4. Take one action (mine, travel, trade, etc.) with your session_id
-5. ALWAYS call get_notifications with your session_id at the end
+1. Call get_status with your session_id
+2. Take one action (mine, travel, trade, etc.) with your session_id
+3. ALWAYS call get_notifications with your session_id at the end
 
 {{LATEST_BROADCAST}}
 
