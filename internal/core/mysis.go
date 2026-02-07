@@ -1264,6 +1264,113 @@ func (m *Mysis) setIdle(reason string) {
 	a.releaseCurrentAccount()
 }
 
+// selectPromptSource chooses the prompt source memory by priority:
+// 1. Most recent commander direct message (source="direct")
+// 2. Last commander broadcast (source="broadcast", sender_id="")
+// 3. Last swarm broadcast (source="broadcast", sender_id!=commander)
+// 4. Return nil if none found (caller will generate synthetic nudge)
+//
+// The commander is identified by empty sender_id in broadcasts.
+// Memories are expected to be ordered newest-first (from getContextMemories).
+func (m *Mysis) selectPromptSource(memories []*store.Memory) *store.Memory {
+	if len(memories) == 0 {
+		return nil
+	}
+
+	// Track most recent broadcast from commander (sender_id="") and swarm (sender_id!="")
+	var lastCommanderBroadcast *store.Memory
+	var lastSwarmBroadcast *store.Memory
+
+	// Scan memories in order (newest first)
+	for _, mem := range memories {
+		// Skip non-user messages
+		if mem.Role != store.MemoryRoleUser {
+			continue
+		}
+
+		// Priority 1: Commander direct message (highest priority)
+		if mem.Source == store.MemorySourceDirect {
+			return mem
+		}
+
+		// Track broadcasts by sender
+		if mem.Source == store.MemorySourceBroadcast {
+			if mem.SenderID == "" {
+				// Commander broadcast (empty sender_id)
+				if lastCommanderBroadcast == nil {
+					lastCommanderBroadcast = mem
+				}
+			} else {
+				// Swarm broadcast (non-empty sender_id)
+				if lastSwarmBroadcast == nil {
+					lastSwarmBroadcast = mem
+				}
+			}
+		}
+	}
+
+	// Priority 2: Last commander broadcast
+	if lastCommanderBroadcast != nil {
+		return lastCommanderBroadcast
+	}
+
+	// Priority 3: Last swarm broadcast
+	if lastSwarmBroadcast != nil {
+		return lastSwarmBroadcast
+	}
+
+	// Priority 4: No prompt source found - return nil for synthetic nudge
+	return nil
+}
+
+// extractLatestToolLoop finds the most recent tool-call message (assistant role
+// with tool_calls) and returns it plus all subsequent tool results.
+//
+// Returns: [tool-call-message, result1, result2, ...] or empty slice if no tool loop found.
+//
+// The function scans memories backwards from the end (since GetRecentMemories returns
+// chronological order: oldest first, newest last) to find the most recent tool call.
+func (m *Mysis) extractLatestToolLoop(memories []*store.Memory) []*store.Memory {
+	if len(memories) == 0 {
+		return nil
+	}
+
+	// Scan backwards from the end (newest first) to find the most recent tool call
+	toolCallIdx := -1
+	for i := len(memories) - 1; i >= 0; i-- {
+		mem := memories[i]
+		if mem.Role == store.MemoryRoleAssistant &&
+			strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			toolCallIdx = i
+			break
+		}
+	}
+
+	// No tool calls found
+	if toolCallIdx == -1 {
+		return nil
+	}
+
+	// Collect the tool call message and all subsequent tool results
+	result := make([]*store.Memory, 0, 4) // Pre-allocate for typical case (1 call + 2-3 results)
+	result = append(result, memories[toolCallIdx])
+
+	// Scan forward (later in time) for consecutive tool results
+	for i := toolCallIdx + 1; i < len(memories); i++ {
+		mem := memories[i]
+
+		// Only collect tool role messages
+		if mem.Role == store.MemoryRoleTool {
+			result = append(result, mem)
+		} else {
+			// Stop at first non-tool message (end of loop)
+			break
+		}
+	}
+
+	return result
+}
+
 // getContextMemories returns memories for LLM context: system prompt + recent messages.
 // This keeps context small for faster inference while preserving essential information.
 // Compacts repeated snapshot tool results to prefer recent state.

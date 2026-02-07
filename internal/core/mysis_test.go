@@ -794,6 +794,214 @@ func TestContextPromptSourcePriority(t *testing.T) {
 	}
 }
 
+func TestSelectPromptSourceHelper(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("helper-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	tests := []struct {
+		name           string
+		memories       []*store.Memory
+		expectedSource store.MemorySource
+		expectedSender string
+		expectNil      bool
+	}{
+		{
+			name:      "nil_memories",
+			memories:  nil,
+			expectNil: true,
+		},
+		{
+			name:      "empty_memories",
+			memories:  []*store.Memory{},
+			expectNil: true,
+		},
+		{
+			name: "only_system_messages",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Source: store.MemorySourceSystem, Content: "System"},
+				{Role: store.MemoryRoleAssistant, Source: store.MemorySourceLLM, Content: "Response"},
+			},
+			expectNil: true,
+		},
+		{
+			name: "direct_message_priority",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceDirect, Content: "Direct", SenderID: "cmd"},
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Broadcast", SenderID: ""},
+			},
+			expectedSource: store.MemorySourceDirect,
+			expectedSender: "cmd",
+		},
+		{
+			name: "commander_broadcast_when_no_direct",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Commander broadcast", SenderID: ""},
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast", SenderID: "mysis-1"},
+			},
+			expectedSource: store.MemorySourceBroadcast,
+			expectedSender: "",
+		},
+		{
+			name: "swarm_broadcast_when_no_commander",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast 1", SenderID: "mysis-1"},
+				{Role: store.MemoryRoleUser, Source: store.MemorySourceBroadcast, Content: "Swarm broadcast 2", SenderID: "mysis-2"},
+			},
+			expectedSource: store.MemorySourceBroadcast,
+			expectedSender: "mysis-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mysis.selectPromptSource(tt.memories)
+
+			if tt.expectNil {
+				if result != nil {
+					t.Errorf("expected nil, got %+v", result)
+				}
+				return
+			}
+
+			if result == nil {
+				t.Fatal("expected non-nil result, got nil")
+			}
+
+			if result.Source != tt.expectedSource {
+				t.Errorf("expected source=%s, got %s", tt.expectedSource, result.Source)
+			}
+
+			if result.SenderID != tt.expectedSender {
+				t.Errorf("expected sender_id=%s, got %s", tt.expectedSender, result.SenderID)
+			}
+		})
+	}
+}
+
+func TestExtractLatestToolLoopHelper(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("helper-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	tests := []struct {
+		name          string
+		memories      []*store.Memory
+		expectedCount int
+		expectNil     bool
+	}{
+		{
+			name:      "nil_memories",
+			memories:  nil,
+			expectNil: true,
+		},
+		{
+			name:      "empty_memories",
+			memories:  []*store.Memory{},
+			expectNil: true,
+		},
+		{
+			name: "no_tool_calls",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "System"},
+				{Role: store.MemoryRoleUser, Content: "User message"},
+				{Role: store.MemoryRoleAssistant, Content: "Text response"},
+			},
+			expectNil: true,
+		},
+		{
+			name: "single_tool_call_with_results",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "System"},
+				{Role: store.MemoryRoleUser, Content: "User"},
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_1:get_status:{}"},
+				{Role: store.MemoryRoleTool, Content: "call_1:status result"},
+			},
+			expectedCount: 2, // 1 tool call + 1 result
+		},
+		{
+			name: "tool_call_with_no_results_yet",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "System"},
+				{Role: store.MemoryRoleUser, Content: "User"},
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_1:get_status:{}"},
+			},
+			expectedCount: 1, // Just the tool call
+		},
+		{
+			name: "multiple_loops_returns_most_recent",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "System"},
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_old:get_status:{}"},
+				{Role: store.MemoryRoleTool, Content: "call_old:old result"},
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_new:get_poi:{}"},
+				{Role: store.MemoryRoleTool, Content: "call_new:new result"},
+			},
+			expectedCount: 2, // Most recent loop only
+		},
+		{
+			name: "tool_call_with_multiple_results",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_1:get_status:{}|call_2:get_system:{}"},
+				{Role: store.MemoryRoleTool, Content: "call_1:result 1"},
+				{Role: store.MemoryRoleTool, Content: "call_2:result 2"},
+			},
+			expectedCount: 3, // 1 tool call message + 2 results
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mysis.extractLatestToolLoop(tt.memories)
+
+			if tt.expectNil {
+				if result != nil {
+					t.Errorf("expected nil, got %d memories", len(result))
+				}
+				return
+			}
+
+			if len(result) != tt.expectedCount {
+				t.Errorf("expected %d memories, got %d", tt.expectedCount, len(result))
+				for i, m := range result {
+					t.Logf("  result[%d]: role=%s content=%.50s", i, m.Role, m.Content)
+				}
+			}
+
+			// Verify first is tool call
+			if len(result) > 0 {
+				if result[0].Role != store.MemoryRoleAssistant {
+					t.Errorf("first memory should be assistant, got %s", result[0].Role)
+				}
+				if !strings.HasPrefix(result[0].Content, "[TOOL_CALLS]") {
+					t.Errorf("first memory should have tool calls prefix")
+				}
+			}
+
+			// Verify rest are tool results
+			for i := 1; i < len(result); i++ {
+				if result[i].Role != store.MemoryRoleTool {
+					t.Errorf("memory[%d] should be tool result, got %s", i, result[i].Role)
+				}
+			}
+		})
+	}
+}
+
 func TestMysisContextCompactionNonSnapshot(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
