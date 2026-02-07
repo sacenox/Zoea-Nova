@@ -1428,6 +1428,32 @@ func (m *Mysis) extractLatestToolLoop(memories []*store.Memory) []*store.Memory 
 	return result
 }
 
+// findLastUserPromptIndex finds the index of the most recent user-initiated prompt.
+// User prompts include:
+// - Direct messages (source: direct)
+// - Broadcasts (source: broadcast)
+// - System nudges (source: system, role: user)
+//
+// Returns -1 if no user prompt is found.
+//
+// This defines the "current turn" boundary - everything from this index onward
+// is part of the current conversation turn and should be included in full context.
+func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
+	// Scan backwards to find most recent user prompt
+	for i := len(memories) - 1; i >= 0; i-- {
+		mem := memories[i]
+		if mem.Role == store.MemoryRoleUser {
+			// User messages from direct, broadcast, or system (nudges) all count as prompts
+			if mem.Source == store.MemorySourceDirect ||
+				mem.Source == store.MemorySourceBroadcast ||
+				mem.Source == store.MemorySourceSystem {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
 // getContextMemories returns memories for LLM context using loop-based composition.
 // Composes context as: [system prompt] + [chosen prompt source] + [most recent tool loop].
 // This ensures stable, bounded context and eliminates orphaned tool sequencing.

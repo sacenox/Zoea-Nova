@@ -1971,3 +1971,63 @@ func TestQueueBroadcast_StoppedState(t *testing.T) {
 		t.Errorf("error should mention stopped, got: %v", err)
 	}
 }
+
+func TestFindLastUserPromptIndex(t *testing.T) {
+	tests := []struct {
+		name     string
+		memories []*store.Memory
+		expected int
+	}{
+		{
+			name: "last message is user",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "system"},
+				{Role: store.MemoryRoleUser, Content: "hello", Source: store.MemorySourceDirect},
+			},
+			expected: 1,
+		},
+		{
+			name: "user followed by tool loop",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "system"},
+				{Role: store.MemoryRoleUser, Content: "check status", Source: store.MemorySourceDirect},
+				{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_1:get_status:{}"},
+				{Role: store.MemoryRoleTool, Content: "call_1:status data"},
+			},
+			expected: 1,
+		},
+		{
+			name: "multiple user messages",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleUser, Content: "first", Source: store.MemorySourceDirect},
+				{Role: store.MemoryRoleAssistant, Content: "response"},
+				{Role: store.MemoryRoleUser, Content: "second", Source: store.MemorySourceDirect},
+			},
+			expected: 2,
+		},
+		{
+			name: "no user messages",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleSystem, Content: "system"},
+			},
+			expected: -1,
+		},
+		{
+			name: "broadcast is user prompt",
+			memories: []*store.Memory{
+				{Role: store.MemoryRoleUser, Content: "broadcast msg", Source: store.MemorySourceBroadcast},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mysis := &Mysis{}
+			result := mysis.findLastUserPromptIndex(tt.memories)
+			if result != tt.expected {
+				t.Errorf("expected %d, got %d", tt.expected, result)
+			}
+		})
+	}
+}
