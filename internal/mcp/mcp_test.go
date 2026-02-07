@@ -256,7 +256,7 @@ func TestOrchestratorTools(t *testing.T) {
 	ctx := context.Background()
 
 	// Test zoea_list_myses
-	result, err = proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
 	if err != nil {
 		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
 	}
