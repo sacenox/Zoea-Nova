@@ -615,7 +615,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 		case InputModeNewMysis:
-			mysis, err := m.commander.CreateMysis(value, "ollama")
+			mysis, err := m.commander.CreateMysis(value, "opencode_zen")
 			if err == nil {
 				// Auto-start newly created myses
 				m.err = m.commander.StartMysis(mysis.ID())
