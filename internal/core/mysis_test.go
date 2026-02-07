@@ -1694,3 +1694,34 @@ func TestNudgeCircuitBreaker(t *testing.T) {
 		}
 	})
 }
+
+func TestCanAcceptMessages(t *testing.T) {
+	tests := []struct {
+		state     MysisState
+		canAccept bool
+		errMsg    string
+	}{
+		{MysisStateIdle, true, ""},
+		{MysisStateRunning, true, ""},
+		{MysisStateStopped, false, "mysis stopped - press 'r' to relaunch"},
+		{MysisStateErrored, false, "mysis errored - press 'r' to relaunch"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.state), func(t *testing.T) {
+			err := validateCanAcceptMessage(tt.state)
+
+			if tt.canAccept {
+				if err != nil {
+					t.Errorf("state %s should accept messages, got error: %v", tt.state, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("state %s should reject messages, got nil error", tt.state)
+				} else if err.Error() != tt.errMsg {
+					t.Errorf("state %s: expected error %q, got %q", tt.state, tt.errMsg, err.Error())
+				}
+			}
+		})
+	}
+}

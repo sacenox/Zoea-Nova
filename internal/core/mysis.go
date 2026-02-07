@@ -146,6 +146,29 @@ func (m *Mysis) State() MysisState {
 	return a.state
 }
 
+// validateCanAcceptMessage checks if a mysis in the given state can accept messages.
+// Returns nil if messages are allowed, error with user-facing message if not.
+//
+// Valid states for accepting messages:
+//   - idle: Mysis is not running but can accept messages (will process when started)
+//   - running: Mysis is actively running and processing messages
+//
+// Invalid states for accepting messages:
+//   - stopped: User explicitly stopped the mysis, requires relaunch
+//   - errored: Mysis encountered an error, requires relaunch
+func validateCanAcceptMessage(state MysisState) error {
+	switch state {
+	case MysisStateIdle, MysisStateRunning:
+		return nil
+	case MysisStateStopped:
+		return fmt.Errorf("mysis stopped - press 'r' to relaunch")
+	case MysisStateErrored:
+		return fmt.Errorf("mysis errored - press 'r' to relaunch")
+	default:
+		return fmt.Errorf("unknown mysis state: %s", state)
+	}
+}
+
 // ProviderName returns the name of the mysis provider.
 func (m *Mysis) ProviderName() string {
 	a := m
