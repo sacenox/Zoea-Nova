@@ -252,7 +252,7 @@ func TestStopDuringActiveLLMCalls(t *testing.T) {
 		t.Fatalf("Start() error: %v", err)
 	}
 
-	// Wait for initial autonomous turn to complete
+	// Wait for initial turn (triggered by encouragement message) to complete
 	time.Sleep(100 * time.Millisecond)
 
 	// Send a message that will take 200ms to process

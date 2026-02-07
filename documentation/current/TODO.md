@@ -13,9 +13,43 @@
 
 ---
 
-- Myses become idle even when there are broadcasts from both commander and other mysis. Broadcasts should be sent as user messages to keep myses active.
+- Investigate no content from AI messages in coversation log. only happens ocasionally.
 
-- When nudging idle myses, encourage use of broadcasts to restart other idle myses in the swarm.
+```
+ T0 ⬡ [19:05] AI: ──────────────────────────────────────────────────────────────────────────────────────────────────  │
+ Sold 10 Iron Ore for 🟢40 credits (Skill Level 0, +1 XP). Current credits: 764.                                      │
+                                                                                                                      │
+ Cargo now contains 12 Iron Ore (was 22). Your mining lasers are still active. Would you like to:                     │
+ 1. Mine more ore to fill cargo                                                                                       │
+ 2. Sell remaining ore at NPC market                                                                                  │
+ 3. Check current market prices for Iron Ore                                                                          │
+ 4. Deploy mining drones to increase efficiency                                                                       │
+                                                                                                                      │
+ Your goal of 10,000 credits for a hauler is still far off (currently at 3,500). Would you like to                    │
+ adjust your strategy?                                                                                                │
+                                                                                                                      │
+ T0 ⬡ [19:05] REASONING: ───────────────────────────────────────────────────────────────────────────────────────────  │
+ Okay, let me see what's going on here. The user is playing as Nova Zoea, a voidborn empire                           │
+ [17 more]                                                                                                            │
+ credit goal.                                                                                                         │
+                                                                                                                      │
+                                                                                                                      │
+ T0 ⬡ [19:07] AI: ──────────────────────────────────────────────────────────────────────────────────────────────────  │
+ (no response)                                                                                                        │
+                                                                                                                      │
+ T0 ⬡ [19:08] YOU: ─────────────────────────────────────────────────────────────────────────────────────────────────  │
+ What was your last reply?                                                                                            │
+                                                                                                                      │
+ T0 ⬡ [19:08] AI: ──────────────────────────────────────────────────────────────────────────────────────────────────  │
+ The last reply was selling 10 units of Iron Ore, earning 40 credits and gaining 1 XP.                                █
+                                                                                                                      █
+ T0 ⬡ [19:08] REASONING: ───────────────────────────────────────────────────────────────────────────────────────────  █
+ Okay, the user is asking, "What was your last reply?" Let me think about how to approach                             █
+ [58 more]                                                                                                            █
+ last reply was the sale of 10 Iron Ore, earning 40 credits and 1 XP.                                                 █
+```
+
+- sending direct message to mysis doesn't reset the message input box. Needs test coverage and fix.
 
 > RELEASE CUTOFF ----~ 8< ~---- STOP HERE **DON'T TOUCH** ----~ 8< ~----
 

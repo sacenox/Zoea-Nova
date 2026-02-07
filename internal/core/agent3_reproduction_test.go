@@ -32,7 +32,7 @@ func TestAgent3Finding_OrphanedToolResults(t *testing.T) {
 
 	// Step 1: Add system prompt
 	err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem,
-		"You are an autonomous AI pilot in SpaceMolt", "", "")
+		"You are an AI pilot in SpaceMolt", "", "")
 	if err != nil {
 		t.Fatalf("AddMemory system: %v", err)
 	}

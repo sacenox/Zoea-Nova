@@ -143,8 +143,8 @@ func TestMysisSendMessage(t *testing.T) {
 	// Subscribe to events
 	events := bus.Subscribe()
 
-	// Wait for the initial autonomous turn to finish
-	// It should emit a response event for the ContinuePrompt
+	// Wait for the initial turn to finish (triggered by synthetic encouragement message)
+	// It should emit a response event after processing the encouragement
 	timeout := time.After(2 * time.Second)
 initialTurnLoop:
 	for {
@@ -154,7 +154,7 @@ initialTurnLoop:
 				break initialTurnLoop
 			}
 		case <-timeout:
-			t.Fatal("timeout waiting for initial autonomous turn")
+			t.Fatal("timeout waiting for initial turn")
 		}
 	}
 
@@ -198,9 +198,9 @@ eventLoop:
 	}
 
 	// Check memories were stored
-	// Expected: user message (sent while idle), system prompt, assistant response (from ephemeral nudge),
+	// Expected: user message (sent while idle), system prompt, assistant response (from ephemeral encouragement),
 	//           user message (Hello, mysis!), assistant response
-	// NOTE: The continue prompt (initial trigger) is now ephemeral and NOT stored in DB
+	// NOTE: The encouragement message (initial trigger) is ephemeral and NOT stored in DB
 	memories, err := s.GetMemories(stored.ID)
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
@@ -436,24 +436,8 @@ func TestContinuePromptContainsSearchReminder(t *testing.T) {
 	}
 }
 
-func TestContinuePromptAddsDriftReminder(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, _ := s.CreateMysis("drift-check", "mock", "test-model", 0.7)
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "Waiting 5 minutes for travel.", "", "")
-
-	prompt := mysis.buildContinuePrompt(0)
-	if !strings.Contains(prompt, "DRIFT REMINDERS") {
-		t.Fatal("expected drift reminders section in continue prompt")
-	}
-	if !strings.Contains(prompt, "real-world time") {
-		t.Fatal("expected real-world time drift reminder")
-	}
-}
+// TestContinuePromptAddsDriftReminder removed - buildContinuePrompt() method removed.
+// Drift reminders are now part of the system prompt, not dynamically generated.
 
 func TestZoeaListMysesCompaction(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
@@ -614,19 +598,19 @@ func TestGetContextMemories_CurrentTurnBoundary(t *testing.T) {
 			}
 
 			if tt.expectedSource == store.MemorySourceSystem {
-				// Synthetic nudge case - should have a user message with source=system
+				// Synthetic encouragement case - should have a user message with source=system
 				if foundPromptSource == nil {
-					t.Fatal("expected synthetic nudge user message, but got none")
+					t.Fatal("expected synthetic encouragement user message, but got none")
 				}
 				if foundPromptSource.Role != store.MemoryRoleUser {
-					t.Errorf("expected role=user for nudge, got %s", foundPromptSource.Role)
+					t.Errorf("expected role=user for encouragement, got %s", foundPromptSource.Role)
 				}
 				if foundPromptSource.Source != store.MemorySourceSystem {
-					t.Errorf("expected source=system for nudge, got %s", foundPromptSource.Source)
+					t.Errorf("expected source=system for encouragement, got %s", foundPromptSource.Source)
 				}
-				// Nudge should contain helpful content
+				// Encouragement should contain helpful content
 				if len(foundPromptSource.Content) == 0 {
-					t.Error("expected nudge content to be non-empty")
+					t.Error("expected encouragement content to be non-empty")
 				}
 			} else {
 				// Should find the correct turn boundary
@@ -1128,75 +1112,8 @@ func TestStopDuringInitialMessageWithSlowProvider(t *testing.T) {
 	}
 }
 
-// TestStopDuringIdleNudge tests stopping a mysis while it's processing an idle nudge.
-// This reproduces the race condition where Stop() is called during nudge processing.
-//
-// Timeline:
-// - Start() completes, initial message finishes processing
-// - Test manually triggers nudge via nudgeCh (no 30s wait needed)
-// - Line 1047-1052: nudge handler spawns `go a.SendMessage(ContinuePrompt, ...)`
-// - HERE: Test calls Stop() while SendMessage goroutine is running
-// - SendMessage tries to process but context is canceled -> calls setError()
-// - Race: setError() tries to set state=Errored, but Stop() already set state=Stopped
-//
-// Expected: Final state is Stopped (not Errored), no lastError.
-func TestStopDuringIdleNudge(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, err := s.CreateMysis("nudge-race-test", "mock", "test-model", 0.7)
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	// Use a mock provider with a delay to simulate LLM processing
-	mock := provider.NewMock("mock", "nudge response").SetDelay(100 * time.Millisecond)
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Start mysis (triggers initial SendMessage at line 268)
-	if err := m.Start(); err != nil {
-		t.Fatalf("Start() error: %v", err)
-	}
-
-	// Wait for initial message to complete
-	time.Sleep(200 * time.Millisecond)
-
-	// Manually trigger a nudge (instead of waiting 30 seconds for ticker)
-	// This simulates what the run() goroutine does on line 1043
-	select {
-	case m.nudgeCh <- struct{}{}:
-		// Nudge sent successfully
-	default:
-		t.Fatal("failed to send nudge - channel full")
-	}
-
-	// Give the nudge handler time to spawn SendMessage goroutine
-	time.Sleep(10 * time.Millisecond)
-
-	// Call Stop() DURING the nudge processing
-	// The race happens when:
-	// 1. Nudge handler (line 1047-1052) spawns: go a.SendMessage(...)
-	// 2. Stop() is called here (cancels context)
-	// 3. SendMessage goroutine tries to process but context is canceled
-	// 4. SendMessage calls setError() which tries to change state to Errored
-	// 5. But Stop() should have already set state to Stopped
-	if err := m.Stop(); err != nil {
-		t.Fatalf("Stop() error: %v", err)
-	}
-
-	// Give a moment for any racing goroutines to complete
-	time.Sleep(100 * time.Millisecond)
-
-	// Assert state == MysisStateStopped (NOT Errored)
-	if m.State() != MysisStateStopped {
-		t.Errorf("expected state=stopped after Stop(), got %s (lastError: %v)", m.State(), m.LastError())
-	}
-
-	// Assert lastError == nil
-	if m.LastError() != nil {
-		t.Errorf("expected no lastError after clean stop, got: %v", m.LastError())
-	}
-}
+// TestStopDuringIdleNudge removed - ticker-based system obsolete.
+// Encouragement is now database-driven via getContextMemories().
 
 // TestStopAtVariousTimings is a parameterized test that calls Stop() at
 // different delays after Start() to systematically explore timing windows.
@@ -1209,7 +1126,7 @@ func TestStopDuringIdleNudge(t *testing.T) {
 // - 10ms: Very fast (goroutine just started, may not have acquired turnMu)
 // - 50ms: During initial message processing (inside provider.Chat)
 // - 100ms: After initial message likely done
-// - 500ms: After idle nudge interval
+// - 500ms: After sufficient time for initial turn
 //
 // Run each timing 10 times with:
 //
@@ -1220,7 +1137,7 @@ func TestStopAtVariousTimings(t *testing.T) {
 		10 * time.Millisecond,  // 10ms - very fast
 		50 * time.Millisecond,  // 50ms - during initial message
 		100 * time.Millisecond, // 100ms - after initial message likely done
-		500 * time.Millisecond, // 500ms - after idle nudge interval
+		500 * time.Millisecond, // 500ms - after sufficient time for initial turn
 	}
 
 	for _, delay := range delays {
@@ -1269,145 +1186,261 @@ func TestStopAtVariousTimings(t *testing.T) {
 	}
 }
 
-// TestNudgeCircuitBreaker tests the circuit breaker logic that errors out stuck myses
-func TestNudgeCircuitBreaker(t *testing.T) {
+// TestNudgeCircuitBreaker removed - ticker-based nudge system obsolete.
+// Encouragement counter now increments in getContextMemories() when no user message exists.
+// See TestEncouragementLimit and TestEncouragementReset for new behavior.
+
+// TestEncouragementLimit tests that encouragementCount reaches 3 after 3 getContextMemories() calls
+// with no user messages, and that a warning is logged.
+func TestEncouragementLimit(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	t.Run("errors_after_3_ticker_fires", func(t *testing.T) {
-		// Create a mock provider that never responds (long delay)
-		mock := provider.NewMock("stuck", "")
-		mock.SetDelay(10 * time.Second) // Will timeout
+	stored, err := s.CreateMysis("limit-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
 
-		stored, err := s.CreateMysis("stuck-mysis", "stuck", "stuck-model", 0.7)
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Add system prompt only (no user messages)
+	err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Call getContextMemories() 3 times with no user messages
+	for i := 1; i <= 3; i++ {
+		_, err := mysis.getContextMemories()
+		if err != nil {
+			t.Fatalf("getContextMemories() error on call %d: %v", i, err)
+		}
+
+		// Check counter value
+		mysis.mu.RLock()
+		count := mysis.encouragementCount
+		mysis.mu.RUnlock()
+
+		if count != i {
+			t.Errorf("after call %d: expected encouragementCount=%d, got %d", i, i, count)
+		}
+	}
+
+	// Verify counter reached 3
+	mysis.mu.RLock()
+	finalCount := mysis.encouragementCount
+	mysis.mu.RUnlock()
+
+	if finalCount != 3 {
+		t.Errorf("expected final encouragementCount=3, got %d", finalCount)
+	}
+
+	// Note: Testing the warning log would require capturing log output,
+	// which is not done here. The warning is verified in integration tests.
+}
+
+// TestEncouragementReset tests that encouragementCount resets to 0 when a real user message
+// (broadcast or direct) is received.
+func TestEncouragementReset(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	t.Run("reset_on_broadcast", func(t *testing.T) {
+		stored, err := s.CreateMysis("reset-broadcast-test", "mock", "test-model", 0.7)
 		if err != nil {
 			t.Fatalf("CreateMysis() error: %v", err)
 		}
 
+		mock := provider.NewMock("mock", "response")
 		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-		// Start the mysis
-		if err := mysis.Start(); err != nil {
-			t.Fatalf("Start() error: %v", err)
-		}
-		defer mysis.Stop()
-
-		// Manually increment the counter 3 times to simulate 3 ticker fires
-		// (In real usage, the ticker would do this automatically)
-		for i := 0; i < 3; i++ {
-			mysis.mu.Lock()
-			mysis.nudgeFailCount++
-			count := mysis.nudgeFailCount
-			mysis.mu.Unlock()
-
-			if count >= 3 {
-				// Trigger error state
-				mysis.setError(errors.New("Failed to respond after 3 nudges"))
-				break
-			}
-		}
-
-		// Wait for error state transition
-		timeout := time.After(2 * time.Second)
-		ticker := time.NewTicker(50 * time.Millisecond)
-		defer ticker.Stop()
-
-		errored := false
-		for !errored {
-			select {
-			case <-timeout:
-				t.Fatal("timed out waiting for error state after 3 nudges")
-			case <-ticker.C:
-				if mysis.State() == MysisStateErrored {
-					errored = true
-				}
-			}
-		}
-
-		// Verify error message
-		lastErr := mysis.LastError()
-		if lastErr == nil {
-			t.Fatal("expected error to be set after 3 nudges")
-		}
-		if !strings.Contains(lastErr.Error(), "Failed to respond after 3 nudges") {
-			t.Errorf("expected 'Failed to respond after 3 nudges' error, got: %v", lastErr)
-		}
-	})
-
-	t.Run("resets_counter_on_successful_response", func(t *testing.T) {
-		// Create a mock provider that responds quickly
-		mock := provider.NewMock("responsive", "I'm working!")
-
-		stored, err := s.CreateMysis("responsive-mysis", "responsive", "responsive-model", 0.7)
-		if err != nil {
-			t.Fatalf("CreateMysis() error: %v", err)
-		}
-
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-		// Start the mysis
-		if err := mysis.Start(); err != nil {
-			t.Fatalf("Start() error: %v", err)
-		}
-		defer mysis.Stop()
-
-		// Manually set counter to 2 (simulate 2 ticker fires)
+		// Set encouragementCount to 2 (simulate 2 synthetic messages)
 		mysis.mu.Lock()
-		mysis.nudgeFailCount = 2
+		mysis.encouragementCount = 2
 		mysis.mu.Unlock()
 
 		// Verify counter is at 2
 		mysis.mu.RLock()
-		count := mysis.nudgeFailCount
+		count := mysis.encouragementCount
 		mysis.mu.RUnlock()
 		if count != 2 {
-			t.Fatalf("expected nudgeFailCount=2, got %d", count)
+			t.Fatalf("expected encouragementCount=2 before broadcast, got %d", count)
 		}
 
-		// Send a successful message (should reset counter)
-		if err := mysis.SendMessage("test message", store.MemorySourceDirect); err != nil {
-			t.Fatalf("SendMessage() error: %v", err)
+		// Queue broadcast message
+		err = mysis.QueueBroadcast("Test broadcast", "sender-id")
+		if err != nil {
+			t.Fatalf("QueueBroadcast() error: %v", err)
 		}
-
-		// Wait for response processing
-		time.Sleep(200 * time.Millisecond)
 
 		// Verify counter was reset to 0
 		mysis.mu.RLock()
-		count = mysis.nudgeFailCount
+		count = mysis.encouragementCount
 		mysis.mu.RUnlock()
 		if count != 0 {
-			t.Errorf("expected nudgeFailCount to reset to 0 after successful response, got %d", count)
-		}
-
-		// Verify state is still running (not errored)
-		if mysis.State() != MysisStateRunning {
-			t.Errorf("expected state=running after successful response, got %s", mysis.State())
+			t.Errorf("expected encouragementCount=0 after broadcast, got %d", count)
 		}
 	})
 
-	t.Run("increments_counter_on_ticker_fire", func(t *testing.T) {
-		// Test that the counter increments properly
-		mysis := &Mysis{}
-		mysis.nudgeFailCount = 0
-
-		// Simulate ticker fires (what happens in real usage)
-		for i := 1; i <= 2; i++ {
-			// This is what the ticker.C case does
-			mysis.nudgeFailCount++
-
-			if mysis.nudgeFailCount != i {
-				t.Errorf("after ticker fire %d: expected nudgeFailCount=%d, got %d", i, i, mysis.nudgeFailCount)
-			}
+	t.Run("reset_on_direct_message", func(t *testing.T) {
+		stored, err := s.CreateMysis("reset-direct-test", "mock", "test-model", 0.7)
+		if err != nil {
+			t.Fatalf("CreateMysis() error: %v", err)
 		}
 
-		// Verify final count
-		if mysis.nudgeFailCount != 2 {
-			t.Errorf("expected final nudgeFailCount=2, got %d", mysis.nudgeFailCount)
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Set encouragementCount to 2
+		mysis.mu.Lock()
+		mysis.encouragementCount = 2
+		mysis.mu.Unlock()
+
+		// Send direct message
+		err = mysis.SendMessageFrom("Test direct", store.MemorySourceDirect, "")
+		if err != nil {
+			t.Fatalf("SendMessageFrom() error: %v", err)
+		}
+
+		// Verify counter was reset to 0
+		mysis.mu.RLock()
+		count := mysis.encouragementCount
+		mysis.mu.RUnlock()
+		if count != 0 {
+			t.Errorf("expected encouragementCount=0 after direct message, got %d", count)
+		}
+	})
+
+	t.Run("no_reset_on_getContextMemories_with_user_message", func(t *testing.T) {
+		stored, err := s.CreateMysis("no-reset-test", "mock", "test-model", 0.7)
+		if err != nil {
+			t.Fatalf("CreateMysis() error: %v", err)
+		}
+
+		mock := provider.NewMock("mock", "response")
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+		// Add system prompt
+		err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+		if err != nil {
+			t.Fatalf("AddMemory error: %v", err)
+		}
+
+		// Add user message (real message exists)
+		err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "User message", "", "")
+		if err != nil {
+			t.Fatalf("AddMemory error: %v", err)
+		}
+
+		// Set encouragementCount to 2
+		mysis.mu.Lock()
+		mysis.encouragementCount = 2
+		mysis.mu.Unlock()
+
+		// Call getContextMemories() - should NOT reset counter because real user message exists
+		_, err = mysis.getContextMemories()
+		if err != nil {
+			t.Fatalf("getContextMemories() error: %v", err)
+		}
+
+		// Counter should still be 2 (NOT reset by getContextMemories when user message exists)
+		mysis.mu.RLock()
+		count := mysis.encouragementCount
+		mysis.mu.RUnlock()
+		if count != 2 {
+			t.Errorf("expected encouragementCount=2 (NOT reset when user message exists), got %d", count)
 		}
 	})
 }
 
+// TestMysisWithBroadcastsKeepsRunning tests the truth table scenario "Running (With Broadcasts)".
+// Verifies that when a broadcast is present, the encouragementCount stays at 0 through multiple
+// turns (because the broadcast remains the most recent user message), keeping the mysis running
+// without going idle.
+//
+// Reference: documentation/architecture/MESSAGE_FORMAT_GUARANTEES.md lines 123-146
+func TestMysisWithBroadcastsKeepsRunning(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create mysis
+	stored, err := s.CreateMysis("broadcast-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Use mock provider with no delay for fast test
+	mock := provider.NewMock("mock", "I will continue exploring")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Step 1-2: Send broadcast "Explore the universe!" via QueueBroadcast
+	// This will be stored as a user message with source=broadcast
+	// QueueBroadcast will auto-start the idle mysis
+	err = mysis.QueueBroadcast("Explore the universe!", "commander-id")
+	if err != nil {
+		t.Fatalf("QueueBroadcast() error: %v", err)
+	}
+	defer mysis.Stop()
+
+	// Step 3: Verify mysis was auto-started by QueueBroadcast
+	// Give it a moment to transition to running state
+	time.Sleep(50 * time.Millisecond)
+	if mysis.State() != MysisStateRunning {
+		t.Fatalf("expected mysis to be auto-started by broadcast, got state: %s", mysis.State())
+	}
+
+	// Step 4: Verify encouragementCount = 0 (reset by broadcast in QueueBroadcast)
+	mysis.mu.RLock()
+	count := mysis.encouragementCount
+	mysis.mu.RUnlock()
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 after broadcast (reset in QueueBroadcast), got %d", count)
+	}
+
+	// Step 5: Trigger a turn by sending a message (QueueBroadcast stored the message but doesn't trigger processing)
+	// The broadcast is now in the database, and SendMessageFrom will trigger getContextMemories() which will find it
+	err = mysis.SendMessageFrom("Status check", store.MemorySourceDirect, "")
+	if err != nil {
+		t.Fatalf("SendMessageFrom() error: %v", err)
+	}
+
+	// Step 6: Check encouragementCount = 0 (reset by the direct message we just sent)
+	mysis.mu.RLock()
+	count = mysis.encouragementCount
+	mysis.mu.RUnlock()
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 after turn (reset by direct message), got %d", count)
+	}
+
+	// Check mysis is still running (not idle)
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running, got %s", mysis.State())
+	}
+
+	// Step 7-8: Send additional messages to trigger more turns and verify counter stays at 0
+	for i := 0; i < 5; i++ {
+		err = mysis.SendMessageFrom("Continue task", store.MemorySourceDirect, "")
+		if err != nil {
+			t.Fatalf("turn %d: SendMessageFrom() error: %v", i+2, err)
+		}
+
+		// Verify counter was reset by direct message
+		mysis.mu.RLock()
+		count = mysis.encouragementCount
+		mysis.mu.RUnlock()
+		if count != 0 {
+			t.Errorf("turn %d: expected encouragementCount=0 after direct message (reset), got %d", i+2, count)
+		}
+	}
+
+	// Step 9: After 6+ turns with user messages, verify mysis is still running (not idle)
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running after 6+ turns with user messages, got %s", mysis.State())
+	}
+
+	t.Logf("✅ Mysis with broadcasts/direct messages stays running: counter reset to 0 on each turn, never went idle")
+}
 func TestCanAcceptMessages(t *testing.T) {
 	tests := []struct {
 		state     MysisState
@@ -1639,65 +1672,11 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	})
 }
 
-func TestSendEphemeralMessage_IdleState(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
+// TestSendEphemeralMessage_IdleState removed - SendEphemeralMessage method removed.
+// Ephemeral messages (synthetic nudges) are now generated by getContextMemories().
 
-	// Create stored mysis
-	stored, err := s.CreateMysis("ephemeral-idle-test", "mock", "test-model", 0.7)
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Mysis starts in idle state
-	if mysis.State() != MysisStateIdle {
-		t.Fatalf("expected idle state, got %s", mysis.State())
-	}
-
-	// Should be able to send ephemeral message to idle mysis
-	err = mysis.SendEphemeralMessage("ephemeral test", store.MemorySourceDirect)
-	if err != nil {
-		t.Errorf("should accept ephemeral message in idle state, got error: %v", err)
-	}
-}
-
-func TestSendEphemeralMessage_StoppedState(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	// Create stored mysis
-	stored, err := s.CreateMysis("ephemeral-stopped-test", "mock", "test-model", 0.7)
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
-
-	// Start then stop
-	if err := mysis.Start(); err != nil {
-		t.Fatalf("failed to start: %v", err)
-	}
-	if err := mysis.Stop(); err != nil {
-		t.Fatalf("failed to stop: %v", err)
-	}
-
-	if mysis.State() != MysisStateStopped {
-		t.Fatalf("expected stopped state, got %s", mysis.State())
-	}
-
-	// Should reject ephemeral message in stopped state
-	err = mysis.SendEphemeralMessage("ephemeral test", store.MemorySourceDirect)
-	if err == nil {
-		t.Error("should reject ephemeral message in stopped state")
-	}
-	if !strings.Contains(err.Error(), "stopped") {
-		t.Errorf("error should mention stopped, got: %v", err)
-	}
-}
+// TestSendEphemeralMessage_StoppedState removed - SendEphemeralMessage method removed.
+// Ephemeral messages (synthetic nudges) are now generated by getContextMemories().
 
 // setupTestMysis creates a mysis for testing with a mock provider
 func setupTestMysis(t *testing.T) (*Mysis, func()) {
@@ -2057,17 +2036,17 @@ func TestGetContextMemories_NoUserPrompt(t *testing.T) {
 		t.Fatalf("getContextMemories error: %v", err)
 	}
 
-	// Should generate synthetic nudge when no user prompt exists
-	hasNudge := false
+	// Should generate synthetic encouragement when no user prompt exists
+	hasEncouragement := false
 	for _, mem := range memories {
 		if mem.Role == store.MemoryRoleUser && mem.Source == store.MemorySourceSystem {
-			hasNudge = true
+			hasEncouragement = true
 			break
 		}
 	}
 
-	if !hasNudge {
-		t.Error("Expected synthetic nudge when no user prompt exists")
+	if !hasEncouragement {
+		t.Error("Expected synthetic encouragement when no user prompt exists")
 	}
 }
 
@@ -2236,101 +2215,169 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 	})
 }
 
-// TestSendEphemeralMessage_ErroredState tests sending ephemeral message to errored mysis.
-func TestSendEphemeralMessage_ErroredState(t *testing.T) {
+// TestSendEphemeralMessage_ErroredState removed - SendEphemeralMessage method removed.
+// Ephemeral messages (synthetic nudges) are now generated by getContextMemories().
+
+// TestSendEphemeralMessage_EmptyContent removed - SendEphemeralMessage method removed.
+// Ephemeral messages (synthetic nudges) are now generated by getContextMemories().
+
+// TestSendEphemeralMessage_MCPListToolsError removed - SendEphemeralMessage method removed.
+// Ephemeral messages (synthetic nudges) are now generated by getContextMemories().
+
+// TestIdleRecoveryOnBroadcast tests the Idle Recovery scenario from MESSAGE_FORMAT_GUARANTEES.md.
+//
+// Scenario:
+// 1. Mysis has gone idle after 3 encouragements (no user messages)
+// 2. Commander sends broadcast "Mine iron ore" via QueueBroadcast
+// 3. Broadcast triggers auto-start (QueueBroadcast calls Start() on idle mysis)
+// 4. Counter resets to 0
+// 5. Mysis processes the broadcast and stays active
+//
+// Reference: documentation/architecture/MESSAGE_FORMAT_GUARANTEES.md lines 148-163
+func TestIdleRecoveryOnBroadcast(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
-	stored, err := s.CreateMysis("errored-mysis", "mock", "test-model", 0.7)
+	// Step 1: Create mysis and store
+	stored, err := s.CreateMysis("idle-recovery-test", "mock", "test-model", 0.7)
 	if err != nil {
 		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
-	mock := provider.NewMock("mock", "response")
+	// Use mock provider with no delay for fast test
+	mock := provider.NewMock("mock", "Working on mining iron ore")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	// Set mysis to errored state
+	// Step 2: Simulate idle state (mysis has already gone idle after 3 encouragements)
+	// Set encouragementCount to 3 and transition to idle state
 	mysis.mu.Lock()
-	mysis.state = MysisStateErrored
+	mysis.encouragementCount = 3
+	mysis.state = MysisStateIdle
 	mysis.mu.Unlock()
 
-	// Attempt to send ephemeral message
-	err = mysis.SendEphemeralMessage("Test message", store.MemorySourceDirect)
-
-	if err == nil {
-		t.Fatal("expected error when sending to errored mysis")
+	// Update state in store
+	if err := s.UpdateMysisState(stored.ID, store.MysisStateIdle); err != nil {
+		t.Fatalf("UpdateMysisState() error: %v", err)
 	}
 
-	expectedErrMsg := "mysis errored - press 'r' to relaunch"
-	if !strings.Contains(err.Error(), expectedErrMsg) {
-		t.Errorf("expected error containing %q, got: %v", expectedErrMsg, err)
+	// Verify mysis is in idle state
+	if mysis.State() != MysisStateIdle {
+		t.Fatalf("expected state=idle, got %s", mysis.State())
 	}
-}
 
-// TestSendEphemeralMessage_EmptyContent tests sending empty ephemeral message.
-func TestSendEphemeralMessage_EmptyContent(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
+	// Verify encouragementCount is 3
+	mysis.mu.RLock()
+	count := mysis.encouragementCount
+	mysis.mu.RUnlock()
+	if count != 3 {
+		t.Fatalf("expected encouragementCount=3, got %d", count)
+	}
 
-	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	// Subscribe to events to track state changes
+	events := bus.Subscribe()
+
+	// Step 3: Send broadcast "Mine iron ore" via QueueBroadcast
+	senderID := "commander-mysis-id"
+	err = mysis.QueueBroadcast("Mine iron ore", senderID)
 	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
+		t.Fatalf("QueueBroadcast() error: %v", err)
 	}
 
-	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	// Step 4: Verify mysis auto-starts (state = running)
+	// QueueBroadcast should have called Start() since mysis was idle
+	autoStartTimeout := time.After(2 * time.Second)
+	autoStarted := false
 
-	// Send empty ephemeral message (should be allowed - LLM can handle it)
-	err = mysis.SendEphemeralMessage("", store.MemorySourceDirect)
-
-	// Empty content should not cause an error - the LLM will receive it
-	if err != nil {
-		t.Errorf("unexpected error for empty content: %v", err)
-	}
-}
-
-// TestSendEphemeralMessage_MCPListToolsError tests handling of MCP tool listing errors.
-func TestSendEphemeralMessage_MCPListToolsError(t *testing.T) {
-	// Skipped: Uses undefined mcp.FailingMockClient - needs proper mock implementation
-	t.Skip("TODO: Implement proper MCP error mock")
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
-	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
-	if err != nil {
-		t.Fatalf("CreateMysis() error: %v", err)
-	}
-
-	// Use a mock provider that returns quickly
-	_ = provider.NewMock("mock", "response")
-
-	// Create a failing MCP proxy - COMMENTED OUT: mcp.FailingMockClient doesn't exist
-	// failingMCP := &mcp.FailingMockClient{Err: errors.New("connection refused")}
-
-	_ = NewMysis(stored.ID, stored.Name, stored.CreatedAt, provider.NewMock("mock", "response"), s, bus)
-	// mysis.mcp = failingMCP
-
-	// Send ephemeral message - should handle MCP error gracefully
-	// err = mysis.SendEphemeralMessage("Test", store.MemorySourceDirect)
-
-	// Should complete successfully even with MCP error (continues without tools)
-	if err == nil {
-		// Wait for async response processing
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// Check that mysis published an error event
-	select {
-	case event := <-bus.Subscribe():
-		if event.Type != EventMysisError {
-			t.Errorf("expected EventMysisError, got %v", event.Type)
+waitForAutoStart:
+	for {
+		select {
+		case e := <-events:
+			if e.Type == EventMysisStateChanged {
+				if e.State != nil && e.State.NewState == MysisStateRunning {
+					autoStarted = true
+					break waitForAutoStart
+				}
+			}
+		case <-autoStartTimeout:
+			// Check if we're already running (event may have been consumed earlier)
+			if mysis.State() == MysisStateRunning {
+				autoStarted = true
+				break waitForAutoStart
+			}
+			t.Fatalf("timeout waiting for mysis to auto-start on broadcast (current state: %s)", mysis.State())
 		}
-		if event.Error == nil {
-			t.Error("expected error data in event")
-		} else if !strings.Contains(event.Error.Error, "Failed to load tools") {
-			t.Errorf("expected 'Failed to load tools' error, got: %v", event.Error.Error)
+	}
+
+	if !autoStarted {
+		t.Error("mysis did not auto-start on broadcast")
+	}
+
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running after broadcast auto-start, got %s", mysis.State())
+	}
+
+	// Step 5: Verify encouragementCount reset to 0
+	mysis.mu.RLock()
+	count = mysis.encouragementCount
+	mysis.mu.RUnlock()
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 after broadcast, got %d", count)
+	}
+
+	// Step 6: Wait for LLM response
+	// Mysis should process the broadcast and generate a response
+	responseTimeout := time.After(2 * time.Second)
+	gotResponse := false
+
+waitForResponse:
+	for {
+		select {
+		case e := <-events:
+			if e.Type == EventMysisResponse {
+				if e.Message != nil {
+					gotResponse = true
+					break waitForResponse
+				}
+			}
+		case <-responseTimeout:
+			// Not fatal - response may have already been processed
+			break waitForResponse
 		}
-	case <-time.After(1 * time.Second):
-		t.Error("timeout waiting for error event")
+	}
+
+	if !gotResponse {
+		t.Log("Warning: Did not receive expected LLM response event (may have been processed quickly)")
+	}
+
+	// Step 7: Verify mysis is running (not idle again)
+	if mysis.State() != MysisStateRunning {
+		t.Errorf("expected state=running after processing broadcast, got %s", mysis.State())
+	}
+
+	// Verify broadcast was stored in database
+	memories, err := s.GetMemories(stored.ID)
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
+	}
+
+	foundBroadcast := false
+	for _, m := range memories {
+		if m.Source == store.MemorySourceBroadcast && m.Content == "Mine iron ore" && m.SenderID == senderID {
+			foundBroadcast = true
+			break
+		}
+	}
+
+	if !foundBroadcast {
+		t.Error("broadcast message was not stored in database")
+	}
+
+	// Step 8: Stop mysis
+	if err := mysis.Stop(); err != nil {
+		t.Fatalf("Stop() error: %v", err)
+	}
+
+	if mysis.State() != MysisStateStopped {
+		t.Errorf("expected state=stopped after Stop(), got %s", mysis.State())
 	}
 }

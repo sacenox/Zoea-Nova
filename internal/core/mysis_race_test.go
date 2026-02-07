@@ -34,27 +34,12 @@ func TestStopWithMultipleInFlightMessages(t *testing.T) {
 	mock := provider.NewMock("mock", "ok").SetDelay(2 * time.Second)
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	// Start the mysis
+	// Start the mysis (will add system prompt automatically)
+	// Note: Myses don't have autonomous loops - they only respond to messages
 	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
 
-	// Wait for initial autonomous turn to complete
-	events := bus.Subscribe()
-	timeout := time.After(5 * time.Second)
-	for {
-		select {
-		case e := <-events:
-			if e.Type == EventMysisResponse {
-				// Initial turn complete, proceed to test
-				goto testStart
-			}
-		case <-timeout:
-			t.Fatal("timeout waiting for initial autonomous turn")
-		}
-	}
-
-testStart:
 	// Track SendMessage completion and errors
 	var wg sync.WaitGroup
 	msgErrors := make([]error, 3)
@@ -141,25 +126,12 @@ func TestStopWithMultipleInFlightMessages_Shorter(t *testing.T) {
 	mock := provider.NewMock("mock", "ok").SetDelay(200 * time.Millisecond)
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
+	// Start the mysis
+	// Note: Myses don't have autonomous loops - they only respond to messages
 	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
 	}
 
-	// Wait for initial turn
-	events := bus.Subscribe()
-	timeout := time.After(2 * time.Second)
-	for {
-		select {
-		case e := <-events:
-			if e.Type == EventMysisResponse {
-				goto shortTestStart
-			}
-		case <-timeout:
-			t.Fatal("timeout waiting for initial autonomous turn")
-		}
-	}
-
-shortTestStart:
 	var wg sync.WaitGroup
 	msgErrors := make([]error, 5) // Test with 5 messages
 

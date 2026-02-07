@@ -21,10 +21,10 @@ func TestMergeSystemMessagesOpenAI_MultipleSystemMessages(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 merged system + 2 non-system + 1 continuation = 4 messages
-	// (Continuation added because conversation ends with assistant message)
-	if len(result) != 4 {
-		t.Fatalf("expected 4 messages, got %d", len(result))
+	// Should have: 1 merged system + 2 non-system = 3 messages
+	// Provider only converts types, doesn't add synthetic messages
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(result))
 	}
 
 	// First message should be merged system message
@@ -43,15 +43,11 @@ func TestMergeSystemMessagesOpenAI_MultipleSystemMessages(t *testing.T) {
 	if result[2].Role != "assistant" || result[2].Content != "Hi!" {
 		t.Errorf("expected assistant message 'Hi!', got role=%s content=%q", result[2].Role, result[2].Content)
 	}
-
-	// Last should be continuation prompt added by workaround
-	if result[3].Role != "user" || result[3].Content != "Continue." {
-		t.Errorf("expected continuation prompt, got role=%s content=%q", result[3].Role, result[3].Content)
-	}
 }
 
 // TestMergeSystemMessagesOpenAI_OnlySystemMessages tests that when only
-// system messages exist, a fallback "Begin." user message is added.
+// system messages exist, they are merged without adding a fallback user message.
+// (User message is added by getContextMemories, not provider layer)
 func TestMergeSystemMessagesOpenAI_OnlySystemMessages(t *testing.T) {
 	messages := []openai.ChatCompletionMessage{
 		{Role: "system", Content: "You are helpful."},
@@ -60,9 +56,9 @@ func TestMergeSystemMessagesOpenAI_OnlySystemMessages(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 merged system + 1 fallback user = 2 messages
-	if len(result) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result))
+	// Should have: 1 merged system message only
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(result))
 	}
 
 	// First message should be merged system
@@ -72,14 +68,6 @@ func TestMergeSystemMessagesOpenAI_OnlySystemMessages(t *testing.T) {
 	expected := "You are helpful.\n\nBe concise."
 	if result[0].Content != expected {
 		t.Errorf("expected content=%q, got %q", expected, result[0].Content)
-	}
-
-	// Second message should be fallback user message
-	if result[1].Role != "user" {
-		t.Errorf("expected second role=user, got %s", result[1].Role)
-	}
-	if result[1].Content != "Begin." {
-		t.Errorf("expected content='Begin.', got %q", result[1].Content)
 	}
 }
 
@@ -93,21 +81,16 @@ func TestMergeSystemMessagesOpenAI_NoSystemMessages(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 2 messages + 1 continuation = 3 messages
-	// (Continuation added because conversation ends with assistant message)
-	if len(result) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(result))
+	// Should have: 2 messages unchanged
+	// Provider only converts types, doesn't add synthetic messages
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
 	}
 	if result[0].Role != "user" || result[0].Content != "Hello" {
 		t.Errorf("expected user message unchanged, got role=%s content=%q", result[0].Role, result[0].Content)
 	}
 	if result[1].Role != "assistant" || result[1].Content != "Hi!" {
 		t.Errorf("expected assistant message unchanged, got role=%s content=%q", result[1].Role, result[1].Content)
-	}
-
-	// Last should be continuation prompt added by workaround
-	if result[2].Role != "user" || result[2].Content != "Continue." {
-		t.Errorf("expected continuation prompt, got role=%s content=%q", result[2].Role, result[2].Content)
 	}
 }
 
@@ -125,10 +108,10 @@ func TestMergeSystemMessagesOpenAI_PreservesConversation(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 system (merged) + 4 conversation messages + 1 continuation = 6 total
-	// (Continuation added because conversation ends with assistant message)
-	if len(result) != 6 {
-		t.Errorf("expected 6 messages, got %d", len(result))
+	// Should have: 1 system (merged) + 4 conversation messages = 5 total
+	// Provider only converts types, doesn't add synthetic messages
+	if len(result) != 5 {
+		t.Errorf("expected 5 messages, got %d", len(result))
 	}
 
 	// First should be merged system
@@ -152,11 +135,6 @@ func TestMergeSystemMessagesOpenAI_PreservesConversation(t *testing.T) {
 	}
 	if result[4].Role != "assistant" || result[4].Content != "I'm good" {
 		t.Errorf("assistant message 2 not preserved, got role=%s content=%q", result[4].Role, result[4].Content)
-	}
-
-	// Last should be continuation prompt added by workaround
-	if result[5].Role != "user" || result[5].Content != "Continue." {
-		t.Errorf("expected continuation prompt, got role=%s content=%q", result[5].Role, result[5].Content)
 	}
 }
 
@@ -182,10 +160,10 @@ func TestMergeSystemMessagesOpenAI_SystemFirst(t *testing.T) {
 
 	result := mergeSystemMessagesOpenAI(messages)
 
-	// Should have: 1 system + 2 non-system + 1 continuation = 4 messages
-	// (Continuation added because conversation ends with assistant message)
-	if len(result) != 4 {
-		t.Fatalf("expected 4 messages, got %d", len(result))
+	// Should have: 1 system + 2 non-system = 3 messages
+	// Provider only converts types, doesn't add synthetic messages
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(result))
 	}
 
 	// System should be first
@@ -196,17 +174,12 @@ func TestMergeSystemMessagesOpenAI_SystemFirst(t *testing.T) {
 		t.Errorf("expected content='You are helpful.', got %q", result[0].Content)
 	}
 
-	// Non-system messages should follow
+	// Non-system messages should follow in original order
 	if result[1].Role != "user" {
 		t.Errorf("expected second role=user, got %s", result[1].Role)
 	}
 	if result[2].Role != "assistant" {
 		t.Errorf("expected third role=assistant, got %s", result[2].Role)
-	}
-
-	// Last should be continuation prompt added by workaround
-	if result[3].Role != "user" || result[3].Content != "Continue." {
-		t.Errorf("expected continuation prompt, got role=%s content=%q", result[3].Role, result[3].Content)
 	}
 }
 

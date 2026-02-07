@@ -24,12 +24,12 @@ const ContinuePrompt = `What's your next move?
 
 Remember: Always call get_notifications at the end of every turn.`
 
-// ContinuePromptFirm is sent on the second nudge attempt (Level 2 - firmer).
+// ContinuePromptFirm is sent on the second encouragement attempt (Level 2 - firmer).
 const ContinuePromptFirm = `You need to respond. What action will you take?
 
 Remember: Always call get_notifications at the end of every turn.`
 
-// ContinuePromptUrgent is sent on the third+ nudge attempt (Level 3 - urgent).
+// ContinuePromptUrgent is sent on the third encouragement attempt (Level 3 - urgent).
 const ContinuePromptUrgent = `URGENT: Respond immediately or you will be stopped.
 
 Remember: Always call get_notifications at the end of every turn.`
@@ -47,10 +47,12 @@ const MaxContextMessages = 20
 // LLMRequestTimeout caps a single LLM/tool turn duration.
 const LLMRequestTimeout = 5 * time.Minute
 
-// IdleNudgeInterval defines how often to prompt idle myses for next action.
+// IdleNudgeInterval is obsolete - encouragement system is now database-driven via getContextMemories().
+// Kept for backwards compatibility but no longer used in mysis loop.
 const IdleNudgeInterval = 30 * time.Second
 
-// WaitStateNudgeInterval defines how often to prompt myses in wait states.
+// WaitStateNudgeInterval is obsolete - encouragement system is now database-driven via getContextMemories().
+// Kept for backwards compatibility but no longer used in mysis loop.
 const WaitStateNudgeInterval = 2 * time.Minute
 
 // ToolResultDisplayMaxChars limits tool result text shown in the UI.

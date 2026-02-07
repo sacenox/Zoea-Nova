@@ -24,24 +24,10 @@ func TestMysisContextCancellationIntegration(t *testing.T) {
 		}
 		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-		// Start mysis
+		// Start mysis (will add system prompt automatically)
+		// Note: Myses don't have autonomous loops - they only respond to messages
 		if err := m.Start(); err != nil {
 			t.Fatalf("Start() error: %v", err)
-		}
-
-		// Wait for initial autonomous turn
-		events := bus.Subscribe()
-		timeout := time.After(5 * time.Second)
-	waitInitial:
-		for {
-			select {
-			case e := <-events:
-				if e.Type == EventMysisResponse {
-					break waitInitial
-				}
-			case <-timeout:
-				t.Fatal("timeout waiting for initial turn")
-			}
 		}
 
 		// Send message that will take 2 seconds
@@ -110,23 +96,10 @@ func TestMysisContextCancellationIntegration(t *testing.T) {
 		}
 		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-		// Start and wait for initial turn
+		// Start mysis
+		// Note: Myses don't have autonomous loops - they only respond to messages
 		if err := m.Start(); err != nil {
 			t.Fatalf("Start() error: %v", err)
-		}
-
-		events := bus.Subscribe()
-		timeout := time.After(5 * time.Second)
-	waitInitial:
-		for {
-			select {
-			case e := <-events:
-				if e.Type == EventMysisResponse {
-					break waitInitial
-				}
-			case <-timeout:
-				t.Fatal("timeout waiting for initial turn")
-			}
 		}
 
 		// Stop without any in-flight calls

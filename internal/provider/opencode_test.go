@@ -9,8 +9,10 @@ import (
 	"testing"
 )
 
-// TestOpenCode_SystemPromptOnly tests that OpenCode provider adds "Begin." user message
-// when only system prompts are present (OpenAI requirement).
+// TestOpenCode_SystemPromptOnly tests that OpenCode provider handles system-only
+// messages correctly by NOT adding synthetic messages at the provider layer.
+// Synthetic messages like "Continue your mission..." are added by getContextMemories()
+// in the core layer, not by the provider.
 func TestOpenCode_SystemPromptOnly(t *testing.T) {
 	// Setup mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,15 +35,12 @@ func TestOpenCode_SystemPromptOnly(t *testing.T) {
 			t.Errorf("expected first message role=system, got %s", req.Messages[0].Role)
 		}
 
-		// Verify "Begin." user message was added
-		if len(req.Messages) < 2 {
-			t.Fatal("expected 2 messages (system + auto-generated user)")
-		}
-		if req.Messages[1].Role != "user" {
-			t.Errorf("expected second message role=user, got %s", req.Messages[1].Role)
-		}
-		if req.Messages[1].Content != "Begin." {
-			t.Errorf("expected second message content='Begin.', got %q", req.Messages[1].Content)
+		// Provider should NOT add "Begin." or "Continue." messages
+		// Those are added by getContextMemories() in core layer
+		for _, msg := range req.Messages {
+			if msg.Content == "Begin." || msg.Content == "Continue." {
+				t.Errorf("Provider should not add synthetic messages, found: %q", msg.Content)
+			}
 		}
 
 		// Return mock response

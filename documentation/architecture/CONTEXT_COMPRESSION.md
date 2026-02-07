@@ -162,11 +162,11 @@ nudgeMemory := &store.Memory{
 **Key properties:**
 - **NOT stored in database** - Ephemeral automation scaffolding
 - **Counted for circuit breaker** - Nudge counter increments in ticker loop (see `internal/core/mysis.go:1624-1641`)
-- **Escalating prompts** - Content changes based on `nudgeFailCount` to increase urgency:
+- **Escalating prompts** - Content changes based on `encouragementCount` to increase urgency:
   - Attempt 1: "Continue your mission. Check notifications and coordinate with the swarm." (gentle)
   - Attempt 2: "You need to respond. Check your notifications and status." (firm)
   - Attempt 3: "URGENT: Respond immediately. Check your system status." (urgent)
-  - After 3 failures: Mysis transitions to idle state with error "Failed to respond after 3 nudges"
+  - After 3 failures: Mysis transitions to idle state with error "Failed to respond after 3 encouragements"
 - **Escalation intervals** - Nudges sent every 30 seconds for idle myses, 2 minutes for wait states (see `internal/constants/constants.go:69-73`)
 
 ### Nudge Circuit Breaker
@@ -175,10 +175,10 @@ nudgeMemory := &store.Memory{
 // internal/core/mysis.go:1624-1641
 
 if shouldNudge(time.Now()) {
-    nudgeFailCount++
+    encouragementCount++
     
-    if nudgeFailCount >= 3 {
-        setIdle("Failed to respond after 3 nudges")
+    if encouragementCount >= 3 {
+        setIdle("Failed to respond after 3 encouragements")
         return
     }
     

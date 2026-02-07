@@ -70,7 +70,7 @@ func TestCommanderStartStopMysis(t *testing.T) {
 		t.Errorf("expected state=running, got %s", mysis.State())
 	}
 
-	// Give mysis time to process first nudge and wait for next one
+	// Give mysis time to process first turn (triggered by encouragement message)
 	// (otherwise Stop cancels mid-turn and state becomes errored)
 	time.Sleep(150 * time.Millisecond)
 

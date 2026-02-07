@@ -46,8 +46,7 @@ type Mysis struct {
 	lastServerTick         int64
 	lastServerTickAt       time.Time
 	tickDuration           time.Duration
-	nudgeCh                chan struct{}
-	nudgeFailCount         int // Circuit breaker: consecutive nudge failures
+	encouragementCount     int // Counter for consecutive synthetic encouragements (limit: 3 before idle)
 }
 
 type contextStats struct {
@@ -76,7 +75,6 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 		commander:     commander,
 		state:         MysisStateIdle,
 		activityState: ActivityStateIdle,
-		nudgeCh:       make(chan struct{}, 1),
 	}
 }
 
@@ -267,13 +265,14 @@ func (m *Mysis) Start() error {
 	a.lastError = nil
 	a.activityState = ActivityStateIdle
 	a.activityUntil = time.Time{}
+	a.encouragementCount = 0 // Reset encouragement counter when starting/restarting
 	a.ctx = ctx
 	a.cancel = cancel
 	a.mu.Unlock()
 
-	// Add system prompt if this is the first time starting (no memories yet)
-	count, err := a.store.CountMemories(a.id)
-	if err == nil && count == 0 {
+	// Add system prompt if it doesn't exist yet
+	system, err := a.store.GetSystemMemory(a.id)
+	if err != nil || system == nil {
 		systemPrompt := a.buildSystemPrompt()
 		a.store.AddMemory(a.id, store.MemoryRoleSystem, store.MemorySourceSystem, systemPrompt, "", "")
 	}
@@ -287,7 +286,7 @@ func (m *Mysis) Start() error {
 	}
 
 	// Start the processing goroutine (only after all setup succeeded)
-	// Initial nudge is sent from run() loop, not here, to avoid async race
+	// Initial encouragement message (if needed) is added by getContextMemories() in run() loop
 	go a.run(ctx)
 
 	return nil
@@ -382,19 +381,43 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		role = store.MemoryRoleSystem
 	}
 
-	// Store the message
-	if err := a.store.AddMemory(a.id, role, source, content, "", senderID); err != nil {
-		return fmt.Errorf("store message: %w", err)
+	// Store the message (skip empty internal trigger messages from run loop)
+	if content != "" {
+		if err := a.store.AddMemory(a.id, role, source, content, "", senderID); err != nil {
+			return fmt.Errorf("store message: %w", err)
+		}
+
+		// Reset encouragement counter - we have a real user message now
+		a.mu.Lock()
+		a.encouragementCount = 0
+		a.mu.Unlock()
+
+		// Emit message event
+		a.bus.Publish(Event{
+			Type:      EventMysisMessage,
+			MysisID:   a.id,
+			MysisName: a.name,
+			Message:   &MessageData{Role: string(role), Content: content},
+			Timestamp: time.Now(),
+		})
 	}
 
-	// Emit message event
-	a.bus.Publish(Event{
-		Type:      EventMysisMessage,
-		MysisID:   a.id,
-		MysisName: a.name,
-		Message:   &MessageData{Role: string(role), Content: content},
-		Timestamp: time.Now(),
-	})
+	// If mysis is idle, auto-start it (direct messages should wake idle myses)
+	// Note: Empty content means this is an internal trigger from run() loop
+	if state == MysisStateIdle && content != "" {
+		if err := a.Start(); err != nil {
+			// Log warning but don't fail the message send
+			// The message is already stored and will be processed when manually started
+			log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to auto-start idle mysis on direct message")
+		}
+		// Return early - run() loop will process the message
+		return nil
+	}
+
+	// If this is an internal trigger but mysis is not running, skip processing
+	if content == "" && state != MysisStateRunning {
+		return nil
+	}
 
 	// Create context for the entire conversation turn
 	a.mu.RLock()
@@ -460,6 +483,17 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		if err != nil {
 			a.setError(err)
 			return fmt.Errorf("get memories: %w", err)
+		}
+
+		// Check if encouragement limit reached (getContextMemories increments counter)
+		a.mu.RLock()
+		count := a.encouragementCount
+		a.mu.RUnlock()
+
+		if count >= 3 {
+			// No real user messages for 3 consecutive iterations - go idle
+			a.setIdle("No user messages after 3 encouragements")
+			return nil
 		}
 
 		memoryStats := a.computeMemoryStats(memories)
@@ -634,11 +668,6 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			return fmt.Errorf("store response: %w", err)
 		}
 
-		// Reset nudge failure counter on successful response
-		a.mu.Lock()
-		a.nudgeFailCount = 0
-		a.mu.Unlock()
-
 		// Signal network idle
 		a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
@@ -666,289 +695,6 @@ func (m *Mysis) SendMessage(content string, source store.MemorySource) error {
 	return a.SendMessageFrom(content, source, "")
 }
 
-// SendEphemeralMessage sends a message to the mysis that is NOT persisted to the database.
-// The LLM response to the message IS still persisted. Used for nudges/automation scaffolding.
-func (m *Mysis) SendEphemeralMessage(content string, source store.MemorySource) error {
-	a := m
-	a.turnMu.Lock()
-	defer a.turnMu.Unlock()
-
-	a.mu.RLock()
-	state := a.state
-	p := a.provider
-	mcpProxy := a.mcp
-	a.mu.RUnlock()
-
-	if err := validateCanAcceptMessage(state); err != nil {
-		return err
-	}
-
-	// NOTE: We skip storing the ephemeral message to the database
-	// Unlike SendMessageFrom, we don't call store.AddMemory here
-
-	// Create context for the entire conversation turn
-	a.mu.RLock()
-	parentCtx := a.ctx
-	a.mu.RUnlock()
-
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-
-	ctx, cancel := context.WithTimeout(parentCtx, constants.LLMRequestTimeout)
-	defer cancel()
-
-	// Get available tools from MCP proxy
-	var tools []provider.Tool
-	if mcpProxy != nil {
-		mcpTools, err := mcpProxy.ListTools(ctx)
-		if err != nil {
-			// Log error but continue - mysis can still chat without tools
-			a.publishCriticalEvent(Event{
-				Type:      EventMysisError,
-				MysisID:   a.id,
-				MysisName: a.name,
-				Error:     &ErrorData{Error: fmt.Sprintf("Failed to load tools: %v", err)},
-				Timestamp: time.Now(),
-			})
-		} else {
-			tools = make([]provider.Tool, len(mcpTools))
-			for i, t := range mcpTools {
-				tools[i] = provider.Tool{
-					Name:        t.Name,
-					Description: t.Description,
-					Parameters:  t.InputSchema,
-				}
-			}
-		}
-	} else {
-		a.publishCriticalEvent(Event{
-			Type:      EventMysisError,
-			MysisID:   a.id,
-			MysisName: a.name,
-			Error:     &ErrorData{Error: "MCP proxy not configured - no tools available"},
-			Timestamp: time.Now(),
-		})
-	}
-
-	// Loop: keep calling LLM until we get a final text response
-	for iteration := 0; iteration < constants.MaxToolIterations; iteration++ {
-		// Get recent conversation history (keeps context small for faster inference)
-		memories, err := a.getContextMemories()
-		if err != nil {
-			a.setError(err)
-			return fmt.Errorf("get memories: %w", err)
-		}
-
-		memoryStats := a.computeMemoryStats(memories)
-		log.Debug().
-			Str("mysis_id", a.id).
-			Str("mysis_name", a.name).
-			Str("stage", "context_memories").
-			Int("memory_count", memoryStats.MemoryCount).
-			Int("message_count", 0).
-			Int("content_bytes", memoryStats.ContentBytes).
-			Int("reasoning_bytes", memoryStats.ReasoningBytes).
-			Interface("role_counts", memoryStats.RoleCounts).
-			Interface("source_counts", memoryStats.SourceCounts).
-			Int("tool_call_count", 0).
-			Msg("Context stats (ephemeral)")
-
-		// Convert to provider messages
-		messages := a.memoriesToMessages(memories)
-
-		// Add ephemeral message to the end (in-memory only, not persisted)
-		role := store.MemoryRoleUser
-		if source == store.MemorySourceSystem {
-			role = store.MemoryRoleSystem
-		}
-		messages = append(messages, provider.Message{
-			Role:    string(role),
-			Content: content,
-		})
-
-		messageStats := a.computeMessageStats(messages)
-		log.Debug().
-			Str("mysis_id", a.id).
-			Str("mysis_name", a.name).
-			Str("stage", "messages_converted").
-			Int("memory_count", memoryStats.MemoryCount).
-			Int("message_count", messageStats.MessageCount).
-			Int("content_bytes", messageStats.ContentBytes).
-			Int("reasoning_bytes", memoryStats.ReasoningBytes).
-			Interface("role_counts", memoryStats.RoleCounts).
-			Interface("source_counts", memoryStats.SourceCounts).
-			Int("tool_call_count", messageStats.ToolCallCount).
-			Msg("Context stats (ephemeral)")
-
-		// Signal LLM activity start
-		a.bus.Publish(Event{
-			Type:      EventNetworkLLM,
-			MysisID:   a.id,
-			MysisName: a.name,
-			Timestamp: time.Now(),
-		})
-		log.Debug().
-			Str("mysis_id", a.id).
-			Str("mysis_name", a.name).
-			Str("stage", "before_llm_call").
-			Int("memory_count", memoryStats.MemoryCount).
-			Int("message_count", messageStats.MessageCount).
-			Int("content_bytes", messageStats.ContentBytes).
-			Int("reasoning_bytes", memoryStats.ReasoningBytes).
-			Interface("role_counts", memoryStats.RoleCounts).
-			Interface("source_counts", memoryStats.SourceCounts).
-			Int("tool_call_count", messageStats.ToolCallCount).
-			Msg("Context stats (ephemeral)")
-
-		// Set activity state to indicate LLM call in progress
-		a.setActivity(ActivityStateLLMCall, time.Time{})
-
-		// Get response from provider
-		var response *provider.ChatResponse
-		if len(tools) > 0 {
-			response, err = p.ChatWithTools(ctx, messages, tools)
-		} else {
-			// No tools available, use simple chat
-			text, chatErr := p.Chat(ctx, messages)
-			if chatErr != nil {
-				err = chatErr
-			} else {
-				response = &provider.ChatResponse{Content: text}
-			}
-		}
-
-		// Clear LLM activity state after call completes (success or failure)
-		a.setActivity(ActivityStateIdle, time.Time{})
-
-		if err != nil {
-			log.Error().
-				Str("mysis", a.name).
-				Str("provider", p.Name()).
-				Err(err).
-				Msg("Provider returned error (ephemeral)")
-			a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
-			a.setError(err)
-			return fmt.Errorf("provider chat: %w", err)
-		}
-
-		if response.Reasoning != "" {
-			log.Debug().Str("mysis", a.name).Int("reasoning_len", len(response.Reasoning)).Msg("LLM reasoning captured (ephemeral)")
-		}
-
-		// If we have tool calls, execute them
-		if len(response.ToolCalls) > 0 {
-			// Store the assistant's tool call request
-			toolCallJSON := a.formatToolCallsForStorage(response.ToolCalls)
-			if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, toolCallJSON, response.Reasoning, ""); err != nil {
-				a.setError(err)
-				return fmt.Errorf("store tool call: %w", err)
-			}
-
-			// Emit event showing which tools are being called
-			toolNames := make([]string, len(response.ToolCalls))
-			for i, tc := range response.ToolCalls {
-				toolNames[i] = tc.Name
-			}
-			a.bus.Publish(Event{
-				Type:      EventMysisMessage,
-				MysisID:   a.id,
-				MysisName: a.name,
-				Message:   &MessageData{Role: "assistant", Content: fmt.Sprintf("Calling tools: %s", strings.Join(toolNames, ", "))},
-				Timestamp: time.Now(),
-			})
-
-			// Execute each tool call
-			for _, tc := range response.ToolCalls {
-				// Signal MCP activity
-				a.bus.Publish(Event{
-					Type:      EventNetworkMCP,
-					MysisID:   a.id,
-					MysisName: a.name,
-					Timestamp: time.Now(),
-				})
-
-				// Set activity state to indicate MCP call in progress
-				a.setActivity(ActivityStateMCPCall, time.Time{})
-
-				result, execErr := a.executeToolCall(ctx, mcpProxy, tc)
-
-				// Clear MCP activity state after call completes
-				a.setActivity(ActivityStateIdle, time.Time{})
-
-				a.updateActivityFromToolResult(result, execErr)
-
-				// Store the tool result
-				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
-				if err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, "", ""); err != nil {
-					a.setError(err)
-					return fmt.Errorf("store tool result: %w", err)
-				}
-
-				// Emit tool result event
-				a.bus.Publish(Event{
-					Type:      EventMysisMessage,
-					MysisID:   a.id,
-					MysisName: a.name,
-					Message:   &MessageData{Role: "tool", Content: fmt.Sprintf("[%s] %s", tc.Name, a.formatToolResultDisplay(result, execErr))},
-					Timestamp: time.Now(),
-				})
-
-				if execErr != nil && isToolTimeout(execErr) {
-					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
-					a.setError(execErr)
-					return fmt.Errorf("tool call timed out: %w", execErr)
-				}
-
-				if execErr != nil && isToolRetryExhausted(execErr) {
-					a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
-					a.setError(execErr)
-					return fmt.Errorf("tool call failed after retries: %w", execErr)
-				}
-			}
-
-			// Continue loop to get next LLM response
-			continue
-		}
-
-		// No tool calls - we have a final response
-		finalResponse := response.Content
-		if finalResponse == "" && response.Reasoning == "" {
-			finalResponse = constants.FallbackLLMResponse
-		}
-
-		// Store the assistant response
-		if err := a.store.AddMemory(a.id, store.MemoryRoleAssistant, store.MemorySourceLLM, finalResponse, response.Reasoning, ""); err != nil {
-			a.setError(err)
-			return fmt.Errorf("store response: %w", err)
-		}
-
-		// Reset nudge failure counter on successful response
-		a.mu.Lock()
-		a.nudgeFailCount = 0
-		a.mu.Unlock()
-
-		// Signal network idle
-		a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
-
-		// Emit response event
-		a.bus.Publish(Event{
-			Type:      EventMysisResponse,
-			MysisID:   a.id,
-			MysisName: a.name,
-			Message:   &MessageData{Role: "assistant", Content: finalResponse},
-			Timestamp: time.Now(),
-		})
-
-		return nil
-	}
-
-	// Signal network idle on max iterations
-	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
-
-	return fmt.Errorf("max tool iterations (%d) exceeded", constants.MaxToolIterations)
-}
-
 // QueueBroadcast stores a broadcast message and triggers async processing.
 // Unlike SendMessage, this does not block waiting for the mysis to process.
 // Returns immediately after storing the message in the database.
@@ -968,6 +714,11 @@ func (m *Mysis) QueueBroadcast(content string, senderID string) error {
 		return fmt.Errorf("store broadcast: %w", err)
 	}
 
+	// Reset encouragement counter - we have a real user message now
+	a.mu.Lock()
+	a.encouragementCount = 0
+	a.mu.Unlock()
+
 	// Emit message event
 	a.bus.Publish(Event{
 		Type:      EventMysisMessage,
@@ -983,15 +734,6 @@ func (m *Mysis) QueueBroadcast(content string, senderID string) error {
 			// Log warning but don't fail the broadcast
 			// The message is already stored and will be processed when manually started
 			log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to auto-start idle mysis on broadcast")
-		}
-	} else {
-		// Mysis is running - nudge it to process the new message
-		select {
-		case a.nudgeCh <- struct{}{}:
-			// Nudge sent successfully
-		default:
-			// Channel full or mysis not listening, that's OK
-			// The mysis will pick up the message on its next turn
 		}
 	}
 
@@ -1404,7 +1146,7 @@ func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
 //  3. Current turn - ALL memories from the last user prompt onward (uncompressed)
 //
 // Turn Boundary:
-//   - "Current turn" starts at the most recent user-initiated prompt (direct message, broadcast, or nudge)
+//   - "Current turn" starts at the most recent user-initiated prompt (direct message, broadcast, or synthetic encouragement)
 //   - Everything from that prompt forward is included in full to preserve multi-step tool reasoning
 //   - Historical turns (before current turn boundary) are compressed to save context
 //
@@ -1458,15 +1200,14 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		currentTurnMemories := allMemories[turnBoundaryIdx:]
 		result = append(result, currentTurnMemories...)
 	} else {
-		// No user prompt found (autonomous nudge-driven mysis)
+		// No user prompt found - add synthetic encouragement message
 		// Include recent tool loop to maintain conversation continuity
 		historicalToolLoop := m.extractLatestToolLoop(allMemories)
 		if len(historicalToolLoop) > 0 {
 			result = append(result, historicalToolLoop...)
 		}
 
-		// Then add synthetic nudge
-		// Note: Nudge counter increment happens in caller (handleLLMResponse)
+		// Then add synthetic encouragement message
 		nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
 		nudgeMemory := &store.Memory{
 			Role:      store.MemoryRoleUser,
@@ -1476,6 +1217,21 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 			CreatedAt: time.Now(),
 		}
 		result = append(result, nudgeMemory)
+
+		// Increment encouragement counter since we added synthetic message
+		m.mu.Lock()
+		m.encouragementCount++
+		count := m.encouragementCount
+		m.mu.Unlock()
+
+		// If 3 encouragements sent, prepare to idle (will be checked in loop)
+		if count >= 3 {
+			// Store that we hit limit - the loop will handle state transition
+			log.Warn().
+				Str("mysis", m.name).
+				Int("count", count).
+				Msg("Encouragement limit reached - mysis should idle")
+		}
 	}
 
 	return result, nil
@@ -1654,6 +1410,12 @@ func (m *Mysis) isSnapshotTool(toolName string) bool {
 }
 
 // run is the mysis main processing loop.
+// Processes one initial turn after Start(), then waits for external messages.
+// According to MESSAGE_FORMAT_GUARANTEES.md lines 100-121:
+// - Iteration 1: getContextMemories() adds synthetic, counter=1, LLM responds
+// - Iteration 2: Still no user message, synthetic added, counter=2, LLM responds
+// - Iteration 3: Still no user message, synthetic added, counter=3, transitions to idle
+// External messages (broadcast/direct) call SendMessageFrom which handles subsequent turns.
 func (m *Mysis) run(ctx context.Context) {
 	a := m
 	// Signal goroutine completion when exiting
@@ -1661,69 +1423,28 @@ func (m *Mysis) run(ctx context.Context) {
 		defer a.commander.wg.Done()
 	}
 
-	// Send initial nudge immediately to start autonomy
-	// This happens inside run() to avoid async race in Start()
-	select {
-	case a.nudgeCh <- struct{}{}:
-	default:
+	// Process one initial turn using existing SendMessageFrom infrastructure
+	// Use empty content - getContextMemories() will add synthetic encouragement if needed
+	// This reuses all the complex LLM loop logic, tool calling, error handling, etc.
+	if err := a.SendMessageFrom("", store.MemorySourceSystem, ""); err != nil {
+		log.Debug().Err(err).Str("mysis", a.name).Msg("Error processing initial turn")
+		// Error already handled by SendMessageFrom -> setError()
+		return
 	}
 
-	// Ticker to nudge the mysis if it's idle
-	ticker := time.NewTicker(constants.IdleNudgeInterval)
-	defer ticker.Stop()
+	// Check if we transitioned to idle during the initial turn
+	a.mu.RLock()
+	state := a.state
+	a.mu.RUnlock()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Only nudge if the mysis is running and not already in a turn
-			a.mu.RLock()
-			isRunning := a.state == MysisStateRunning
-			a.mu.RUnlock()
-
-			if isRunning && a.shouldNudge(time.Now()) {
-				// Only increment nudge counter if no turn is currently in progress
-				// This prevents counting nudges while the LLM is still processing a previous nudge
-				if a.turnMu.TryLock() {
-					a.turnMu.Unlock()
-
-					// Circuit breaker: increment failure count before sending nudge
-					// This counts how many times the ticker has fired while mysis appears idle
-					a.mu.Lock()
-					a.nudgeFailCount++
-					failCount := a.nudgeFailCount
-					a.mu.Unlock()
-
-					// If we've failed 3 times, transition to error state
-					if failCount >= 3 {
-						a.setIdle("Failed to respond after 3 nudges")
-						return
-					}
-
-					select {
-					case a.nudgeCh <- struct{}{}:
-					default:
-					}
-				}
-				// If turn is in progress, skip this nudge tick (LLM is still working)
-			}
-		case <-a.nudgeCh:
-			if !a.turnMu.TryLock() {
-				continue
-			}
-			a.turnMu.Unlock()
-
-			// Get current nudge attempt count for escalation
-			a.mu.RLock()
-			attemptCount := a.nudgeFailCount
-			a.mu.RUnlock()
-
-			// Send nudge as ephemeral user message (not persisted to DB, only sent to LLM)
-			// Nudges are automation scaffolding, not conversation history
-			go a.SendEphemeralMessage(a.buildContinuePrompt(attemptCount), store.MemorySourceDirect)
-		}
+	if state == MysisStateIdle {
+		// Mysis went idle (3 encouragements reached or other reason)
+		return
 	}
+
+	// Wait for context cancellation
+	// External messages call SendMessageFrom directly, which handles its own turn processing
+	<-ctx.Done()
 }
 
 // buildSystemPrompt creates the system prompt with the latest swarm broadcast injected.
@@ -1760,104 +1481,6 @@ Follow swarm directives. Coordinate your actions with the swarm's goals.`,
 		broadcast.Content)
 
 	return strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
-}
-
-func (m *Mysis) buildContinuePrompt(attemptCount int) string {
-	a := m
-
-	// Select base message based on escalation level
-	var base string
-	switch {
-	case attemptCount >= 2:
-		base = constants.ContinuePromptUrgent
-	case attemptCount == 1:
-		base = constants.ContinuePromptFirm
-	default:
-		base = constants.ContinuePrompt
-	}
-
-	reminders := a.detectDriftReminders()
-	if len(reminders) == 0 {
-		return base
-	}
-
-	var builder strings.Builder
-	builder.WriteString(base)
-	builder.WriteString("\n\nDRIFT REMINDERS:\n")
-	for _, reminder := range reminders {
-		builder.WriteString("- ")
-		builder.WriteString(reminder)
-		builder.WriteString("\n")
-	}
-	return strings.TrimRight(builder.String(), "\n")
-}
-
-func (m *Mysis) detectDriftReminders() []string {
-	a := m
-	if a.store == nil {
-		return nil
-	}
-
-	memories, err := a.store.GetRecentMemories(a.id, constants.ContinuePromptDriftLookback)
-	if err != nil {
-		return nil
-	}
-
-	if hasRealTimeReference(memories) {
-		return []string{"Avoid real-world time references. Use game ticks from tool results (current_tick, arrival_tick, cooldown_ticks)."}
-	}
-
-	return nil
-}
-
-func hasRealTimeReference(memories []*store.Memory) bool {
-	keywords := []string{
-		"real time",
-		"real-time",
-		"real world",
-		"real-world",
-		"irl",
-		"utc",
-		"minute",
-		"minutes",
-		"hour",
-		"hours",
-		"second",
-		"seconds",
-	}
-
-	for _, memory := range memories {
-		switch memory.Role {
-		case store.MemoryRoleUser, store.MemoryRoleAssistant:
-			content := strings.ToLower(memory.Content)
-			for _, keyword := range keywords {
-				if strings.Contains(content, keyword) {
-					return true
-				}
-			}
-		}
-	}
-
-	return false
-}
-
-func (m *Mysis) shouldNudge(now time.Time) bool {
-	a := m
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.activityState == ActivityStateTraveling || a.activityState == ActivityStateCooldown {
-		if !a.activityUntil.IsZero() {
-			if now.Before(a.activityUntil) {
-				// Activity not finished yet - don't nudge
-				return false
-			}
-			// Activity finished - transition to idle
-			a.activityState = ActivityStateIdle
-			a.activityUntil = time.Time{}
-		}
-	}
-	return true
 }
 
 func (m *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) {

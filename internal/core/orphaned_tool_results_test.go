@@ -316,7 +316,7 @@ func TestRemoveOrphanedToolCalls_WithOrphanedCalls(t *testing.T) {
 // TestLoopContextSlice tests the new loop-based context composition.
 // According to the loop context composition design, getContextMemories should return:
 // - System prompt
-// - Selected prompt source (commander direct → last commander broadcast → last swarm broadcast → nudge)
+// - Selected prompt source (commander direct → last commander broadcast → last swarm broadcast → synthetic encouragement)
 // - ONLY the most recent tool-call message and its tool results
 //
 // This test creates multiple tool loops and verifies that older loops are excluded.

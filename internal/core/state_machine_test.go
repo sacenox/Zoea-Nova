@@ -254,7 +254,7 @@ func TestStateTransition_Running_To_Errored(t *testing.T) {
 }
 
 // TestStateTransition_Running_To_Idle tests the running → idle transition.
-// Trigger: nudge breaker (simulated)
+// Trigger: 3-encouragement limit (simulated)
 // Expected: State transitions to Idle, LastError is nil
 func TestStateTransition_Running_To_Idle(t *testing.T) {
 	// Known issue: setIdle() doesn't stop the loop goroutine, causing test to hang.
@@ -274,8 +274,8 @@ func TestStateTransition_Running_To_Idle(t *testing.T) {
 		t.Fatalf("Start() error: %v", err)
 	}
 
-	// Simulate nudge breaker
-	mysis.setIdle("Failed to respond after 3 nudges")
+	// Simulate 3-encouragement limit reached
+	mysis.setIdle("No user messages after 3 encouragements")
 
 	// Verify idle state
 	if state := mysis.State(); state != MysisStateIdle {

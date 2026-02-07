@@ -77,7 +77,7 @@ func TestStopWithRealOllamaProvider(t *testing.T) {
 
 // TestStopDuringRealLLMCall tests stopping DURING an active LLM call.
 // This is different from TestStopWithRealOllamaProvider because:
-// - That test stops during INITIAL autonomous turn (Start -> SendMessage)
+// - That test stops during INITIAL turn (Start -> encouragement-triggered SendMessage)
 // - This test stops during an EXPLICIT message send
 func TestStopDuringRealLLMCall(t *testing.T) {
 	// Check if Ollama is available

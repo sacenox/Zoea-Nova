@@ -10,24 +10,21 @@ import (
 // mergeSystemMessagesOpenAI function doesn't reintroduce orphaned messages
 // after they've been removed by the core package.
 //
-// This test was added after discovering that our unit tests passed but production
-// failed because tests never exercised the provider's message manipulation code.
+// This test verifies that the provider layer only merges system messages and
+// does NOT add synthetic "Begin." or "Continue." messages. Those are added by
+// getContextMemories() in the core layer.
 func TestMergeSystemMessagesOpenAI_PreservesOrphanRemoval(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          []openai.ChatCompletionMessage
-		expectedCount  int
-		shouldAddBegin bool
-		shouldAddCont  bool
+		name          string
+		input         []openai.ChatCompletionMessage
+		expectedCount int
 	}{
 		{
 			name: "minimal_system_only",
 			input: []openai.ChatCompletionMessage{
 				{Role: "system", Content: "You are a helpful assistant"},
 			},
-			expectedCount:  2, // system + "Begin."
-			shouldAddBegin: true,
-			shouldAddCont:  false,
+			expectedCount: 1, // system only (synthetic user added by getContextMemories)
 		},
 		{
 			name: "system_plus_user",
@@ -35,9 +32,7 @@ func TestMergeSystemMessagesOpenAI_PreservesOrphanRemoval(t *testing.T) {
 				{Role: "system", Content: "You are a helpful assistant"},
 				{Role: "user", Content: "Hello"},
 			},
-			expectedCount:  2, // no additions needed
-			shouldAddBegin: false,
-			shouldAddCont:  false,
+			expectedCount: 2, // no additions needed
 		},
 		{
 			name: "ends_with_assistant",
@@ -46,9 +41,7 @@ func TestMergeSystemMessagesOpenAI_PreservesOrphanRemoval(t *testing.T) {
 				{Role: "user", Content: "Hello"},
 				{Role: "assistant", Content: "Hi!"},
 			},
-			expectedCount:  4, // system + user + assistant + "Continue."
-			shouldAddBegin: false,
-			shouldAddCont:  true,
+			expectedCount: 3, // system + user + assistant (no synthetic continuation)
 		},
 	}
 
@@ -60,19 +53,10 @@ func TestMergeSystemMessagesOpenAI_PreservesOrphanRemoval(t *testing.T) {
 				t.Errorf("Expected %d messages, got %d", tt.expectedCount, len(result))
 			}
 
-			if tt.shouldAddBegin {
-				lastMsg := result[len(result)-1]
-				if lastMsg.Role != "user" || lastMsg.Content != "Begin." {
-					t.Errorf("Expected 'Begin.' user message to be added, got role=%s content=%q",
-						lastMsg.Role, lastMsg.Content)
-				}
-			}
-
-			if tt.shouldAddCont {
-				lastMsg := result[len(result)-1]
-				if lastMsg.Role != "user" || lastMsg.Content != "Continue." {
-					t.Errorf("Expected 'Continue.' user message to be added, got role=%s content=%q",
-						lastMsg.Role, lastMsg.Content)
+			// Verify no synthetic "Begin." or "Continue." messages were added
+			for _, msg := range result {
+				if msg.Content == "Begin." || msg.Content == "Continue." {
+					t.Errorf("Provider should not add synthetic messages, found: %q", msg.Content)
 				}
 			}
 		})
@@ -135,10 +119,11 @@ func TestProviderMessageFlow_AfterOrphanRemoval(t *testing.T) {
 		t.Errorf("First message should be system, got %s", merged[0].Role)
 	}
 
-	// 3. Should end with user (Continue. was added)
-	lastMsg := merged[len(merged)-1]
-	if lastMsg.Role != "user" {
-		t.Errorf("Last message should be user after merge, got %s", lastMsg.Role)
+	// 3. Provider should NOT add synthetic messages
+	for _, msg := range merged {
+		if msg.Content == "Begin." || msg.Content == "Continue." {
+			t.Errorf("Provider should not add synthetic messages, found: %q", msg.Content)
+		}
 	}
 
 	// 4. No orphaned tool messages should exist
