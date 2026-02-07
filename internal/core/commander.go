@@ -283,15 +283,16 @@ func (c *Commander) Broadcast(content string) error {
 	c.mu.RLock()
 	myses := make([]*Mysis, 0)
 	for _, m := range c.myses {
-		if m.State() == MysisStateRunning {
+		// Include myses in idle or running state (can accept messages)
+		if validateCanAcceptMessage(m.State()) == nil {
 			myses = append(myses, m)
 		}
 	}
 	c.mu.RUnlock()
 
-	// Check if any myses are running
+	// Check if any myses can receive broadcast
 	if len(myses) == 0 {
-		return fmt.Errorf("no running myses to receive broadcast")
+		return fmt.Errorf("no myses available to receive broadcast (all stopped or errored)")
 	}
 
 	// Emit broadcast event
@@ -320,14 +321,15 @@ func (c *Commander) BroadcastFrom(senderID, content string) error {
 	c.mu.RLock()
 	myses := make([]*Mysis, 0)
 	for _, m := range c.myses {
-		if m.State() == MysisStateRunning && m.ID() != senderID {
+		// Include myses in idle or running state (can accept messages), excluding sender
+		if validateCanAcceptMessage(m.State()) == nil && m.ID() != senderID {
 			myses = append(myses, m)
 		}
 	}
 	c.mu.RUnlock()
 
 	if len(myses) == 0 {
-		return fmt.Errorf("no recipients for broadcast (sender excluded)")
+		return fmt.Errorf("no recipients for broadcast (sender excluded or all stopped/errored)")
 	}
 
 	// Emit broadcast event

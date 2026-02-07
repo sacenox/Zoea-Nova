@@ -163,28 +163,43 @@ func TestNudgeRoleIsUser(t *testing.T) {
 	// Simulate what happens in run() when a nudge is received
 	// The code calls: a.SendMessage(a.buildContinuePrompt(attemptCount), store.MemorySourceDirect)
 	prompt := mysis.buildContinuePrompt(0)
-	err := mysis.SendMessage(prompt, store.MemorySourceDirect)
 
-	// SendMessage will fail because mysis is not running, but we can test the role logic directly
-	if err == nil || !strings.Contains(err.Error(), "not running") {
-		t.Fatalf("Expected 'not running' error, got: %v", err)
+	// Idle myses now accept messages, so this should succeed
+	err := mysis.SendMessage(prompt, store.MemorySourceDirect)
+	if err != nil {
+		t.Fatalf("SendMessage should succeed for idle mysis, got: %v", err)
 	}
 
 	// The important part: verify that MemorySourceDirect maps to user role
-	// This is tested by checking the SendMessageFrom logic
-	// role := store.MemoryRoleUser (default)
-	// if source == store.MemorySourceSystem { role = store.MemoryRoleSystem }
-	// Since we're using MemorySourceDirect, role should be user
-
-	// We can verify this by checking what would be stored
-	// Let's test the role mapping directly
-	testRole := store.MemoryRoleUser
-	testSource := store.MemorySourceDirect
-	if testSource == store.MemorySourceSystem {
-		testRole = store.MemoryRoleSystem
+	// Check the stored memory to verify role
+	memories, err := s.GetMemories(mysis.ID())
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
 	}
 
-	if testRole != store.MemoryRoleUser {
-		t.Errorf("Expected nudge to use user role, got: %s", testRole)
+	// Should have stored the nudge message (and possibly LLM response)
+	if len(memories) == 0 {
+		t.Fatal("Expected stored memory for nudge message")
+	}
+
+	// Find the user message (the nudge we sent)
+	var userMemory *store.Memory
+	for i := range memories {
+		if memories[i].Role == store.MemoryRoleUser {
+			userMemory = memories[i]
+			break
+		}
+	}
+
+	if userMemory == nil {
+		t.Fatal("Expected to find user role memory (the nudge)")
+	}
+
+	// Verify the role is user (not system) and source is direct
+	if userMemory.Role != store.MemoryRoleUser {
+		t.Errorf("Expected nudge to use user role, got: %s", userMemory.Role)
+	}
+	if userMemory.Source != store.MemorySourceDirect {
+		t.Errorf("Expected source to be direct, got: %s", userMemory.Source)
 	}
 }

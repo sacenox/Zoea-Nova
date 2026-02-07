@@ -410,6 +410,70 @@ func TestCommanderBroadcast(t *testing.T) {
 	}
 }
 
+func TestCommanderBroadcastToIdleMyses(t *testing.T) {
+	cmd, bus, cleanup := setupCommanderTest(t)
+	defer cleanup()
+
+	// Subscribe first
+	events := bus.Subscribe()
+
+	// Create myses but don't start them (they'll be in idle state)
+	mysis1, _ := cmd.CreateMysis("idle-1", "mock")
+	mysis2, _ := cmd.CreateMysis("idle-2", "mock")
+
+	// Verify they're idle
+	if mysis1.State() != MysisStateIdle {
+		t.Fatalf("mysis1 should be idle, got %s", mysis1.State())
+	}
+	if mysis2.State() != MysisStateIdle {
+		t.Fatalf("mysis2 should be idle, got %s", mysis2.State())
+	}
+
+	// Drain created events with timeout
+	for i := 0; i < 2; i++ {
+		select {
+		case <-events:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	// Should be able to broadcast to idle myses
+	if err := cmd.Broadcast("Wake up!"); err != nil {
+		t.Fatalf("Broadcast() should accept idle myses, got error: %v", err)
+	}
+
+	// Should receive broadcast event
+	found := false
+	timeout := time.After(2 * time.Second)
+	for !found {
+		select {
+		case e := <-events:
+			if e.Type == EventBroadcast {
+				found = true
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for broadcast event")
+		}
+	}
+
+	// Verify messages were stored (even though myses are idle)
+	memories1, err := cmd.Store().GetMemories(mysis1.ID())
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
+	}
+	if len(memories1) == 0 {
+		t.Error("broadcast should be stored for idle mysis1")
+	}
+
+	memories2, err := cmd.Store().GetMemories(mysis2.ID())
+	if err != nil {
+		t.Fatalf("GetMemories() error: %v", err)
+	}
+	if len(memories2) == 0 {
+		t.Error("broadcast should be stored for idle mysis2")
+	}
+}
+
 func TestCommanderBroadcastSource(t *testing.T) {
 	cmd, _, cleanup := setupCommanderTest(t)
 	defer cleanup()
