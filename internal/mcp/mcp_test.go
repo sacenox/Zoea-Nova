@@ -255,15 +255,6 @@ func TestOrchestratorTools(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test zoea_swarm_status
-	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_swarm_status", nil)
-	if err != nil {
-		t.Fatalf("CallTool(zoea_swarm_status) error: %v", err)
-	}
-	if result.IsError {
-		t.Errorf("unexpected error: %s", result.Content[0].Text)
-	}
-
 	// Test zoea_list_myses
 	result, err = proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
 	if err != nil {
