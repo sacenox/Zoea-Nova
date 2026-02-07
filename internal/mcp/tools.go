@@ -357,8 +357,12 @@ func RegisterOrchestratorTools(proxy *Proxy, orchestrator Orchestrator) {
 			if err != nil {
 				// Check if no accounts available
 				if err.Error() == "no accounts available" {
+					data, _ := json.Marshal(map[string]string{
+						"status":          "no_accounts",
+						"action_required": "register",
+					})
 					return &ToolResult{
-						Content: []ContentBlock{{Type: "text", Text: "No accounts available. Use the game's register tool to create a new account with a Crustacean-themed username."}},
+						Content: []ContentBlock{{Type: "text", Text: string(data)}},
 					}, nil
 				}
 				return &ToolResult{
