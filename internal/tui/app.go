@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/xonecas/zoea-nova/internal/config"
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -24,11 +25,20 @@ const (
 	ViewFocus
 )
 
+// InputStage represents stages in multi-step input flows.
+type InputStage int
+
+const (
+	InputStageName InputStage = iota
+	InputStageProvider
+)
+
 // Model is the main TUI model.
 type Model struct {
 	commander *core.Commander
 	store     *store.Store
 	eventCh   <-chan core.Event
+	config    *config.Config
 
 	view        View
 	width       int
@@ -41,6 +51,11 @@ type Model struct {
 	myses   []MysisInfo
 	logs    []LogEntry
 	focusID string
+
+	// Multi-stage input for mysis creation
+	inputStage           InputStage
+	pendingMysisName     string
+	pendingMysisProvider string
 
 	pendingProvider string
 	startSwarm      bool // auto-start idle myses on launch
@@ -91,6 +106,13 @@ type EventMsg struct {
 
 // New creates a new TUI model.
 func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event, startSwarm bool) Model {
+	// Load config (use default path resolution)
+	cfg, err := config.Load("")
+	if err != nil {
+		// Use defaults if load fails
+		cfg = config.DefaultConfig()
+	}
+
 	// Initialize spinner with hexagonal theme (matching logo)
 	sp := spinner.New()
 	sp.Spinner = spinner.Spinner{
@@ -107,9 +129,11 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event, s
 		commander:    commander,
 		store:        s,
 		eventCh:      eventCh,
+		config:       cfg,
 		view:         ViewDashboard,
 		input:        NewInputModel(),
 		myses:        []MysisInfo{},
+		inputStage:   InputStageName,
 		spinner:      sp,
 		loadingSet:   make(map[string]bool),
 		viewport:     vp,
@@ -588,7 +612,7 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Escape):
-		m.input.Reset()
+		m.resetInput()
 		m.pendingProvider = ""
 		m.err = nil
 		return m, nil
@@ -633,14 +657,47 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 		case InputModeNewMysis:
-			mysis, err := m.commander.CreateMysis(value, "opencode_zen")
-			if err == nil {
-				// Auto-start newly created myses
-				m.err = m.commander.StartMysis(mysis.ID())
-			} else {
-				m.err = err
+			// Multi-stage flow: name → provider
+			switch m.inputStage {
+			case InputStageName:
+				// Name is required
+				if value == "" {
+					m.err = fmt.Errorf("name cannot be empty")
+					return m, nil
+				}
+				m.pendingMysisName = value
+				m.inputStage = InputStageProvider
+				m.input.textInput.SetValue("")
+				m.input.textInput.Placeholder = fmt.Sprintf("Provider (empty for default: %s)...", m.config.Swarm.DefaultProvider)
+				return m, nil
+
+			case InputStageProvider:
+				// Provider is optional - use default if empty
+				provider := value
+				if provider == "" {
+					provider = m.config.Swarm.DefaultProvider
+				}
+
+				// Validate provider exists
+				if _, ok := m.config.Providers[provider]; !ok {
+					m.err = fmt.Errorf("provider '%s' not found in config", provider)
+					m.resetInput()
+					m.refreshMysisList()
+					return m, nil
+				}
+
+				// Create mysis with selected provider
+				mysis, err := m.commander.CreateMysis(m.pendingMysisName, provider)
+				if err == nil {
+					// Auto-start newly created myses
+					m.err = m.commander.StartMysis(mysis.ID())
+				} else {
+					m.err = err
+				}
+				m.resetInput()
+				m.refreshMysisList()
+				return m, nil
 			}
-			m.refreshMysisList()
 
 		case InputModeConfigProvider:
 			switch value {
@@ -888,6 +945,14 @@ func (m Model) focusPosition(focusID string) (int, int) {
 		}
 	}
 	return 0, total
+}
+
+// resetInput resets input state and clears multi-stage flow.
+func (m *Model) resetInput() {
+	m.input.Reset()
+	m.inputStage = InputStageName
+	m.pendingMysisName = ""
+	m.pendingMysisProvider = ""
 }
 
 type refreshMysesMsg struct{}
