@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -147,5 +148,78 @@ func TestProxyAuthInterceptionLogout(t *testing.T) {
 	}
 	if len(accounts.released) != 1 || accounts.released[0] != "pilot" {
 		t.Fatalf("expected account released for pilot, got %+v", accounts.released)
+	}
+}
+
+func TestRewriteSessionError_SessionRequired(t *testing.T) {
+	proxy := &Proxy{}
+
+	original := "Error: session_required: You must provide a session_id. Get one by calling login() or register() first."
+	rewritten := proxy.rewriteSessionError(original)
+
+	if strings.Contains(rewritten, "Get one by calling login()") {
+		t.Error("Should have replaced the instruction to login again")
+	}
+
+	if !strings.Contains(rewritten, "Check your recent tool results") {
+		t.Error("Should instruct to check recent tool results")
+	}
+}
+
+func TestRewriteSessionError_SessionInvalid(t *testing.T) {
+	proxy := &Proxy{}
+
+	original := "Error: session_invalid: Session not found or expired. Call login() again to get a new session_id."
+	rewritten := proxy.rewriteSessionError(original)
+
+	if !strings.Contains(rewritten, "session truly expired") {
+		t.Error("Should add clarification about true expiration")
+	}
+}
+
+func TestRewriteSessionError_Other(t *testing.T) {
+	proxy := &Proxy{}
+
+	original := "Error: some_other_error: This is not a session error."
+	rewritten := proxy.rewriteSessionError(original)
+
+	if rewritten != original {
+		t.Error("Should not modify non-session errors")
+	}
+}
+
+func TestProxyRewritesUpstreamErrors(t *testing.T) {
+	// Simulate upstream returning a session_required error
+	upstream := &mockUpstream{
+		result: &ToolResult{
+			Content: []ContentBlock{{
+				Type: "text",
+				Text: "Error: session_required: You must provide a session_id. Get one by calling login() or register() first.",
+			}},
+			IsError: true,
+		},
+	}
+	proxy := NewProxy(upstream)
+
+	result, err := proxy.CallTool(context.Background(), CallerContext{}, "mine", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("CallTool() error: %v", err)
+	}
+
+	if !result.IsError {
+		t.Fatal("Expected error result")
+	}
+
+	if len(result.Content) == 0 {
+		t.Fatal("Expected content in error result")
+	}
+
+	rewrittenText := result.Content[0].Text
+	if strings.Contains(rewrittenText, "Get one by calling login()") {
+		t.Error("Error message should have been rewritten")
+	}
+
+	if !strings.Contains(rewrittenText, "Check your recent tool results") {
+		t.Error("Error message should contain guidance to check tool results")
 	}
 }
