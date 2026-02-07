@@ -1725,3 +1725,249 @@ func TestCanAcceptMessages(t *testing.T) {
 		})
 	}
 }
+
+func TestSendEphemeralMessage_IdleState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create stored mysis
+	stored, err := s.CreateMysis("ephemeral-idle-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Mysis starts in idle state
+	if mysis.State() != MysisStateIdle {
+		t.Fatalf("expected idle state, got %s", mysis.State())
+	}
+
+	// Should be able to send ephemeral message to idle mysis
+	err = mysis.SendEphemeralMessage("ephemeral test", store.MemorySourceDirect)
+	if err != nil {
+		t.Errorf("should accept ephemeral message in idle state, got error: %v", err)
+	}
+}
+
+func TestSendEphemeralMessage_StoppedState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create stored mysis
+	stored, err := s.CreateMysis("ephemeral-stopped-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start then stop
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
+	if err := mysis.Stop(); err != nil {
+		t.Fatalf("failed to stop: %v", err)
+	}
+
+	if mysis.State() != MysisStateStopped {
+		t.Fatalf("expected stopped state, got %s", mysis.State())
+	}
+
+	// Should reject ephemeral message in stopped state
+	err = mysis.SendEphemeralMessage("ephemeral test", store.MemorySourceDirect)
+	if err == nil {
+		t.Error("should reject ephemeral message in stopped state")
+	}
+	if !strings.Contains(err.Error(), "stopped") {
+		t.Errorf("error should mention stopped, got: %v", err)
+	}
+}
+
+// setupTestMysis creates a mysis for testing with a mock provider
+func setupTestMysis(t *testing.T) (*Mysis, func()) {
+	t.Helper()
+
+	s, bus, cleanup := setupMysisTest(t)
+
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "test response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	return mysis, cleanup
+}
+
+// setupTestMysisWithErrorProvider creates a mysis with a provider that returns errors
+func setupTestMysisWithErrorProvider(t *testing.T) (*Mysis, func()) {
+	t.Helper()
+
+	s, bus, cleanup := setupMysisTest(t)
+
+	stored, err := s.CreateMysis("error-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Create a mock provider that returns errors
+	mock := provider.NewMock("mock", "").WithChatError(errors.New("provider error"))
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	return mysis, cleanup
+}
+
+func TestSendMessageFrom_IdleState(t *testing.T) {
+	mysis, cleanup := setupTestMysis(t)
+	defer cleanup()
+
+	// Mysis starts in idle state
+	if mysis.State() != MysisStateIdle {
+		t.Fatalf("expected idle state, got %s", mysis.State())
+	}
+
+	// Should be able to send message to idle mysis
+	err := mysis.SendMessageFrom("test message", store.MemorySourceDirect, "")
+	if err != nil {
+		t.Errorf("should accept message in idle state, got error: %v", err)
+	}
+
+	// Verify message was stored
+	memories, err := mysis.store.GetMemories(mysis.ID())
+	if err != nil {
+		t.Fatalf("failed to get memories: %v", err)
+	}
+	if len(memories) == 0 {
+		t.Error("message was not stored")
+	}
+	if len(memories) == 0 {
+		t.Error("message was not stored")
+	}
+}
+
+func TestSendMessageFrom_StoppedState(t *testing.T) {
+	mysis, cleanup := setupTestMysis(t)
+	defer cleanup()
+
+	// Start then stop the mysis
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("failed to start mysis: %v", err)
+	}
+	if err := mysis.Stop(); err != nil {
+		t.Fatalf("failed to stop mysis: %v", err)
+	}
+
+	if mysis.State() != MysisStateStopped {
+		t.Fatalf("expected stopped state, got %s", mysis.State())
+	}
+
+	// Should NOT be able to send message to stopped mysis
+	err := mysis.SendMessageFrom("test message", store.MemorySourceDirect, "")
+	if err == nil {
+		t.Error("should reject message in stopped state")
+	}
+	if !strings.Contains(err.Error(), "stopped") || !strings.Contains(err.Error(), "relaunch") {
+		t.Errorf("error should mention stopped and relaunch, got: %v", err)
+	}
+}
+
+func TestSendMessageFrom_ErroredState(t *testing.T) {
+	mysis, cleanup := setupTestMysisWithErrorProvider(t)
+	defer cleanup()
+
+	// Start mysis and trigger error
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("failed to start mysis: %v", err)
+	}
+
+	// Send message to trigger error
+	_ = mysis.SendMessageFrom("trigger error", store.MemorySourceDirect, "")
+
+	// Wait for error state
+	time.Sleep(100 * time.Millisecond)
+
+	if mysis.State() != MysisStateErrored {
+		t.Fatalf("expected errored state, got %s", mysis.State())
+	}
+
+	// Should NOT be able to send message to errored mysis
+	err := mysis.SendMessageFrom("test message", store.MemorySourceDirect, "")
+	if err == nil {
+		t.Error("should reject message in errored state")
+	}
+	if !strings.Contains(err.Error(), "errored") || !strings.Contains(err.Error(), "relaunch") {
+		t.Errorf("error should mention errored and relaunch, got: %v", err)
+	}
+}
+func TestQueueBroadcast_IdleState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create stored mysis
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "Hello!")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Mysis starts in idle state
+	if mysis.State() != MysisStateIdle {
+		t.Fatalf("expected idle state, got %s", mysis.State())
+	}
+
+	// Should be able to queue broadcast to idle mysis
+	err = mysis.QueueBroadcast("broadcast test", "sender-id")
+	if err != nil {
+		t.Errorf("should accept broadcast in idle state, got error: %v", err)
+	}
+
+	// Verify message was stored
+	memories, err := s.GetMemories(mysis.ID())
+	if err != nil {
+		t.Fatalf("failed to get memories: %v", err)
+	}
+	if len(memories) == 0 {
+		t.Error("broadcast was not stored")
+	}
+}
+
+func TestQueueBroadcast_StoppedState(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create stored mysis
+	stored, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "Hello!")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Start then stop
+	if err := mysis.Start(); err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
+	if err := mysis.Stop(); err != nil {
+		t.Fatalf("failed to stop: %v", err)
+	}
+
+	if mysis.State() != MysisStateStopped {
+		t.Fatalf("expected stopped state, got %s", mysis.State())
+	}
+
+	// Should reject broadcast in stopped state
+	err = mysis.QueueBroadcast("broadcast test", "sender-id")
+	if err == nil {
+		t.Error("should reject broadcast in stopped state")
+	}
+	if !strings.Contains(err.Error(), "stopped") {
+		t.Errorf("error should mention stopped, got: %v", err)
+	}
+}

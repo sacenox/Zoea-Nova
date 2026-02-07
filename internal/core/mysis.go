@@ -372,8 +372,8 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 	mcpProxy := a.mcp
 	a.mu.RUnlock()
 
-	if state != MysisStateRunning {
-		return fmt.Errorf("mysis not running")
+	if err := validateCanAcceptMessage(state); err != nil {
+		return err
 	}
 
 	// Determine role based on source
@@ -679,8 +679,8 @@ func (m *Mysis) SendEphemeralMessage(content string, source store.MemorySource) 
 	mcpProxy := a.mcp
 	a.mu.RUnlock()
 
-	if state != MysisStateRunning {
-		return fmt.Errorf("mysis not running")
+	if err := validateCanAcceptMessage(state); err != nil {
+		return err
 	}
 
 	// NOTE: We skip storing the ephemeral message to the database
@@ -959,8 +959,8 @@ func (m *Mysis) QueueBroadcast(content string, senderID string) error {
 	state := a.state
 	a.mu.RUnlock()
 
-	if state != MysisStateRunning {
-		return fmt.Errorf("mysis not running")
+	if err := validateCanAcceptMessage(state); err != nil {
+		return err
 	}
 
 	// Store the message immediately (fast DB write, no LLM call)
