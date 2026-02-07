@@ -130,9 +130,9 @@ func TestMysisSendMessage(t *testing.T) {
 	mock := provider.NewMock("mock", "I received your message!")
 	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-	// Can't send to non-running mysis
-	if err := mysis.SendMessage("Hello", store.MemorySourceDirect); err == nil {
-		t.Error("expected error sending to non-running mysis")
+	// Can send to idle mysis (will be stored and processed when started)
+	if err := mysis.SendMessage("Hello", store.MemorySourceDirect); err != nil {
+		t.Errorf("should accept message in idle state, got error: %v", err)
 	}
 
 	// Start mysis
@@ -196,15 +196,15 @@ eventLoop:
 	}
 
 	// Check memories were stored
-	// Expected: system prompt, assistant response (from ephemeral nudge),
-	//           user message, assistant response
+	// Expected: user message (sent while idle), system prompt, assistant response (from ephemeral nudge),
+	//           user message (Hello, mysis!), assistant response
 	// NOTE: The continue prompt (initial trigger) is now ephemeral and NOT stored in DB
 	memories, err := s.GetMemories(stored.ID)
 	if err != nil {
 		t.Fatalf("GetMemories() error: %v", err)
 	}
-	if len(memories) != 4 {
-		t.Errorf("expected 4 memories, got %d", len(memories))
+	if len(memories) != 5 {
+		t.Errorf("expected 5 memories, got %d", len(memories))
 	}
 
 	mysis.Stop()
