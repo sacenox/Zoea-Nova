@@ -43,6 +43,7 @@ type Model struct {
 	focusID string
 
 	pendingProvider string
+	startSwarm      bool // auto-start idle myses on launch
 
 	// Swarm broadcast history
 	swarmMessages []SwarmMessage
@@ -89,7 +90,7 @@ type EventMsg struct {
 }
 
 // New creates a new TUI model.
-func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) Model {
+func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event, startSwarm bool) Model {
 	// Initialize spinner with hexagonal theme (matching logo)
 	sp := spinner.New()
 	sp.Spinner = spinner.Spinner{
@@ -113,6 +114,7 @@ func New(commander *core.Commander, s *store.Store, eventCh <-chan core.Event) M
 		loadingSet:   make(map[string]bool),
 		viewport:     vp,
 		netIndicator: NewNetIndicator(),
+		startSwarm:   startSwarm,
 	}
 }
 
@@ -123,12 +125,28 @@ func (m *Model) SetOnQuit(fn func()) {
 
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
+	// Auto-start idle myses if flag enabled
+	if m.startSwarm {
+		go m.autoStartIdleMyses()
+	}
+
 	return tea.Batch(
 		m.netIndicator.Init(),
 		m.refreshMyses(),
 		m.listenForEvents(),
 		m.spinner.Tick,
 	)
+}
+
+// autoStartIdleMyses starts all myses in idle state (no error).
+func (m Model) autoStartIdleMyses() {
+	myses := m.commander.ListMyses()
+	for _, mysis := range myses {
+		// Start myses that are not errored (idle state)
+		if mysis.LastError() == nil {
+			_ = m.commander.StartMysis(mysis.ID())
+		}
+	}
 }
 
 // Update handles messages.

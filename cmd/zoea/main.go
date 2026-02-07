@@ -37,6 +37,7 @@ func main() {
 		debug       = flag.Bool("debug", false, "Enable debug logging")
 		testMCP     = flag.Bool("test-mcp", false, "Test MCP connection and tool calling, then exit")
 		offline     = flag.Bool("offline", false, "Run in offline mode with stub MCP server")
+		startSwarm  = flag.Bool("start-swarm", false, "Auto-start all idle myses on launch")
 	)
 	flag.Parse()
 
@@ -159,7 +160,7 @@ func main() {
 	eventCh := bus.Subscribe()
 
 	// Create and run TUI
-	model := tui.New(commander, s, eventCh)
+	model := tui.New(commander, s, eventCh, *startSwarm)
 
 	// Set cleanup callback to close event bus before quit
 	model.SetOnQuit(func() {
