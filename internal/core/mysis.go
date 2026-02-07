@@ -1449,7 +1449,14 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		currentTurnMemories := allMemories[turnBoundaryIdx:]
 		result = append(result, currentTurnMemories...)
 	} else {
-		// No user prompt found - generate synthetic nudge
+		// No user prompt found (autonomous nudge-driven mysis)
+		// Include recent tool loop to maintain conversation continuity
+		historicalToolLoop := m.extractLatestToolLoop(allMemories)
+		if len(historicalToolLoop) > 0 {
+			result = append(result, historicalToolLoop...)
+		}
+
+		// Then add synthetic nudge
 		// Note: Nudge counter increment happens in caller (handleLLMResponse)
 		nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
 		nudgeMemory := &store.Memory{
