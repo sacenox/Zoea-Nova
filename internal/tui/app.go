@@ -632,6 +632,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			// Add to history before sending
 			m.input.AddToHistory(value)
+			m.input.Reset()
 			// Mark all running myses as loading
 			myses := m.commander.ListMyses()
 			for _, mysis := range myses {
@@ -648,11 +649,12 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputModeMessage:
 			// Add to history before sending
 			m.input.AddToHistory(value)
-			targetID := m.input.TargetID()
+			targetID := m.input.TargetID() // Save targetID BEFORE reset
+			m.input.Reset()                // Clear input immediately after saving targetID
 			m.loadingSet[targetID] = true
 			m.netIndicator.SetActivity(NetActivityLLM)
-			m.sending = true
-			m.sendingMode = InputModeMessage
+			// Note: m.sending NOT set here - SendMessageAsync returns immediately
+			// Network indicator shows activity, but input is ready for next message
 			cmd = m.sendMessageAsync(targetID, value)
 			if m.view == ViewFocus {
 				m.loadMysisLogs()
@@ -745,7 +747,9 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // sendMessageAsync sends a message to a mysis asynchronously.
 func (m Model) sendMessageAsync(mysisID, content string) tea.Cmd {
 	return func() tea.Msg {
-		err := m.commander.SendMessage(mysisID, content)
+		// Use async version to clear input immediately when message is sent,
+		// not when LLM completes processing
+		err := m.commander.SendMessageAsync(mysisID, content)
 		return sendMessageResult{mysisID: mysisID, err: err}
 	}
 }
