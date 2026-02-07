@@ -1,9 +1,9 @@
 package tui
 
 import (
+	"github.com/xonecas/zoea-nova/internal/store"
 	"testing"
 	"time"
-	"github.com/xonecas/zoea-nova/internal/store"
 )
 
 func TestBroadcastFiltering(t *testing.T) {
@@ -16,7 +16,7 @@ func TestBroadcastFiltering(t *testing.T) {
 		{Role: store.MemoryRoleTool, Source: store.MemorySourceTool, Content: "Tool result", CreatedAt: time.Now()},
 		{Role: store.MemoryRoleUser, Source: store.MemorySourceDirect, Content: "Direct message 2", CreatedAt: time.Now()},
 	}
-	
+
 	// Apply the filtering (same logic as loadMysisLogs)
 	var filteredLogs []LogEntry
 	for _, mem := range memories {
@@ -26,20 +26,20 @@ func TestBroadcastFiltering(t *testing.T) {
 		}
 		filteredLogs = append(filteredLogs, LogEntryFromMemory(mem, "test-mysis", ""))
 	}
-	
+
 	// Verify filtering
 	expectedCount := 4 // 2 direct, 1 LLM, 1 tool (excluding 2 broadcasts)
 	if len(filteredLogs) != expectedCount {
 		t.Errorf("Expected %d filtered logs, got %d", expectedCount, len(filteredLogs))
 	}
-	
+
 	// Verify no broadcasts in filtered logs
 	for i, log := range filteredLogs {
 		if log.Source == "broadcast" || log.Source == "broadcast_self" {
 			t.Errorf("Log %d should not be a broadcast: source=%s, content=%s", i, log.Source, log.Content)
 		}
 	}
-	
+
 	// Verify expected messages are present
 	expectedMessages := []string{
 		"Direct message 1",
@@ -47,7 +47,7 @@ func TestBroadcastFiltering(t *testing.T) {
 		"Tool result",
 		"Direct message 2",
 	}
-	
+
 	for i, expected := range expectedMessages {
 		if i >= len(filteredLogs) {
 			t.Errorf("Missing expected message: %s", expected)
