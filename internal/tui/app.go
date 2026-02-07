@@ -712,16 +712,19 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 		case InputModeConfigProvider:
-			switch value {
-			case "ollama", "opencode_zen":
-				m.pendingProvider = value
-				m.input.SetMode(InputModeConfigModel, m.input.TargetID())
-				return m, m.input.Focus()
-			default:
-				m.err = fmt.Errorf("unknown provider: %s", value)
+			// Validate provider exists in config
+			if _, ok := m.config.Providers[value]; !ok {
+				var available []string
+				for p := range m.config.Providers {
+					available = append(available, p)
+				}
+				m.err = fmt.Errorf("provider '%s' not found. Available: %v", value, available)
 				m.input.Reset()
 				return m, nil
 			}
+			m.pendingProvider = value
+			m.input.SetMode(InputModeConfigModel, m.input.TargetID())
+			return m, m.input.Focus()
 
 		case InputModeConfigModel:
 			m.err = m.commander.ConfigureMysis(m.input.TargetID(), m.pendingProvider, value)
