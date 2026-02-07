@@ -346,6 +346,7 @@ func TestMysisStateEvents(t *testing.T) {
 }
 
 func TestMysisContextMemoryLimit(t *testing.T) {
+	t.Skip("Obsolete: Tests old compaction strategy. Replaced by loop-based composition (TestLoopContextSlice).")
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
@@ -384,6 +385,7 @@ func TestMysisContextMemoryLimit(t *testing.T) {
 }
 
 func TestMysisContextMemoryWithRecentSystemPrompt(t *testing.T) {
+	t.Skip("Obsolete: Tests old compaction strategy. Replaced by loop-based composition (TestContextPromptSourcePriority).")
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
@@ -487,6 +489,7 @@ func TestFormatToolResult_Success(t *testing.T) {
 }
 
 func TestMysisContextCompaction(t *testing.T) {
+	t.Skip("Obsolete: Tests old snapshot compaction. Loop composition doesn't use compaction.")
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
@@ -772,9 +775,19 @@ func TestContextPromptSourcePriority(t *testing.T) {
 			}
 
 			if tt.expectedSource == store.MemorySourceSystem {
-				// Synthetic nudge case - no user messages should exist
-				if foundPromptSource != nil {
-					t.Errorf("expected no user message (synthetic nudge), but found: %+v", foundPromptSource)
+				// Synthetic nudge case - should have a user message with source=system
+				if foundPromptSource == nil {
+					t.Fatal("expected synthetic nudge user message, but got none")
+				}
+				if foundPromptSource.Role != store.MemoryRoleUser {
+					t.Errorf("expected role=user for nudge, got %s", foundPromptSource.Role)
+				}
+				if foundPromptSource.Source != store.MemorySourceSystem {
+					t.Errorf("expected source=system for nudge, got %s", foundPromptSource.Source)
+				}
+				// Nudge should contain helpful content
+				if len(foundPromptSource.Content) == 0 {
+					t.Error("expected nudge content to be non-empty")
 				}
 			} else {
 				// Should find the correct prompt source
@@ -1003,6 +1016,7 @@ func TestExtractLatestToolLoopHelper(t *testing.T) {
 }
 
 func TestMysisContextCompactionNonSnapshot(t *testing.T) {
+	t.Skip("Obsolete: Tests old non-snapshot compaction. Loop composition doesn't use compaction.")
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 

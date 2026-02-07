@@ -1371,44 +1371,52 @@ func (m *Mysis) extractLatestToolLoop(memories []*store.Memory) []*store.Memory 
 	return result
 }
 
-// getContextMemories returns memories for LLM context: system prompt + recent messages.
-// This keeps context small for faster inference while preserving essential information.
-// Compacts repeated snapshot tool results to prefer recent state.
+// getContextMemories returns memories for LLM context using loop-based composition.
+// Composes context as: [system prompt] + [chosen prompt source] + [most recent tool loop].
+// This ensures stable, bounded context and eliminates orphaned tool sequencing.
 func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
-	a := m
-	// Get recent memories (limited for performance)
-	recent, err := a.store.GetRecentMemories(a.id, constants.MaxContextMessages)
+	// Get all recent memories
+	allMemories, err := m.store.GetRecentMemories(m.id, constants.MaxContextMessages)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply compaction to remove redundant snapshot tool results
-	compacted := a.compactSnapshots(recent)
+	// Build context: [system] + [prompt source] + [latest tool loop]
+	result := make([]*store.Memory, 0, 10) // Pre-allocate for typical size
 
-	// Remove orphaned tool messages (results without corresponding tool calls)
-	// This ensures OpenAI Chat Completions API compliance
-	compacted = a.removeOrphanedToolMessages(compacted)
-
-	// Remove orphaned tool calls (assistant tool calls without corresponding tool results)
-	// This prevents OpenCode Zen API crashes when context window cuts off tool results
-	compacted = a.removeOrphanedToolCalls(compacted)
-
-	// Always try to fetch the system prompt and prepend it if not already first
-	system, err := a.store.GetSystemMemory(a.id)
-	if err != nil {
-		// No system prompt found - this is okay, just use compacted memories
-		return compacted, nil
+	// Step 1: Add system prompt (if available)
+	system, err := m.store.GetSystemMemory(m.id)
+	if err == nil && system != nil {
+		result = append(result, system)
 	}
 
-	// Check if system prompt is already the first message
-	if len(compacted) > 0 && compacted[0].ID == system.ID {
-		return compacted, nil
+	// Step 2: Select and add prompt source by priority
+	// Priority: commander direct → last commander broadcast → last swarm broadcast → nudge
+	promptSource := m.selectPromptSource(allMemories)
+
+	if promptSource == nil {
+		// No prompt source found - generate synthetic nudge
+		// Note: Nudge counter increment happens in caller (handleLLMResponse)
+		// We create a temporary memory that is NOT stored in database
+		nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
+		nudgeMemory := &store.Memory{
+			Role:      store.MemoryRoleUser,
+			Source:    store.MemorySourceSystem,
+			Content:   nudgeContent,
+			SenderID:  "",
+			CreatedAt: time.Now(),
+		}
+		result = append(result, nudgeMemory)
+	} else {
+		result = append(result, promptSource)
 	}
 
-	// Prepend system prompt to compacted memories
-	result := make([]*store.Memory, 0, len(compacted)+1)
-	result = append(result, system)
-	result = append(result, compacted...)
+	// Step 3: Extract and add the most recent tool loop (if any)
+	toolLoop := m.extractLatestToolLoop(allMemories)
+	if len(toolLoop) > 0 {
+		result = append(result, toolLoop...)
+	}
+
 	return result, nil
 }
 
@@ -1778,7 +1786,12 @@ func (m *Mysis) shouldNudge(now time.Time) bool {
 	defer a.mu.Unlock()
 
 	if a.activityState == ActivityStateTraveling || a.activityState == ActivityStateCooldown {
-		if !a.activityUntil.IsZero() && !now.Before(a.activityUntil) {
+		if !a.activityUntil.IsZero() {
+			if now.Before(a.activityUntil) {
+				// Activity not finished yet - don't nudge
+				return false
+			}
+			// Activity finished - transition to idle
 			a.activityState = ActivityStateIdle
 			a.activityUntil = time.Time{}
 		}
