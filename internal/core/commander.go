@@ -260,15 +260,14 @@ func (c *Commander) SendMessage(id, content string) error {
 }
 
 // SendMessageAsync sends a message to a specific mysis without waiting for processing.
-// Returns immediately after validating the mysis exists and is running.
+// Returns immediately after validating the mysis exists.
+// State validation is done inside mysis.SendMessage.
 func (c *Commander) SendMessageAsync(id, content string) error {
 	mysis, err := c.GetMysis(id)
 	if err != nil {
 		return err
 	}
-	if mysis.State() != MysisStateRunning {
-		return fmt.Errorf("mysis not running")
-	}
+	// State validation is done inside mysis.SendMessage
 	go func() {
 		if err := mysis.SendMessage(content, store.MemorySourceDirect); err != nil {
 			// Error is published to bus by mysis.SendMessage
