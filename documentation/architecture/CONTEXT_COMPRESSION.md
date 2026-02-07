@@ -327,3 +327,67 @@ This architecture replaced the previous snapshot compaction model (v0.4.x) which
 The loop slice model eliminates these issues by composing context from atomic units (system + prompt + loop) rather than arbitrary time windows.
 
 See `documentation/archive/` for historical compaction implementation details.
+
+## Turn-Aware Context Composition (v0.5.0+)
+
+As of v0.5.0, context composition distinguishes between historical turns and the current turn.
+
+### Architecture
+
+**Turn Boundary:** Detected by finding the most recent user-initiated prompt (direct message, broadcast, or system nudge).
+
+**Historical Turns:** All messages before the turn boundary
+- Compressed using `extractLatestToolLoop()`
+- Only the most recent complete tool loop is included
+- Saves context space for older conversations
+
+**Current Turn:** All messages from turn boundary to present
+- Included WITHOUT compression
+- Preserves complete multi-step tool sequences
+- Essential for multi-step reasoning (e.g., login → get_status → get_notifications)
+
+### Example
+
+```
+Historical:
+  [user: "old question"]
+  [assistant: tool_call_1]
+  [tool: result_1]
+  [assistant: tool_call_2]  ← Only latest loop included
+  [tool: result_2]           ← Only latest loop included
+
+Current Turn:
+  [user: "new question"]      ← Turn boundary
+  [assistant: login_call]     ← All included
+  [tool: session_id: abc123]  ← All included
+  [assistant: status_call]    ← All included
+  [tool: status_result]       ← All included
+```
+
+### Benefits
+
+1. **Multi-step reasoning:** LLM can reference earlier tool results within the same turn
+2. **Session persistence:** Session IDs from login remain visible throughout the turn
+3. **Context efficiency:** Historical turns compressed, current turn preserved
+4. **Orphan prevention:** Complete tool loops stay together
+
+### Implementation
+
+**Function:** `getContextMemories()` in `internal/core/mysis.go`
+
+**Turn Detection:** `findLastUserPromptIndex()` scans backwards to find the most recent user prompt
+
+**Composition:**
+1. System prompt (always first)
+2. Historical context (compressed via `extractLatestToolLoop()`)
+3. Current turn (uncompressed, from turn boundary to present)
+
+### Migration from v0.4.x
+
+**Before (Loop-based):**
+- Context: `[system] + [prompt source] + [latest tool loop only]`
+- Issue: Multi-step tool sequences truncated (login result lost)
+
+**After (Turn-aware):**
+- Context: `[system] + [historical compressed] + [current turn complete]`
+- Fixed: Complete current turn preserved, enabling multi-step reasoning
