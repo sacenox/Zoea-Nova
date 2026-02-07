@@ -974,3 +974,107 @@ func getProviderNames(cfg *config.Config) []string {
 	}
 	return names
 }
+
+// TestNetworkIndicator_AutonomousActivity verifies that the network indicator
+// correctly tracks autonomous Mysis activity (not just user-initiated messages).
+func TestNetworkIndicator_AutonomousActivity(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Initial state: indicator should be idle, counter at 0
+	if m.netIndicator.Activity() != NetActivityIdle {
+		t.Errorf("initial activity = %v, want NetActivityIdle", m.netIndicator.Activity())
+	}
+	if m.activeNetworkOps != 0 {
+		t.Errorf("initial activeNetworkOps = %d, want 0", m.activeNetworkOps)
+	}
+
+	// Simulate autonomous LLM activity (not user-initiated)
+	event := core.Event{
+		Type:      core.EventNetworkLLM,
+		MysisID:   "test-mysis-1",
+		MysisName: "TestMysis1",
+		Timestamp: time.Now(),
+	}
+	m.handleEvent(event)
+
+	// Indicator should show LLM activity, counter incremented
+	if m.netIndicator.Activity() != NetActivityLLM {
+		t.Errorf("after EventNetworkLLM: activity = %v, want NetActivityLLM", m.netIndicator.Activity())
+	}
+	if m.activeNetworkOps != 1 {
+		t.Errorf("after EventNetworkLLM: activeNetworkOps = %d, want 1", m.activeNetworkOps)
+	}
+
+	// Simulate MCP activity from another Mysis
+	event2 := core.Event{
+		Type:      core.EventNetworkMCP,
+		MysisID:   "test-mysis-2",
+		MysisName: "TestMysis2",
+		Timestamp: time.Now(),
+	}
+	m.handleEvent(event2)
+
+	// Indicator should show MCP activity, counter incremented again
+	if m.netIndicator.Activity() != NetActivityMCP {
+		t.Errorf("after EventNetworkMCP: activity = %v, want NetActivityMCP", m.netIndicator.Activity())
+	}
+	if m.activeNetworkOps != 2 {
+		t.Errorf("after EventNetworkMCP: activeNetworkOps = %d, want 2", m.activeNetworkOps)
+	}
+
+	// First Mysis completes
+	idleEvent1 := core.Event{
+		Type:      core.EventNetworkIdle,
+		MysisID:   "test-mysis-1",
+		Timestamp: time.Now(),
+	}
+	m.handleEvent(idleEvent1)
+
+	// Indicator should STILL be active (second Mysis still working)
+	if m.netIndicator.Activity() == NetActivityIdle {
+		t.Error("after first EventNetworkIdle: indicator should NOT be idle (second Mysis still active)")
+	}
+	if m.activeNetworkOps != 1 {
+		t.Errorf("after first EventNetworkIdle: activeNetworkOps = %d, want 1", m.activeNetworkOps)
+	}
+
+	// Second Mysis completes
+	idleEvent2 := core.Event{
+		Type:      core.EventNetworkIdle,
+		MysisID:   "test-mysis-2",
+		Timestamp: time.Now(),
+	}
+	m.handleEvent(idleEvent2)
+
+	// NOW indicator should go idle (all operations complete)
+	if m.netIndicator.Activity() != NetActivityIdle {
+		t.Errorf("after all EventNetworkIdle: activity = %v, want NetActivityIdle", m.netIndicator.Activity())
+	}
+	if m.activeNetworkOps != 0 {
+		t.Errorf("after all EventNetworkIdle: activeNetworkOps = %d, want 0", m.activeNetworkOps)
+	}
+}
+
+// TestNetworkIndicator_NegativeCounterProtection verifies that the counter
+// doesn't go negative if we receive more idle events than activity events.
+func TestNetworkIndicator_NegativeCounterProtection(t *testing.T) {
+	m, cleanup := setupTestModel(t)
+	defer cleanup()
+
+	// Send idle event without corresponding activity event
+	idleEvent := core.Event{
+		Type:      core.EventNetworkIdle,
+		MysisID:   "test-mysis",
+		Timestamp: time.Now(),
+	}
+	m.handleEvent(idleEvent)
+
+	// Counter should be clamped at 0, not negative
+	if m.activeNetworkOps < 0 {
+		t.Errorf("activeNetworkOps = %d, should not be negative", m.activeNetworkOps)
+	}
+	if m.activeNetworkOps != 0 {
+		t.Errorf("activeNetworkOps = %d, want 0", m.activeNetworkOps)
+	}
+}

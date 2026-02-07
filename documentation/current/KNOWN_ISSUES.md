@@ -66,6 +66,8 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## Recently Resolved
 
+- [x] **Network indicator shows idle despite active Myses** (2026-02-07) - Fixed missing `EventNetworkIdle` after successful MCP tool execution and added counter tracking for network operations. Root cause: `EventNetworkMCP` was published for each tool call but `EventNetworkIdle` was only published on errors, causing counter to grow unbounded. Added `activeNetworkOps` counter in TUI that increments on LLM/MCP events and decrements on idle events. Indicator now correctly shows activity for both user-initiated and autonomous operations. See `documentation/architecture/NETWORK_EVENT_GUARANTEES.md` for event contract. Coverage improved from 85.0% to 85.3%.
+
 - [x] **Config validation and type safety** (2026-02-05) - Added comprehensive config validation with aggregated errors for provider/swarm settings. Replaced Event.Data interface{} with typed fields for type safety. Standardized Mysis receiver names. Coverage improved from 61% to 71.4%.
 
 - [x] **Testing coverage expansion** (2026-02-05) - Added config validation tests (11 subtests), provider error handling tests, HTTP mocking for tool calls, MCP proxy tests, and concurrent write benchmark (p50: 0.3ms, p99: 1.9ms).

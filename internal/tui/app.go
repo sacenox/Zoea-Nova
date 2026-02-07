@@ -79,7 +79,8 @@ type Model struct {
 	viewportTotalLines int // total lines in viewport content
 
 	// Network activity indicator
-	netIndicator NetIndicator
+	netIndicator     NetIndicator
+	activeNetworkOps int // Count of active network operations (LLM/MCP calls)
 
 	providerErrorTimes []time.Time
 
@@ -779,14 +780,21 @@ func (m *Model) handleEvent(event core.Event) {
 		m.refreshSwarmMessages()
 
 	case core.EventNetworkLLM:
+		m.activeNetworkOps++
 		m.netIndicator.SetActivity(NetActivityLLM)
 
 	case core.EventNetworkMCP:
+		m.activeNetworkOps++
 		m.netIndicator.SetActivity(NetActivityMCP)
 
 	case core.EventNetworkIdle:
-		// Only go idle if no myses are loading
-		if len(m.loadingSet) == 0 {
+		// Decrement active operations counter
+		m.activeNetworkOps--
+		if m.activeNetworkOps < 0 {
+			m.activeNetworkOps = 0 // Safety: prevent negative counts
+		}
+		// Only go idle if no active network operations
+		if m.activeNetworkOps == 0 {
 			m.netIndicator.SetActivity(NetActivityIdle)
 		}
 		// Refresh tick when network goes idle (tool calls completed)

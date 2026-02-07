@@ -621,6 +621,9 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 				// Clear MCP activity state after call completes
 				a.setActivity(ActivityStateIdle, time.Time{})
 
+				// Signal MCP activity complete
+				a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
+
 				a.updateActivityFromToolResult(result, execErr)
 
 				// Store the tool result
