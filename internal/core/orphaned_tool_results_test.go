@@ -8,12 +8,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-// TestOrphanedToolResults_ContextCompression tests the bug found in investigation:
-// When context window compression removes an assistant message with parallel tool calls,
-// but keeps some of the tool results, we get orphaned tool results that violate OpenAI API.
-//
-// This reproduces Agent 3's finding: Messages 5-6 contained orphaned tool results
-// for tool calls that were removed during context compression.
+// TestOrphanedToolResults_ContextCompression ensures tool messages are excluded from context.
 func TestOrphanedToolResults_ContextCompression(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -88,8 +83,7 @@ func TestOrphanedToolResults_ContextCompression(t *testing.T) {
 		}
 	}
 
-	// Step 5: Get context memories with compression (last 20 messages)
-	// This should simulate what happens in real usage
+	// Step 5: Get context memories with filtering (last 20 messages)
 	mysis := &Mysis{
 		id:    stored.ID,
 		name:  stored.Name,
@@ -102,37 +96,13 @@ func TestOrphanedToolResults_ContextCompression(t *testing.T) {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// Step 6: Check if orphaned tool results exist
-	validToolCalls := mysis.collectValidToolCallIDs(memories)
-	orphanedResults := []string{}
-
 	for _, mem := range memories {
 		if mem.Role == store.MemoryRoleTool {
-			// Extract tool call ID from result
-			idx := len(mem.Content)
-			for i, ch := range mem.Content {
-				if ch == ':' {
-					idx = i
-					break
-				}
-			}
-			if idx > 0 && idx < len(mem.Content) {
-				toolCallID := mem.Content[:idx]
-				if !validToolCalls[toolCallID] {
-					orphanedResults = append(orphanedResults, toolCallID)
-				}
-			}
+			t.Fatalf("expected no tool memories in context, found: %s", mem.Content)
 		}
-	}
-
-	// ASSERTION: This test should FAIL initially, proving the bug exists
-	// After fix, orphanedResults should be empty
-	if len(orphanedResults) > 0 {
-		t.Errorf("Found %d orphaned tool results (expected 0): %v",
-			len(orphanedResults), orphanedResults)
-		t.Logf("This proves the bug: orphaned tool results exist after context compression")
-		t.Logf("Valid tool calls in context: %d", len(validToolCalls))
-		t.Logf("Total memories in context: %d", len(memories))
+		if mem.Role == store.MemoryRoleAssistant && strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			t.Fatalf("expected no assistant tool-call memories in context, found: %s", mem.Content)
+		}
 	}
 }
 

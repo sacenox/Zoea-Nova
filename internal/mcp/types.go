@@ -4,6 +4,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
 // Request represents an MCP request.
@@ -26,6 +27,16 @@ type Response struct {
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// HTTPError represents a non-200 HTTP response from the MCP server.
+type HTTPError struct {
+	Status int
+	Body   string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("http error %d: %s", e.Status, e.Body)
 }
 
 // Tool represents an MCP tool definition.

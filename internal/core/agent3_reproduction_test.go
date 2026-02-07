@@ -8,17 +8,7 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-// TestAgent3Finding_OrphanedToolResults reproduces the EXACT finding from Agent 3:
-// The request sent to OpenCode Zen contained orphaned tool results at messages 5-6.
-//
-// Agent 3 found:
-// - Message 5: Tool result for call_-7908546686739502338 (get_system) - ORPHANED
-// - Message 6: Tool result for call_-7908546686739502336 (get_ship) - ORPHANED
-//
-// The assistant message with these 4 tool calls was removed during context compression,
-// but 2 of the 4 tool results remained.
-//
-// This test MUST FAIL to prove the bug exists in the actual code path.
+// TestAgent3Finding_OrphanedToolResults ensures tool messages are excluded from context.
 func TestAgent3Finding_OrphanedToolResults(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -134,53 +124,24 @@ func TestAgent3Finding_OrphanedToolResults(t *testing.T) {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// Step 7: Check for orphaned tool results (the bug)
-	validToolCalls := mysis.collectValidToolCallIDs(memories)
-
-	t.Logf("Context has %d memories", len(memories))
-	t.Logf("Valid tool calls in context: %d", len(validToolCalls))
-
-	orphanedResults := []string{}
 	for _, mem := range memories {
 		if mem.Role == store.MemoryRoleTool {
-			// Extract tool call ID
-			parts := strings.Split(mem.Content, constants.ToolCallStorageFieldDelimiter)
-			if len(parts) > 0 {
-				toolCallID := parts[0]
-				if !validToolCalls[toolCallID] {
-					orphanedResults = append(orphanedResults, toolCallID)
-					t.Logf("Found orphaned tool result: %s (content: %.50s...)", toolCallID, mem.Content)
-				}
-			}
+			t.Fatalf("expected no tool memories in context, found: %s", mem.Content)
+		}
+		if mem.Role == store.MemoryRoleAssistant && strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			t.Fatalf("expected no assistant tool-call memories in context, found: %s", mem.Content)
 		}
 	}
 
-	// CRITICAL ASSERTION: This test MUST FAIL if the bug exists
-	// If orphanedResults is NOT empty, the bug is present
-	if len(orphanedResults) == 0 {
-		t.Logf("✅ No orphaned tool results found - bug is FIXED")
-	} else {
-		t.Errorf("🚨 Found %d orphaned tool results (THIS IS THE BUG): %v",
-			len(orphanedResults), orphanedResults)
-		t.Errorf("Agent 3 found call_-7908546686739502338 and call_-7908546686739502336 as orphaned")
-		t.Errorf("Our cleanup functions should have removed these, but they didn't")
-	}
-
-	// Step 8: Also check that our cleanup functions are being called
-	// Convert to messages to see if they would be sent to the LLM
 	messages := mysis.memoriesToMessages(memories)
-
-	t.Logf("Converted to %d messages for LLM", len(messages))
-
-	// Check for orphaned tool messages in the final message list
-	toolMessagesCount := 0
 	for _, msg := range messages {
 		if msg.Role == "tool" {
-			toolMessagesCount++
+			t.Fatalf("expected no tool messages for LLM, found: %+v", msg)
+		}
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			t.Fatalf("expected no assistant tool calls for LLM, found: %+v", msg)
 		}
 	}
-
-	t.Logf("Final message list has %d tool messages", toolMessagesCount)
 }
 
 // TestMemoriesToMessages_WithOrphanedResults documents that memoriesToMessages

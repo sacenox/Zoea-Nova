@@ -1275,8 +1275,10 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		return nil, err
 	}
 
+	filtered := a.filterContextMemories(recent)
+
 	// Apply compaction to remove redundant snapshot tool results
-	compacted := a.compactSnapshots(recent)
+	compacted := a.compactSnapshots(filtered)
 
 	// Remove orphaned tool messages (results without corresponding tool calls)
 	// This ensures OpenAI Chat Completions API compliance
@@ -1303,6 +1305,20 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 	result = append(result, system)
 	result = append(result, compacted...)
 	return result, nil
+}
+
+func (m *Mysis) filterContextMemories(memories []*store.Memory) []*store.Memory {
+	result := make([]*store.Memory, 0, len(memories))
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			continue
+		}
+		if mem.Role == store.MemoryRoleAssistant && strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			continue
+		}
+		result = append(result, mem)
+	}
+	return result
 }
 
 // compactSnapshots removes redundant snapshot tool results, keeping only the most recent
