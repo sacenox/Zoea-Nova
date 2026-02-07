@@ -75,23 +75,25 @@ func Load(path string) (*Config, error) {
 	defaults := DefaultConfig()
 	cfg := DefaultConfig()
 	var meta toml.MetaData
-	var loaded bool
 
-	// Load from file if it exists
-	if path != "" {
-		if _, err := os.Stat(path); err == nil {
-			decoded, err := toml.DecodeFile(path, cfg)
-			if err != nil {
-				return nil, err
-			}
-			meta = decoded
-			loaded = true
-		}
+	// Config file is required
+	if path == "" {
+		return nil, fmt.Errorf("config path is required")
 	}
 
-	if loaded {
-		applyProviderDefaults(cfg, defaults, meta)
+	// File must exist
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("config file not found: %s", path)
 	}
+
+	// Load from file
+	decoded, err := toml.DecodeFile(path, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	meta = decoded
+
+	applyProviderDefaults(cfg, defaults, meta)
 
 	// Apply environment variable overrides
 	applyEnvOverrides(cfg)
