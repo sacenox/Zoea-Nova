@@ -1272,6 +1272,19 @@ func (m *Mysis) setIdle(reason string) {
 //
 // The commander is identified by empty sender_id in broadcasts.
 // Memories are expected to be ordered newest-first (from getContextMemories).
+//
+// Parameters:
+//   - memories: Slice of memories ordered newest-first, typically from GetRecentMemories
+//
+// Returns:
+//   - *store.Memory: The selected prompt source, or nil if no valid user message exists
+//
+// Rationale:
+//
+//	This priority ensures that direct commands from the commander take precedence
+//	over broadcasts, and commander broadcasts take precedence over peer messages.
+//	When no prompt source exists, returning nil signals the caller to generate
+//	a synthetic nudge to keep the Mysis active.
 func (m *Mysis) selectPromptSource(memories []*store.Memory) *store.Memory {
 	if len(memories) == 0 {
 		return nil
@@ -1326,10 +1339,31 @@ func (m *Mysis) selectPromptSource(memories []*store.Memory) *store.Memory {
 // extractLatestToolLoop finds the most recent tool-call message (assistant role
 // with tool_calls) and returns it plus all subsequent tool results.
 //
-// Returns: [tool-call-message, result1, result2, ...] or empty slice if no tool loop found.
+// Parameters:
+//   - memories: Slice of memories in chronological order (oldest first, newest last)
+//     as returned by GetRecentMemories
 //
-// The function scans memories backwards from the end (since GetRecentMemories returns
-// chronological order: oldest first, newest last) to find the most recent tool call.
+// Returns:
+//   - []*store.Memory: Slice containing [tool-call-message, result1, result2, ...]
+//     in chronological order, or empty slice if no tool loop found
+//
+// Behavior:
+//   - Scans backwards from the end to find the most recent assistant message
+//     with content prefixed by constants.ToolCallStoragePrefix
+//   - Collects all consecutive tool role messages that follow the tool call
+//   - Stops at the first non-tool message (end of loop)
+//   - Returns empty slice if no tool call is found
+//
+// Rationale:
+//
+//	By extracting only the latest tool loop, we ensure OpenAI-compatible providers
+//	receive properly paired tool calls and results without orphaned tool messages.
+//	This prevents API errors from malformed message sequences.
+//
+// Example:
+//
+//	Given memories: [user_msg, assistant_with_tools, tool_result1, tool_result2, user_msg2]
+//	Returns: [assistant_with_tools, tool_result1, tool_result2]
 func (m *Mysis) extractLatestToolLoop(memories []*store.Memory) []*store.Memory {
 	if len(memories) == 0 {
 		return nil
@@ -1374,6 +1408,42 @@ func (m *Mysis) extractLatestToolLoop(memories []*store.Memory) []*store.Memory 
 // getContextMemories returns memories for LLM context using loop-based composition.
 // Composes context as: [system prompt] + [chosen prompt source] + [most recent tool loop].
 // This ensures stable, bounded context and eliminates orphaned tool sequencing.
+//
+// Returns:
+//   - []*store.Memory: Composed context slice ready for provider conversion
+//   - error: Database error from GetRecentMemories or GetSystemMemory
+//
+// Context Composition:
+//  1. System prompt (if available) - provides mysis identity and mission
+//  2. Prompt source (by priority) - the user message that triggers this LLM turn
+//     - Commander direct message (highest priority)
+//     - Commander broadcast
+//     - Swarm broadcast
+//     - Synthetic nudge (if no prompt found)
+//  3. Latest tool loop (if any) - most recent tool call + all its results
+//
+// Behavior:
+//   - Fetches up to constants.MaxContextMessages (20) recent memories
+//   - Creates synthetic nudge if no valid prompt source exists
+//   - Nudge memory is NOT stored in database (temporary, in-memory only)
+//   - Nudge counter increment happens in caller (handleLLMResponse)
+//
+// Rationale:
+//
+//	Loop-based composition solves the orphaned tool result problem:
+//	- Sliding window (MaxContextMessages) can split tool call/result pairs
+//	- By extracting only the latest complete loop, we guarantee proper pairing
+//	- Bounded context (3 components max) keeps token usage predictable
+//	- Stable structure prevents OpenAI API errors from malformed sequences
+//
+// Example context:
+//
+//	[
+//	  {role: system, content: "You are Mysis Alpha..."},
+//	  {role: user, source: direct, content: "Check ship status"},
+//	  {role: assistant, content: "[TOOL_CALLS]call_1:get_ship:{}"},
+//	  {role: tool, content: "Ship health: 100%"}
+//	]
 func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 	// Get all recent memories
 	allMemories, err := m.store.GetRecentMemories(m.id, constants.MaxContextMessages)

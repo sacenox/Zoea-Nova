@@ -1,6 +1,6 @@
 # Context Compression
 
-Myses in Zoea Nova use a sliding window approach to manage LLM context size. Instead of sending the entire conversation history to the LLM on each turn, Myses send only recent messages plus the system prompt. This keeps inference fast while Myses retain access to older memories through search tools.
+Zoea Nova uses a loop-based context composition strategy to keep LLM context small and stable. Instead of sending large conversation windows, each LLM request includes only three components: system prompt, a single prompt source, and the most recent tool loop. This guarantees bounded context size (typically 2-10 messages) while the full conversation history remains searchable.
 
 ## Design
 
@@ -11,19 +11,26 @@ Without compression, Mysis context grows unbounded:
 - SpaceMolt gameplay involves frequent tool use (mining, trading, navigation)
 - Large contexts slow inference and increase costs
 - Eventually hits provider token limits
+- Traditional sliding windows create orphaned tool results and broken message sequences
 
-### The Solution
+### The Solution: Loop Slices
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   LLM Context                       │
+│              (Loop-Based Composition)               │
 ├─────────────────────────────────────────────────────┤
-│  System Prompt (always included)                    │
+│  [1] System Prompt (always first)                   │
 ├─────────────────────────────────────────────────────┤
-│  Recent Messages (last 20)                          │
-│  - User messages                                    │
-│  - Assistant responses                              │
-│  - Tool calls and results                           │
+│  [2] Prompt Source (chosen by priority)             │
+│      • Commander direct message                     │
+│      • Last commander broadcast                     │
+│      • Last swarm broadcast                         │
+│      • Synthetic nudge (if no prompts found)        │
+├─────────────────────────────────────────────────────┤
+│  [3] Latest Tool Loop (if any)                      │
+│      • Tool call message (assistant with tools)     │
+│      • All subsequent tool results                  │
 └─────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────┐
@@ -35,92 +42,158 @@ Without compression, Mysis context grows unbounded:
 └─────────────────────────────────────────────────────┘
 ```
 
-## Implementation
+## Architecture
 
-### Constants
+### Loop Slice Model
 
-```go
-// internal/core/mysis.go
+A **loop slice** is the atomic unit of tool interaction:
+1. **Tool call message** (assistant role, contains `[TOOL_CALLS]` prefix)
+2. **Tool results** (tool role, consecutive messages following the call)
 
-// MaxContextMessages limits how many recent messages to include in LLM context.
-// Value chosen to cover ~2 server ticks worth of activity.
-const MaxContextMessages = 20
+The most recent loop slice is always included in context to maintain tool-calling coherence.
 
-// Snapshot tools are identified by prefix matching and explicit names:
-// - Any tool starting with "get_" (e.g., get_ship, get_system, get_poi, get_nearby, get_cargo)
-// - Explicit: zoea_swarm_status, zoea_list_myses
-// When multiple results from the same snapshot tool appear in context,
-// only the most recent one is kept to prevent redundant state data.
-```
+### Prompt Source Priority
 
-### Context Assembly
+Prompt sources are user messages that drive Mysis behavior. Priority order:
 
-The `getContextMemories()` method assembles context for each LLM call:
+1. **Commander direct message** (`source="direct"`) - Highest priority, always used if present
+2. **Last commander broadcast** (`source="broadcast"`, `sender_id=""`) - Commander identified by empty sender_id
+3. **Last swarm broadcast** (`source="broadcast"`, `sender_id!=""`) - Most recent broadcast from another Mysis
+4. **Synthetic nudge** (generated, not stored) - Fallback when no prompt sources exist
 
-1. Fetch the N most recent memories from SQLite
-2. Apply snapshot compaction to remove redundant state tool results
-3. Fetch the system prompt (first system message for the Mysis)
-4. If system prompt isn't already in compacted memories, prepend it
-5. Return the assembled context
+### Context Composition Algorithm
 
 ```go
+// internal/core/mysis.go:1374-1421
+
 func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
-    recent, err := m.store.GetRecentMemories(m.id, MaxContextMessages)
-    if err != nil {
-        return nil, err
+    // Fetch recent memories from DB
+    allMemories := GetRecentMemories(m.id, MaxContextMessages)
+    
+    result := []
+    
+    // Step 1: Add system prompt (if available)
+    system := GetSystemMemory(m.id)
+    if system != nil {
+        result.append(system)
     }
-
-    // Apply compaction to remove redundant snapshot tool results
-    compacted := m.compactSnapshots(recent)
-
-    system, err := m.store.GetSystemMemory(m.id)
-    if err != nil {
-        // No system prompt - use compacted memories only
-        return compacted, nil
+    
+    // Step 2: Select prompt source by priority
+    promptSource := selectPromptSource(allMemories)
+    if promptSource == nil {
+        // Generate synthetic nudge (not stored in DB)
+        nudge := createEphemeralNudge()
+        result.append(nudge)
+    } else {
+        result.append(promptSource)
     }
-
-    // Check if system prompt is already first
-    if len(compacted) > 0 && compacted[0].ID == system.ID {
-        return compacted, nil
-    }
-
-    // Prepend system prompt
-    result := make([]*store.Memory, 0, len(compacted)+1)
-    result = append(result, system)
-    result = append(result, compacted...)
-    return result, nil
+    
+    // Step 3: Extract latest tool loop
+    toolLoop := extractLatestToolLoop(allMemories)
+    result.append(toolLoop...)
+    
+    return result
 }
 ```
 
-### Snapshot Compaction
-
-The `compactSnapshots()` method removes redundant state tool results:
-
-- Identifies tool results from snapshot tools (get_ship, get_system, etc.)
-- Keeps only the most recent result for each snapshot tool
-- Preserves all non-snapshot messages and tool results
-- Maintains chronological order
-
-Snapshot detection relies on tool call IDs recorded in assistant `[TOOL_CALLS]` memories. Tool results are compacted only when their tool call ID resolves to a snapshot tool name, which avoids misclassifying non-snapshot results that happen to include similar fields.
-
-This prevents state-heavy tools from crowding out conversation history while ensuring the latest state is always available.
-
-### Store Methods
+### Loop Extraction
 
 ```go
-// internal/store/memories.go
+// internal/core/mysis.go:1326-1372
 
-// GetSystemMemory retrieves the initial system prompt for a Mysis.
-func (s *Store) GetSystemMemory(mysisID string) (*Memory, error)
+func extractLatestToolLoop(memories []*store.Memory) []*store.Memory {
+    // Scan backwards (newest first) for most recent tool call
+    toolCallIdx := findLastToolCallMessage(memories)
+    if toolCallIdx == -1 {
+        return nil
+    }
+    
+    // Collect tool call + all consecutive tool results
+    loop := [memories[toolCallIdx]]
+    for i := toolCallIdx + 1; i < len(memories); i++ {
+        if memories[i].Role == "tool" {
+            loop.append(memories[i])
+        } else {
+            break  // Stop at first non-tool message
+        }
+    }
+    
+    return loop
+}
+```
 
-// GetRecentMemories retrieves the most recent N memories for a Mysis.
-func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error)
+Tool call messages are identified by:
+- Role: `assistant`
+- Content prefix: `[TOOL_CALLS]`
 
-// SearchMemories searches memories by content text (case-sensitive).
-func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error)
+## Bounded Size Guarantees
 
-// SearchBroadcasts searches broadcast messages by content text (case-sensitive).
-func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, error)
+The loop slice model provides strict size bounds:
+
+| Component | Typical Size | Max Size |
+|-----------|--------------|----------|
+| System prompt | 1 message | 1 message |
+| Prompt source | 1 message | 1 message |
+| Tool loop | 1-8 messages | ~15 messages (1 call + max results) |
+| **Total** | **3-10 messages** | **~17 messages** |
+
+This is dramatically smaller than traditional sliding windows (20-50 messages) and eliminates orphaned tool sequencing issues.
+
+## Synthetic Nudge Behavior
+
+When no prompt source is found in recent memory, a synthetic nudge is generated:
+
+```go
+// internal/core/mysis.go:1398-1409
+
+nudgeContent := "Continue your mission. Check notifications and coordinate with the swarm."
+nudgeMemory := &store.Memory{
+    Role:      "user",
+    Source:    "system",
+    Content:   nudgeContent,
+    SenderID:  "",
+    CreatedAt: time.Now(),
+}
+```
+
+**Key properties:**
+- **NOT stored in database** - Ephemeral automation scaffolding
+- **Counted for circuit breaker** - Nudge counter increments in ticker loop
+- **Escalating prompts** - Content changes based on `nudgeFailCount`:
+  - Attempt 1: "Continue your mission..." (gentle)
+  - Attempt 2: "You need to respond..." (firm)
+  - Attempt 3: "URGENT: Respond immediately..." (urgent)
+  - After 3: Transition to idle state with error
+
+### Nudge Circuit Breaker
+
+```go
+// internal/core/mysis.go:1624-1641
+
+if shouldNudge(time.Now()) {
+    nudgeFailCount++
+    
+    if nudgeFailCount >= 3 {
+        setIdle("Failed to respond after 3 nudges")
+        return
+    }
+    
+    nudgeCh <- struct{}{}  // Trigger nudge processing
+}
+```
+
+**Counter reset:**
+- Reset to 0 on successful LLM response (line 616)
+- Prevents idle Myses from looping indefinitely
+- Forces transition to idle state after 3 failed nudges
+
+### Nudge Intervals
+
+```go
+// internal/constants/constants.go:69-73
+
+IdleNudgeInterval = 30 * time.Second      // Default idle nudging
+WaitStateNudgeInterval = 2 * time.Minute  // Nudging during wait states
 ```
 
 ## Search Tools
@@ -173,44 +246,84 @@ Returns matching reasoning entries with role, source, content, reasoning, and ti
 The system prompt instructs Myses to use their captain's log for persistent memory and search tools for older context:
 
 ```
-## Memory
-Use captain's log to persist important information across sessions.
-
-## Context & Memory Management
-Your context window is limited. Recent state snapshots are kept, but older messages are removed.
-If you need information from earlier in the conversation:
-- Use zoea_search_messages to find past messages by keyword
-- Use zoea_search_reasoning to find past reasoning by keyword
-- Use captain's log for persistent notes across sessions
+## Critical Rules
+Context is limited - use search tools for older information.
 ```
 
-The continue prompt also reminds Myses about search tools:
-
-```
-CRITICAL REMINDERS:
-- If you need past data, use zoea_search_messages or zoea_search_reasoning
-```
+The continue prompt also reminds Myses about search tools when generated by nudging logic.
 
 This encourages Myses to:
 1. Externalize important information to the game's built-in note system
 2. Use search tools to retrieve older context when needed
-3. Understand that their context window is limited and compacted
+3. Understand that their context window is minimal and focused
+
+## Benefits Over Sliding Windows
+
+| Aspect | Loop Slices | Traditional Sliding Window |
+|--------|-------------|---------------------------|
+| Size | 2-10 messages | 20-50 messages |
+| Stability | Always same structure | Variable, depends on history |
+| Tool coherence | Complete loops guaranteed | Often broken mid-sequence |
+| Orphaned messages | Never | Common (tool results without calls) |
+| Context bloat | None | Redundant state snapshots accumulate |
+| Inference speed | Fast (minimal tokens) | Slower (large context) |
+
+## Implementation Details
+
+### Constants
+
+```go
+// internal/constants/constants.go:62-64
+
+MaxContextMessages = 20  // Window for scanning recent memories
+```
+
+Note: `MaxContextMessages` is the scanning window, NOT the final context size. The loop slice extraction typically produces 2-10 messages regardless of this value.
+
+### Store Methods
+
+```go
+// internal/store/memories.go
+
+// GetSystemMemory retrieves the initial system prompt for a Mysis.
+func (s *Store) GetSystemMemory(mysisID string) (*Memory, error)
+
+// GetRecentMemories retrieves the most recent N memories for a Mysis.
+func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error)
+
+// SearchMemories searches memories by content text (case-sensitive).
+func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error)
+
+// SearchBroadcasts searches broadcast messages by content text (case-sensitive).
+func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, error)
+```
 
 ## Tradeoffs
 
 | Aspect | Benefit | Cost |
 |--------|---------|------|
-| Inference speed | Faster responses with smaller context | May lose relevant older context |
-| Token costs | Lower per-request costs | Search queries add overhead |
+| Inference speed | Very fast with minimal context | May lose relevant older context |
+| Token costs | Minimal per-request costs | Search queries add overhead |
 | Memory access | Full history searchable | Requires explicit search |
-| Coherence | Recent context always available | Long-term plans may be forgotten |
+| Coherence | Recent tool loops always complete | Long-term plans may be forgotten |
+| Predictability | Same structure every time | Less conversational continuity |
 
 ## Tuning
 
-The `MaxContextMessages` constant can be adjusted based on:
+The loop slice model has minimal tuning surface:
 
-- **Model context window**: Larger models can handle more messages
-- **Gameplay pace**: Faster tick rates may need larger windows
-- **Tool call frequency**: Heavy tool use fills context faster
+- **`MaxContextMessages`**: Scanning window for finding prompt sources and tool loops. Larger values increase DB query cost but provide more history to search. Default: 20 messages (~2 server ticks).
+- **Prompt source priority**: Fixed order defined by game design (commander > broadcasts > nudge).
+- **Nudge intervals**: Control how often idle Myses are prompted. Faster intervals increase responsiveness but may interrupt LLM processing.
 
-Current value of 20 messages covers approximately 2 server ticks of typical gameplay activity.
+## Migration Notes
+
+This architecture replaced the previous snapshot compaction model (v0.4.x) which used a 20-message sliding window with snapshot deduplication. The old model:
+- Sent 20 recent messages per LLM request
+- Deduplicated redundant `get_*` tool results
+- Often broke tool call sequences mid-loop
+- Created orphaned tool results
+
+The loop slice model eliminates these issues by composing context from atomic units (system + prompt + loop) rather than arbitrary time windows.
+
+See `documentation/archive/` for historical compaction implementation details.
