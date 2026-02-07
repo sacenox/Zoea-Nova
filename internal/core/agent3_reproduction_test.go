@@ -265,3 +265,217 @@ func TestMemoriesToMessages_WithOrphanedResults(t *testing.T) {
 		t.Errorf("memoriesToMessages should not convert orphaned tool results to messages")
 	}
 }
+
+// TestLoopContextSlice_ToolCallResultPairing validates that tool results are
+// present ONLY when their matching tool call is present in the context.
+//
+// This test is part of Task 2 of the Loop Context Composition plan:
+// - Tool results must be paired with their tool calls
+// - No orphaned tool results should exist
+// - If a tool call is excluded from context, its results must also be excluded
+//
+// Expected behavior under new loop composition:
+// - Only the most recent tool-call loop is included
+// - Older tool loops are completely excluded (both calls and results)
+//
+// This test MUST FAIL initially because the current implementation uses
+// MaxContextMessages sliding window which can split tool call/result pairs.
+func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("loop-pairing-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Step 1: Add system prompt
+	err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem,
+		"System prompt", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory system: %v", err)
+	}
+
+	// Step 2: Add commander message (prompt source)
+	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect,
+		"Check your status and mine some resources", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory commander: %v", err)
+	}
+
+	// Step 3: Add OLD tool loop (should be excluded entirely)
+	// Loop 1: get_status + get_system
+	oldLoop1Assistant := constants.ToolCallStoragePrefix +
+		"call_old_1:get_status:{}" + constants.ToolCallStorageRecordDelimiter +
+		"call_old_2:get_system:{}"
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		oldLoop1Assistant, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory old loop 1: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_old_1"+constants.ToolCallStorageFieldDelimiter+"Old status result", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory old result 1: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_old_2"+constants.ToolCallStorageFieldDelimiter+"Old system result", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory old result 2: %v", err)
+	}
+
+	// Step 4: Add another OLD tool loop (should also be excluded)
+	// Loop 2: get_poi
+	oldLoop2Assistant := constants.ToolCallStoragePrefix + "call_old_3:get_poi:{}"
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		oldLoop2Assistant, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory old loop 2: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_old_3"+constants.ToolCallStorageFieldDelimiter+"Old POI result", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory old result 3: %v", err)
+	}
+
+	// Step 5: Add the MOST RECENT tool loop (should be included entirely)
+	// Loop 3: mine + get_cargo
+	recentLoopAssistant := constants.ToolCallStoragePrefix +
+		"call_recent_1:mine:{}" + constants.ToolCallStorageRecordDelimiter +
+		"call_recent_2:get_cargo:{}"
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		recentLoopAssistant, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory recent loop: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_recent_1"+constants.ToolCallStorageFieldDelimiter+"Mining successful", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory recent result 1: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_recent_2"+constants.ToolCallStorageFieldDelimiter+"Cargo: ore_iron x10", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory recent result 2: %v", err)
+	}
+
+	// Step 6: Get context memories using new loop composition
+	mysis := &Mysis{
+		id:    stored.ID,
+		name:  stored.Name,
+		store: s,
+		bus:   bus,
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// Step 7: Validate loop composition rules
+	t.Logf("Context has %d memories", len(memories))
+
+	// Collect all tool call IDs present in assistant messages
+	validToolCalls := make(map[string]bool)
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleAssistant &&
+			strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			calls := mysis.parseStoredToolCalls(mem.Content)
+			for _, call := range calls {
+				validToolCalls[call.ID] = true
+				t.Logf("Found tool call in context: %s (%s)", call.ID, call.Name)
+			}
+		}
+	}
+
+	// Collect all tool result IDs present in tool messages
+	presentToolResults := make(map[string]bool)
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			parts := strings.Split(mem.Content, constants.ToolCallStorageFieldDelimiter)
+			if len(parts) > 0 {
+				toolCallID := parts[0]
+				presentToolResults[toolCallID] = true
+				t.Logf("Found tool result in context: %s", toolCallID)
+			}
+		}
+	}
+
+	// CRITICAL ASSERTION 1: No orphaned tool results
+	// Every tool result must have a matching tool call in the context
+	orphanedResults := []string{}
+	for resultID := range presentToolResults {
+		if !validToolCalls[resultID] {
+			orphanedResults = append(orphanedResults, resultID)
+		}
+	}
+
+	if len(orphanedResults) > 0 {
+		t.Errorf("LOOP COMPOSITION VIOLATION: Found %d orphaned tool results (results without tool calls): %v",
+			len(orphanedResults), orphanedResults)
+		t.Errorf("Under loop composition, if a tool call is excluded, ALL its results must be excluded")
+	}
+
+	// CRITICAL ASSERTION 2: Only the most recent tool loop is present
+	// Old tool calls (call_old_*) should NOT be in context
+	oldCallsPresent := []string{}
+	for callID := range validToolCalls {
+		if strings.Contains(callID, "call_old_") {
+			oldCallsPresent = append(oldCallsPresent, callID)
+		}
+	}
+
+	if len(oldCallsPresent) > 0 {
+		t.Errorf("LOOP COMPOSITION VIOLATION: Found %d old tool calls in context (should only have most recent loop): %v",
+			len(oldCallsPresent), oldCallsPresent)
+	}
+
+	// CRITICAL ASSERTION 3: The most recent loop is complete
+	// Both call_recent_1 and call_recent_2 should be present
+	expectedRecentCalls := []string{"call_recent_1", "call_recent_2"}
+	missingRecentCalls := []string{}
+	for _, expectedCall := range expectedRecentCalls {
+		if !validToolCalls[expectedCall] {
+			missingRecentCalls = append(missingRecentCalls, expectedCall)
+		}
+	}
+
+	if len(missingRecentCalls) > 0 {
+		t.Errorf("LOOP COMPOSITION VIOLATION: Missing %d tool calls from most recent loop: %v",
+			len(missingRecentCalls), missingRecentCalls)
+		t.Errorf("The most recent tool loop must be included completely")
+	}
+
+	// CRITICAL ASSERTION 4: All tool calls have matching results
+	// This is the inverse check - no orphaned tool calls
+	missingResults := []string{}
+	for callID := range validToolCalls {
+		if !presentToolResults[callID] {
+			missingResults = append(missingResults, callID)
+		}
+	}
+
+	if len(missingResults) > 0 {
+		t.Errorf("LOOP COMPOSITION VIOLATION: Found %d tool calls without results: %v",
+			len(missingResults), missingResults)
+		t.Errorf("Under loop composition, tool calls and their results must be paired")
+	}
+
+	// SUCCESS: If we get here with no errors, loop composition is working correctly
+	if len(orphanedResults) == 0 && len(oldCallsPresent) == 0 &&
+		len(missingRecentCalls) == 0 && len(missingResults) == 0 {
+		t.Logf("Loop composition validated:")
+		t.Logf("  - No orphaned tool results")
+		t.Logf("  - Only most recent loop present")
+		t.Logf("  - Complete tool call/result pairing")
+		t.Logf("  - Found %d tool calls, %d tool results", len(validToolCalls), len(presentToolResults))
+	}
+}

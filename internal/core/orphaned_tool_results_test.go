@@ -379,3 +379,244 @@ func TestContextCompressionPreservesToolCallPairs(t *testing.T) {
 		}
 	}
 }
+
+// TestLoopContextSlice tests the new loop-based context composition.
+// According to the loop context composition design, getContextMemories should return:
+// - System prompt
+// - Selected prompt source (commander direct → last commander broadcast → last swarm broadcast → nudge)
+// - ONLY the most recent tool-call message and its tool results
+//
+// This test creates multiple tool loops and verifies that older loops are excluded.
+func TestLoopContextSlice(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	stored, err := s.CreateMysis("loop-slice-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	// Step 1: Add system prompt
+	err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem,
+		"You are a test mysis", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory system: %v", err)
+	}
+
+	// Step 2: Add commander direct message (prompt source)
+	err = s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect,
+		"Mine some ore", "", "commander-id")
+	if err != nil {
+		t.Fatalf("AddMemory commander direct: %v", err)
+	}
+
+	// Step 3: Create FIRST tool loop (OLD - should be excluded)
+	// Assistant message with tool call
+	firstLoopToolCall := constants.ToolCallStoragePrefix +
+		"call_loop1_1:get_status:{}" + constants.ToolCallStorageRecordDelimiter +
+		"call_loop1_2:get_system:{}"
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		firstLoopToolCall, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory first loop tool call: %v", err)
+	}
+
+	// Tool results for first loop
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop1_1"+constants.ToolCallStorageFieldDelimiter+"status result 1", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory first loop result 1: %v", err)
+	}
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop1_2"+constants.ToolCallStorageFieldDelimiter+"system result 1", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory first loop result 2: %v", err)
+	}
+
+	// Step 4: Create SECOND tool loop (OLD - should be excluded)
+	secondLoopToolCall := constants.ToolCallStoragePrefix +
+		"call_loop2_1:get_poi:{}" + constants.ToolCallStorageRecordDelimiter +
+		"call_loop2_2:mine:{}"
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		secondLoopToolCall, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory second loop tool call: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop2_1"+constants.ToolCallStorageFieldDelimiter+"poi result 2", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory second loop result 1: %v", err)
+	}
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop2_2"+constants.ToolCallStorageFieldDelimiter+"mine result 2", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory second loop result 2: %v", err)
+	}
+
+	// Step 5: Create THIRD tool loop (CURRENT - should be included)
+	thirdLoopToolCall := constants.ToolCallStoragePrefix +
+		"call_loop3_1:get_notifications:{}" + constants.ToolCallStorageRecordDelimiter +
+		"call_loop3_2:get_cargo:{}"
+	err = s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM,
+		thirdLoopToolCall, "", "")
+	if err != nil {
+		t.Fatalf("AddMemory third loop tool call: %v", err)
+	}
+
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop3_1"+constants.ToolCallStorageFieldDelimiter+"notifications result 3", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory third loop result 1: %v", err)
+	}
+	err = s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
+		"call_loop3_2"+constants.ToolCallStorageFieldDelimiter+"cargo result 3", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory third loop result 2: %v", err)
+	}
+
+	// Step 6: Get context memories
+	mysis := &Mysis{
+		id:    stored.ID,
+		name:  stored.Name,
+		store: s,
+		bus:   bus,
+	}
+
+	memories, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
+	}
+
+	// Step 7: Assertions
+	// Expected: system prompt + commander direct + ONLY third loop (1 assistant + 2 tool results)
+	// Total: 5 memories
+	expectedCount := 5
+	if len(memories) != expectedCount {
+		t.Errorf("Expected %d memories in context, got %d", expectedCount, len(memories))
+		t.Logf("This test SHOULD fail initially - getContextMemories doesn't implement loop slicing yet")
+		for i, m := range memories {
+			contentPreview := m.Content
+			if len(contentPreview) > 50 {
+				contentPreview = contentPreview[:50] + "..."
+			}
+			t.Logf("  Memory[%d]: role=%s source=%s content=%s", i, m.Role, m.Source, contentPreview)
+		}
+	}
+
+	// ASSERTION 1: System prompt should be present
+	if memories[0].Role != store.MemoryRoleSystem {
+		t.Errorf("Expected first memory to be system prompt, got role=%s", memories[0].Role)
+	}
+
+	// ASSERTION 2: Commander direct prompt should be present
+	if memories[1].Role != store.MemoryRoleUser || memories[1].Source != store.MemorySourceDirect {
+		t.Errorf("Expected second memory to be commander direct, got role=%s source=%s",
+			memories[1].Role, memories[1].Source)
+	}
+
+	// ASSERTION 3: Only third loop tool calls should be present
+	foundLoop1Calls := false
+	foundLoop2Calls := false
+	foundLoop3Calls := false
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, constants.ToolCallStoragePrefix) {
+			if strings.Contains(mem.Content, "call_loop1_1") || strings.Contains(mem.Content, "call_loop1_2") {
+				foundLoop1Calls = true
+			}
+			if strings.Contains(mem.Content, "call_loop2_1") || strings.Contains(mem.Content, "call_loop2_2") {
+				foundLoop2Calls = true
+			}
+			if strings.Contains(mem.Content, "call_loop3_1") || strings.Contains(mem.Content, "call_loop3_2") {
+				foundLoop3Calls = true
+			}
+		}
+	}
+
+	if foundLoop1Calls {
+		t.Errorf("First tool loop calls should be excluded from context (too old)")
+	}
+	if foundLoop2Calls {
+		t.Errorf("Second tool loop calls should be excluded from context (too old)")
+	}
+	if !foundLoop3Calls {
+		t.Errorf("Third tool loop calls should be included in context (most recent)")
+	}
+
+	// ASSERTION 4: Only third loop tool results should be present
+	foundLoop1Results := false
+	foundLoop2Results := false
+	foundLoop3Results := false
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			if strings.Contains(mem.Content, "call_loop1_1") || strings.Contains(mem.Content, "call_loop1_2") {
+				foundLoop1Results = true
+			}
+			if strings.Contains(mem.Content, "call_loop2_1") || strings.Contains(mem.Content, "call_loop2_2") {
+				foundLoop2Results = true
+			}
+			if strings.Contains(mem.Content, "call_loop3_1") || strings.Contains(mem.Content, "call_loop3_2") {
+				foundLoop3Results = true
+			}
+		}
+	}
+
+	if foundLoop1Results {
+		t.Errorf("First tool loop results should be excluded from context")
+	}
+	if foundLoop2Results {
+		t.Errorf("Second tool loop results should be excluded from context")
+	}
+	if !foundLoop3Results {
+		t.Errorf("Third tool loop results should be included in context")
+	}
+
+	// ASSERTION 5: Verify no orphaned tool results (all results have matching calls)
+	validToolCalls := mysis.collectValidToolCallIDs(memories)
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			// Extract tool call ID from result
+			idx := len(mem.Content)
+			for i, ch := range mem.Content {
+				if ch == ':' {
+					idx = i
+					break
+				}
+			}
+			if idx > 0 && idx < len(mem.Content) {
+				toolCallID := mem.Content[:idx]
+				if !validToolCalls[toolCallID] {
+					t.Errorf("Found orphaned tool result for call_id=%s (no matching tool call)", toolCallID)
+				}
+			}
+		}
+	}
+
+	// ASSERTION 6: Verify all expected results from loop 3 are present
+	expectedResults := map[string]bool{
+		"call_loop3_1": false,
+		"call_loop3_2": false,
+	}
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			parts := strings.Split(mem.Content, constants.ToolCallStorageFieldDelimiter)
+			if len(parts) > 0 {
+				callID := parts[0]
+				if _, exists := expectedResults[callID]; exists {
+					expectedResults[callID] = true
+				}
+			}
+		}
+	}
+	for callID, found := range expectedResults {
+		if !found {
+			t.Errorf("Expected tool result for %s not found in context", callID)
+		}
+	}
+
+	t.Logf("Total memories in full history: 11 (system + prompt + 3 loops)")
+	t.Logf("Total memories in context: %d", len(memories))
+	t.Logf("Expected context: 5 (system + prompt + last loop)")
+}

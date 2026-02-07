@@ -666,6 +666,134 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	}
 }
 
+func TestContextPromptSourcePriority(t *testing.T) {
+	s, bus, cleanup := setupMysisTest(t)
+	defer cleanup()
+
+	// Create a mysis for testing
+	stored, err := s.CreateMysis("priority-test", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+
+	mock := provider.NewMock("mock", "response")
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+
+	// Commander ID for testing
+	commanderID := "commander-mysis-id"
+	swarmMysisID := "swarm-mysis-id"
+
+	tests := []struct {
+		name           string
+		setupMemories  func()
+		expectedSource store.MemorySource
+		expectedSender string
+	}{
+		{
+			name: "commander_direct_present",
+			setupMemories: func() {
+				// Add system prompt
+				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+				// Add commander direct message
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "Commander direct message", "", commanderID)
+				// Add commander broadcast (should be ignored when direct exists)
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander broadcast", "", commanderID)
+				// Add swarm broadcast (should be ignored when direct exists)
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast", "", swarmMysisID)
+			},
+			expectedSource: store.MemorySourceDirect,
+			expectedSender: commanderID,
+		},
+		{
+			name: "commander_broadcast_when_no_direct",
+			setupMemories: func() {
+				// Add system prompt
+				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+				// Add commander broadcast (most recent)
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander broadcast 1", "", commanderID)
+				// Add swarm broadcast (should be ignored when commander broadcast exists)
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast", "", swarmMysisID)
+				// Add older commander broadcast
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander broadcast 2", "", commanderID)
+			},
+			expectedSource: store.MemorySourceBroadcast,
+			expectedSender: commanderID,
+		},
+		{
+			name: "swarm_broadcast_when_no_commander_messages",
+			setupMemories: func() {
+				// Add system prompt
+				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+				// Add older swarm broadcast
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast 1", "", swarmMysisID)
+				// Add most recent swarm broadcast
+				s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Swarm broadcast 2", "", swarmMysisID)
+			},
+			expectedSource: store.MemorySourceBroadcast,
+			expectedSender: swarmMysisID,
+		},
+		{
+			name: "synthetic_nudge_when_no_broadcasts",
+			setupMemories: func() {
+				// Add system prompt only
+				s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
+				// Add some assistant responses (no user messages)
+				s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, "Previous response", "", "")
+			},
+			expectedSource: store.MemorySourceSystem, // Nudge should be synthesized (not in DB)
+			expectedSender: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear memories for clean test
+			s.DB().Exec("DELETE FROM memories WHERE mysis_id = ?", stored.ID)
+
+			// Setup memories for this test case
+			tt.setupMemories()
+
+			// Get context memories
+			memories, err := mysis.getContextMemories()
+			if err != nil {
+				t.Fatalf("getContextMemories() error: %v", err)
+			}
+
+			// Find the prompt source in the returned memories
+			// Note: This test currently passes because getContextMemories happens to
+			// return memories in the correct order (most recent first), which matches
+			// the priority order. The implementation will be made explicit in Task 3.
+			var foundPromptSource *store.Memory
+			for _, m := range memories {
+				if m.Role == store.MemoryRoleUser {
+					foundPromptSource = m
+					break // Take the first user message as the prompt source
+				}
+			}
+
+			if tt.expectedSource == store.MemorySourceSystem {
+				// Synthetic nudge case - no user messages should exist
+				if foundPromptSource != nil {
+					t.Errorf("expected no user message (synthetic nudge), but found: %+v", foundPromptSource)
+				}
+			} else {
+				// Should find the correct prompt source
+				if foundPromptSource == nil {
+					t.Fatal("expected to find a prompt source, but got none")
+				}
+
+				if foundPromptSource.Source != tt.expectedSource {
+					t.Errorf("expected source=%s, got %s", tt.expectedSource, foundPromptSource.Source)
+				}
+
+				if foundPromptSource.SenderID != tt.expectedSender {
+					t.Errorf("expected sender_id=%s, got %s", tt.expectedSender, foundPromptSource.SenderID)
+				}
+			}
+		})
+	}
+}
+
 func TestMysisContextCompactionNonSnapshot(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
