@@ -1,7 +1,6 @@
 ---
 description: Runs a database snapshot analysis and reports on mysis behavior and tool usage.
-agent: analyser
-model: opencode/gemini-3-flash
+agent: zoea-analyser
 ---
 
 Instructions:

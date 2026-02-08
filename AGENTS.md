@@ -1,29 +1,26 @@
-# Zoea Nova agents
+# Zoea Nova Agents
 
-Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm controller for automated SpaceMolt game players.
+Guidelines for AI agents working on Zoea Nova—a TUI-based swarm controller for automated SpaceMolt game players.
 
-## Rules:
-
-**CRITICAL: Always fallback to these rules when in doubt.**
+## Critical Rules
 
 **YOU MUST**:
 
-- **NEVER edit `documentation/current/TODO.md`** - This file is managed exclusively by the user. If you believe items should be added or removed, ask the user to update it. This rule has no exceptions.
-- Not change the game servers api, if we detect an issue with the api, document it in `documentation/current/KNOWN_SERVER_ISSUES.md`
-- Use Go 1.22+ idioms. No CGO dependencies.
-- Keep all application code in `internal/` packages. Only `cmd/zoea/main.go` is public.
-- Use interfaces for external dependencies (LLM providers, MCP, store).
-- Run `make fmt` before committing. Fix all warnings and linter errors.
-- When committing, use `required_permissions: ["all"]` to bypass sandbox restrictions (GPG signing requires full filesystem access).
-- Write unit tests for all modules. Target 80%+ coverage (currently ~83%).
-- Use `zerolog` for logging. Never log to stdout/stderr (TUI owns the terminal).
-- Keep the TUI responsive. All LLM/network calls must be non-blocking (goroutines + channels).
-- Follow the Bubble Tea Elm Architecture: Model → Update → View.
-- No "nice to haves." This is an MVP. Keep scope minimal. MVP is not an escuse for lack of testing or code quality.
-- Keep track of known issues in `documentation/current/KNOWN_ISSUES.md` and ensure the list is up-do-date and correct.
-- Not duplicate information between README.md and AGENTS.md files. Use AGENTS for technical information, and README for user facing information. Keep README minimal and concise.
-- Follow the versioning rules. See bellow
-- Never open interactive editors when using git. use the `-m` or appropriate parameter to supply messages.
+- **NEVER edit `documentation/current/TODO.md`** - User managed only
+- Not change game server API - document issues in `documentation/current/KNOWN_SERVER_ISSUES.md`
+- Not commit to git without explicit user approval - ask first
+- When committing, use non-interactive git commands (always use `-m` flag, never open editors)
+- Use Go 1.22+ idioms, no CGO
+- Keep code in `internal/`, only `cmd/zoea/main.go` is public
+- Use interfaces for external dependencies (LLM providers, MCP, store)
+- Run `make fmt` before committing, fix all warnings/linter errors
+- Write unit tests for all modules (target 80%+ coverage, currently ~83%)
+- Use `zerolog` for logging, never log to stdout/stderr (TUI owns terminal)
+- Keep TUI responsive - all LLM/network calls non-blocking (goroutines + channels)
+- Follow Bubble Tea Elm Architecture: Model → Update → View
+- Keep scope minimal (MVP), but maintain testing and code quality
+- Keep `documentation/current/KNOWN_ISSUES.md` up-to-date
+- Use AGENTS.md for technical info (not guides), README.md for user-facing info
 
 ## Versions
 
@@ -36,122 +33,53 @@ Guidelines for AI agents working on the Zoea Nova codebase—a TUI-based swarm c
 
 ## Offline Mode
 
-To run Zoea Nova without connecting to the SpaceMolt MCP server, use the `--offline` flag:
+Run without SpaceMolt MCP server: `./bin/zoea --offline`
 
-```bash
-./bin/zoea --offline
-```
+Uses stub MCP client with mock data. See `documentation/architecture/OFFLINE_MODE.md` for details.
 
-This uses a stub MCP client that returns mock data for essential tools (`get_status`, `get_system`, etc.), allowing TUI development and testing without an active game session.
+## Terminal Requirements
 
-See `documentation/architecture/OFFLINE_MODE.md` for supported tools and limitations.
+**Minimum:** 80 columns × 20 lines
 
-## Terminal Requirements:
+**Recommended terminals:** Alacritty, Kitty, WezTerm, Ghostty, iTerm2, Windows Terminal
 
-**Minimum Dimensions:**
-- Width: 80 columns
-- Height: 20 lines
+**Fonts:** Nerd Fonts (FiraCode, JetBrains Mono) or Unicode fonts (Cascadia Code, Ubuntu Mono)
 
-Zoea Nova enforces minimum terminal dimensions at startup. If the terminal is too small, it displays a warning message and prompts the user to resize. This prevents layout calculation issues and ensures a consistent user experience.
+See `documentation/guides/TERMINAL_COMPATIBILITY.md` and `documentation/guides/TUI_TESTING.md`.
 
-**Recommended Terminals:**
-- Alacritty (excellent Unicode support)
-- Kitty (full Unicode support)
-- WezTerm (native font fallback)
-- Ghostty (TrueColor support verified)
-- iTerm2 (good with proper font)
-- Windows Terminal (requires Nerd Font or Unicode font)
-
-**Font Recommendations:**
-- Nerd Fonts: FiraCode Nerd Font, JetBrains Mono Nerd Font
-- Unicode fonts: Cascadia Code, Ubuntu Mono, Inconsolata
-- Fallback: DejaVu Sans Mono (decent Unicode coverage)
-
-See `documentation/guides/TERMINAL_COMPATIBILITY.md` for detailed terminal testing results and `documentation/guides/TUI_TESTING.md` for testing guidelines.
-
-## TUI Testing:
+## TUI Testing
 
 Zoea Nova uses three types of TUI tests:
 
 ### 1. Unit Tests (Model State & Logic)
+
 Test model state transitions, business logic, and non-rendering behavior:
+
 - Navigation (up/down, view switching)
 - Input mode transitions
 - Help toggle, history navigation
 - Error handling
 
-**Pattern:**
-```go
-func TestModelNavigation(t *testing.T) {
-    m, cleanup := setupTestModel(t)
-    defer cleanup()
-    
-    m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-    if m.selectedIdx != 1 {
-        t.Errorf("expected selectedIdx=1, got %d", m.selectedIdx)
-    }
-}
-```
-
 ### 2. Golden File Tests (Visual Regression)
+
 Test visual output using golden files (both ANSI and stripped versions):
+
 - Dashboard rendering
 - Focus view layouts
 - Log entry formatting
 - JSON tree rendering
 - Scrollbar positioning
 
-**Pattern:**
-```go
-func TestDashboard(t *testing.T) {
-    defer setupGoldenTest(t)()  // Force TrueColor output
-    
-    output := renderDashboard(...)
-    
-    t.Run("ANSI", func(t *testing.T) {
-        golden.RequireEqual(t, []byte(output))
-    })
-    
-    t.Run("Stripped", func(t *testing.T) {
-        stripped := stripANSIForGolden(output)
-        golden.RequireEqual(t, []byte(stripped))
-    })
-}
-```
-
 **Update golden files:** `go test ./internal/tui -update`
 
 ### 3. Integration Tests (End-to-End with teatest)
+
 Test full TUI behavior through Bubble Tea's event loop:
+
 - Complete user flows (create mysis, send broadcast, etc.)
 - Async event handling
 - Window resize behavior
 - Viewport scrolling
-
-**Pattern:**
-```go
-func TestIntegration_Example(t *testing.T) {
-    m, cleanup := setupTestModel(t)
-    defer cleanup()
-    
-    tm := teatest.NewTestModel(t, m,
-        teatest.WithInitialTermSize(120, 40))
-    defer tm.Quit()
-    
-    // Send input
-    tm.Send(tea.KeyMsg{Type: tea.KeyDown})
-    
-    // Wait for output
-    teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-        return bytes.Contains(bts, []byte("expected"))
-    }, teatest.WithDuration(2*time.Second))
-    
-    // Verify final state
-    fm := tm.FinalModel(t)
-    finalModel := fm.(Model)
-    // ... assertions
-}
-```
 
 ### Testing Guidelines
 
@@ -167,7 +95,7 @@ func TestIntegration_Example(t *testing.T) {
 - **Use `lipgloss.Width()` for display width**: Never use `len()` on styled strings
 - **Strip ANSI for content checks**: Use `stripANSIForGolden()` helper
 
-## Unicode Width Calculations:
+## Unicode Width Calculations
 
 Multi-byte Unicode characters cause width calculation bugs:
 
@@ -178,7 +106,7 @@ Multi-byte Unicode characters cause width calculation bugs:
 - **Style padding affects alignment**: `lipgloss.Style.Padding(0, 1)` adds 1 space on each side. If one element has padding and another doesn't, their decorations won't align even if both are "width" chars total.
 - **`lipgloss.Width()` sets content width**: When using `style.Width(n)`, the `n` sets the CONTENT width. Borders and padding are added ON TOP. So `style.Width(98)` with a border produces total width 100.
 
-## Database Management:
+## Database Management
 
 The application uses SQLite for persistence.
 
@@ -187,7 +115,7 @@ The application uses SQLite for persistence.
 - **Wiping**: To reset state or apply schema changes (no migrations), run `make db-reset-accounts` to export usernames/passwords to `accounts-backup.sql`, wipe the DB, recreate schema, and reimport accounts. The backup file is created at repo root and is ignored by git.
 - **Testing**: Tests use `t.TempDir()` for isolated database files. Never use the production database path in tests.
 
-## Terminology:
+## Terminology
 
 - **Mysis**: An AI-controlled player instance with its own provider, memory, and state.
 - **Commander**: The swarm orchestrator that owns Mysis lifecycles and routes messages.
@@ -199,7 +127,7 @@ The application uses SQLite for persistence.
 - **Focus Mode**: TUI view showing detailed conversation logs for a single Mysis.
 - **Dashboard**: TUI view showing swarm status, broadcast history, and Mysis list.
 - **Memory**: A stored conversation message with role (system/user/assistant/tool) and source.
-- **Source**: Origin of a memory—`direct` (single Mysis), `broadcast` (swarm), `system`, `llm`, or `tool`.
+- **Memory Source**: Origin of a memory—`direct` (single Mysis), `broadcast` (swarm), `system`, `llm`, or `tool`.
 - **Context Compression**: Sliding window that sends only recent messages + system prompt to LLM. See [documentation/architecture/CONTEXT_COMPRESSION.md](documentation/architecture/CONTEXT_COMPRESSION.md).
 
 ## Architecture
@@ -222,11 +150,13 @@ flowchart LR
 Zoea Nova supports two types of LLM providers:
 
 ### OpenAI-Compatible Providers
+
 Providers that follow the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat/create) specification.
 
 **Examples:** OpenCode Zen, OpenAI, Azure OpenAI, Together AI, etc.
 
 **Implementation:**
+
 - Use shared code in `internal/provider/openai_common.go`
 - Strict message ordering (system first, alternating user/assistant)
 - Tool call validation and orphaned message removal
@@ -235,14 +165,17 @@ Providers that follow the [OpenAI Chat Completions API](https://platform.openai.
 **Location:** `internal/provider/opencode.go` (reference implementation)
 
 ### Ollama Provider
+
 Custom provider with flexible API that differs from OpenAI standard.
 
 **Ollama-Specific Behavior:**
+
 - System messages allowed anywhere (not just first)
 - Custom response types with `reasoning()` method
 - Flexible message ordering
 
 **Implementation:**
+
 - Isolated in `internal/provider/ollama.go`
 - Uses custom types (`ollamaReqMessage`, `chatCompletionResponse`, etc.)
 - Custom message merging (`mergeConsecutiveSystemMessagesOllama`)
@@ -251,12 +184,14 @@ Custom provider with flexible API that differs from OpenAI standard.
 **Location:** `internal/provider/ollama.go`
 
 ### Key Files
+
 - `internal/provider/openai_common.go` - Shared OpenAI-compliant code (use for new OpenAI-compatible providers)
 - `internal/provider/opencode.go` - OpenCode Zen implementation (OpenAI-compatible reference)
 - `internal/provider/ollama.go` - Ollama implementation (isolated, custom)
 - `documentation/architecture/OPENAI_COMPATIBILITY.md` - Full compatibility guide
 
 ### Adding New Providers
+
 - **OpenAI-compatible:** Use `openai_common.go` functions, follow OpenCode pattern
 - **Custom API:** Create isolated implementation like Ollama, document differences
 
@@ -264,7 +199,7 @@ Custom provider with flexible API that differs from OpenAI standard.
 
 See `documentation/architecture/MYSIS_STATE_MACHINE.md` for valid Mysis transitions and triggers.
 
-## Workflow:
+## Workflow
 
 The user follows a structured development workflow. Respect these phases:
 
@@ -274,7 +209,7 @@ The user follows a structured development workflow. Respect these phases:
 4. **Test**: Run `make test` after each phase. Fix failures before moving on.
 5. **Build**: Run `make build` to verify compilation. Address any warnings.
 
-## Role:
+## Role
 
 You are helping build a retro-futuristic TUI command center for controlling AI game Myses. Assume familiarity with:
 
@@ -282,7 +217,6 @@ You are helping build a retro-futuristic TUI command center for controlling AI g
 - Bubble Tea / Elm Architecture (Model, Update, View, Cmd, Msg)
 - SQLite basics (no ORM, raw SQL is fine)
 - OpenAI-compatible APIs (chat completions, streaming)
-- Your available skills that are related with your current task. **ALWAYS USE A SKILL IF YOU CAN**
 
 Do NOT assume knowledge of:
 
