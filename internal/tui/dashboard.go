@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/xonecas/zoea-nova/internal/constants"
 	"github.com/xonecas/zoea-nova/internal/core"
+	"github.com/xonecas/zoea-nova/internal/store"
 )
 
 const (
@@ -23,11 +27,12 @@ type MysisInfo struct {
 	State           string
 	Activity        string // Current activity (idle, llm_call, mcp_call, traveling, etc.)
 	Provider        string
-	AccountUsername string    // NEW: game account username
-	LastMessage     string    // Most recent message (user or assistant)
-	LastMessageAt   time.Time // Timestamp of most recent message
-	CreatedAt       time.Time // When mysis was created
-	LastError       string    // Last error string (if errored)
+	AccountUsername string          // NEW: game account username
+	LastMessage     string          // Most recent message (user or assistant) - DEPRECATED, kept for compatibility
+	LastMessageAt   time.Time       // Timestamp of most recent message
+	RecentMemories  []*store.Memory // Recent memories for message row formatting
+	CreatedAt       time.Time       // When mysis was created
+	LastError       string          // Last error string (if errored)
 }
 
 // SwarmMessageInfo holds display info for a broadcast message.
@@ -260,33 +265,8 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 		msgWidth = 10
 	}
 
-	// Format last message (truncated) - use display width
-	var msgPart string
-	messageContent := m.LastMessage
-	if messageContent == "" && m.State == "errored" && m.LastError != "" {
-		messageContent = "Error: " + m.LastError
-	}
-	if messageContent != "" {
-		msg := strings.ReplaceAll(messageContent, "\n", " ")
-		msgPrefix := ""
-		if !m.LastMessageAt.IsZero() {
-			msgPrefix = formatTickTimestamp(currentTick, m.LastMessageAt) + " "
-		}
-		prefixWidth := lipgloss.Width(msgPrefix)
-		availableWidth := msgWidth - prefixWidth
-		if availableWidth < 10 {
-			msgPrefix = ""
-			availableWidth = msgWidth
-		}
-		if lipgloss.Width(msg) > availableWidth {
-			if availableWidth > 3 {
-				msg = truncateToWidth(msg, availableWidth-3) + "..."
-			} else {
-				msg = truncateToWidth(msg, availableWidth)
-			}
-		}
-		msgPart = dimmedStyle.Render(" │ " + msgPrefix + msg)
-	}
+	// Format last message using dedicated rendering with priority system
+	msgPart := formatMessageRow(m, currentTick, msgWidth)
 
 	line := contentPart + msgPart
 
@@ -310,6 +290,214 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 	unselectedBracketStyle := lipgloss.NewStyle().Foreground(colorBrandDim)
 	unselectedCursor := unselectedBracketStyle.Render("[") + "  " + unselectedBracketStyle.Render("]")
 	return unselectedCursor + " " + stateIndicator + "  " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(line)
+}
+
+// formatMessageRow formats the message row based on message type and priority.
+// Priority order: 1) Errors, 2) AI replies, 3) Tool calls, 4) User messages/broadcasts
+func formatMessageRow(m MysisInfo, currentTick int64, maxWidth int) string {
+	// Priority 1: Errors (if state is errored and LastError is set)
+	if m.State == "errored" && m.LastError != "" {
+		return formatErrorMessage(m.LastError, currentTick, m.LastMessageAt, maxWidth)
+	}
+
+	// If no recent memories but we have LastMessage (backward compatibility for tests),
+	// show it as a simple message
+	if len(m.RecentMemories) == 0 {
+		if m.LastMessage != "" {
+			return formatLegacyMessage(m.LastMessage, currentTick, m.LastMessageAt, maxWidth)
+		}
+		return ""
+	}
+
+	// Priority 2: AI replies (not tool calls)
+	for _, mem := range m.RecentMemories {
+		if mem.Role == store.MemoryRoleAssistant && !strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			return formatAIReply(mem, currentTick, maxWidth)
+		}
+	}
+
+	// Priority 3: Tool calls
+	for _, mem := range m.RecentMemories {
+		if mem.Role == store.MemoryRoleAssistant && strings.HasPrefix(mem.Content, constants.ToolCallStoragePrefix) {
+			return formatToolCall(mem, currentTick, maxWidth)
+		}
+	}
+
+	// Priority 4: User messages/broadcasts
+	for _, mem := range m.RecentMemories {
+		if mem.Role == store.MemoryRoleUser {
+			return formatUserMessage(mem, currentTick, maxWidth)
+		}
+	}
+
+	return "" // No message to display
+}
+
+// formatLegacyMessage formats a simple message (backward compatibility for tests).
+func formatLegacyMessage(msg string, currentTick int64, timestamp time.Time, maxWidth int) string {
+	prefix := ""
+	if !timestamp.IsZero() {
+		prefix = formatTickTimestamp(currentTick, timestamp) + " "
+	}
+	prefixWidth := lipgloss.Width(prefix)
+	availableWidth := maxWidth - prefixWidth
+
+	content := strings.ReplaceAll(msg, "\n", " ")
+	if lipgloss.Width(content) > availableWidth {
+		content = truncateToWidth(content, availableWidth-3) + "..."
+	}
+
+	return dimmedStyle.Render(" │ " + prefix + content)
+}
+
+// formatErrorMessage formats error messages.
+func formatErrorMessage(errMsg string, currentTick int64, timestamp time.Time, maxWidth int) string {
+	prefix := "Error: "
+	if !timestamp.IsZero() {
+		prefix = formatTickTimestamp(currentTick, timestamp) + " " + prefix
+	}
+	prefixWidth := lipgloss.Width(prefix)
+	availableWidth := maxWidth - prefixWidth
+
+	msg := strings.ReplaceAll(errMsg, "\n", " ")
+	if lipgloss.Width(msg) > availableWidth {
+		msg = truncateToWidth(msg, availableWidth-3) + "..."
+	}
+
+	return dimmedStyle.Render(" │ " + prefix + msg)
+}
+
+// formatAIReply formats AI assistant replies.
+func formatAIReply(mem *store.Memory, currentTick int64, maxWidth int) string {
+	prefix := formatTickTimestamp(currentTick, mem.CreatedAt) + " [AI] "
+	prefixWidth := lipgloss.Width(prefix)
+	availableWidth := maxWidth - prefixWidth
+
+	msg := strings.ReplaceAll(mem.Content, "\n", " ")
+	if lipgloss.Width(msg) > availableWidth {
+		msg = truncateToWidth(msg, availableWidth-3) + "..."
+	}
+
+	return dimmedStyle.Render(" │ " + prefix + msg)
+}
+
+// formatToolCall formats tool call messages.
+func formatToolCall(mem *store.Memory, currentTick int64, maxWidth int) string {
+	// Parse tool call from storage format
+	stored := strings.TrimPrefix(mem.Content, constants.ToolCallStoragePrefix)
+	if stored == "" {
+		return ""
+	}
+
+	// Parse first tool call record
+	parts := strings.Split(stored, constants.ToolCallStorageRecordDelimiter)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	fields := strings.SplitN(parts[0], constants.ToolCallStorageFieldDelimiter, constants.ToolCallStorageFieldCount)
+	if len(fields) < constants.ToolCallStorageFieldCount {
+		return ""
+	}
+
+	toolName := fields[1]
+	argsJSON := fields[2]
+
+	// Format args (remove outer braces, simplify nested structures)
+	argsFormatted := formatToolArgs(argsJSON)
+
+	// Build message: timestamp + label + function_name(args)
+	timestamp := formatTickTimestamp(currentTick, mem.CreatedAt)
+	label := lipgloss.NewStyle().Foreground(colorTool).Render("→ call")
+	funcName := lipgloss.NewStyle().Foreground(colorTool).Bold(true).Render(toolName)
+	argsStyled := lipgloss.NewStyle().Foreground(colorTool).Render("(" + argsFormatted + ")")
+
+	prefix := timestamp + " " + label + " "
+	prefixWidth := lipgloss.Width(prefix)
+	funcWidth := lipgloss.Width(toolName) + lipgloss.Width(argsFormatted) + 2 // +2 for parentheses
+
+	availableWidth := maxWidth - prefixWidth
+	if funcWidth > availableWidth {
+		// Truncate args
+		argsAvailable := availableWidth - lipgloss.Width(toolName) - 5 // -5 for "(...)"
+		if argsAvailable < 3 {
+			argsFormatted = "..."
+		} else {
+			argsFormatted = truncateToWidth(argsFormatted, argsAvailable-3) + "..."
+		}
+		argsStyled = lipgloss.NewStyle().Foreground(colorTool).Render("(" + argsFormatted + ")")
+	}
+
+	return dimmedStyle.Render(" │ ") + prefix + funcName + argsStyled
+}
+
+// formatToolArgs formats tool arguments for display.
+func formatToolArgs(argsJSON string) string {
+	if argsJSON == "{}" {
+		return ""
+	}
+
+	var args map[string]interface{}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "..."
+	}
+
+	if len(args) == 0 {
+		return ""
+	}
+
+	// Sort keys for deterministic output
+	var keys []string
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var parts []string
+	for _, k := range keys {
+		v := args[k]
+		valStr := formatArgValue(v)
+		parts = append(parts, k+": "+valStr)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// formatArgValue formats a single argument value.
+func formatArgValue(v interface{}) string {
+	switch v := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", v)
+	case float64, int, bool:
+		return fmt.Sprintf("%v", v)
+	case map[string]interface{}:
+		return "{...}"
+	case []interface{}:
+		return "[...]"
+	default:
+		return "{...}"
+	}
+}
+
+// formatUserMessage formats user messages and broadcasts.
+func formatUserMessage(mem *store.Memory, currentTick int64, maxWidth int) string {
+	var sourceLabel string
+	if mem.Source == store.MemorySourceBroadcast {
+		sourceLabel = "[SWARM]"
+	} else {
+		sourceLabel = "[YOU]"
+	}
+
+	prefix := formatTickTimestamp(currentTick, mem.CreatedAt) + " " + sourceLabel + " "
+	prefixWidth := lipgloss.Width(prefix)
+	availableWidth := maxWidth - prefixWidth
+
+	msg := strings.ReplaceAll(mem.Content, "\n", " ")
+	if lipgloss.Width(msg) > availableWidth {
+		msg = truncateToWidth(msg, availableWidth-3) + "..."
+	}
+
+	return dimmedStyle.Render(" │ " + prefix + msg)
 }
 
 // MysisInfoFromCore converts a core.Mysis to MysisInfo.

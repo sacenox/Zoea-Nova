@@ -841,9 +841,11 @@ func (m *Model) refreshMysisList() {
 	for i, mysis := range myses {
 		info := MysisInfoFromCore(mysis)
 
-		// Fetch last message for this mysis
-		memories, err := m.store.GetRecentMemories(mysis.ID(), 1)
+		// Fetch recent memories for message row formatting (5-10 messages to check priority)
+		memories, err := m.store.GetRecentMemories(mysis.ID(), 10)
 		if err == nil && len(memories) > 0 {
+			info.RecentMemories = memories
+			// Keep LastMessage and LastMessageAt for backward compatibility
 			info.LastMessage = memories[0].Content
 			info.LastMessageAt = memories[0].CreatedAt
 		}
