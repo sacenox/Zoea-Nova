@@ -257,10 +257,6 @@ func TestStateTransition_Running_To_Errored(t *testing.T) {
 // Trigger: 3-encouragement limit (simulated)
 // Expected: State transitions to Idle, LastError is nil
 func TestStateTransition_Running_To_Idle(t *testing.T) {
-	// Known issue: setIdle() doesn't stop the loop goroutine, causing test to hang.
-	// The loop continues trying to call LLM even after state changes to idle.
-	// Requires fix to loop goroutine lifecycle management in mysis.go
-	t.Skip("Known bug: setIdle() doesn't stop loop goroutine - requires lifecycle fix")
 	cmd, cleanup := setupStateMachineTest(t)
 	defer cleanup()
 
