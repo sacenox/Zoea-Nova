@@ -97,7 +97,7 @@ func TestOrphanedToolResults_ContextCompression(t *testing.T) {
 		bus:   bus,
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestLoopContextSlice(t *testing.T) {
 		bus:   bus,
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}

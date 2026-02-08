@@ -129,7 +129,7 @@ func TestAgent3Finding_OrphanedToolResults(t *testing.T) {
 		bus:   bus,
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestLoopContextSlice_ToolCallResultPairing(t *testing.T) {
 		bus:   bus,
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}

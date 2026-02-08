@@ -476,22 +476,31 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		})
 	}
 
+	// Track if synthetic encouragement was added (for counter increment after turn completes)
+	var addedSyntheticEncouragement bool
+
 	// Loop: keep calling LLM until we get a final text response
 	for iteration := 0; iteration < constants.MaxToolIterations; iteration++ {
 		// Get recent conversation history (keeps context small for faster inference)
-		memories, err := a.getContextMemories()
+		memories, addedSynthetic, err := a.getContextMemories()
 		if err != nil {
 			a.setError(err)
 			return fmt.Errorf("get memories: %w", err)
 		}
 
-		// Check if encouragement limit reached (getContextMemories increments counter)
+		// Track if synthetic encouragement was added on first iteration
+		// (subsequent iterations reuse same context, so only first matters)
+		if iteration == 0 {
+			addedSyntheticEncouragement = addedSynthetic
+		}
+
+		// Check if encouragement limit reached (counter incremented after turn completes)
 		a.mu.RLock()
 		count := a.encouragementCount
 		a.mu.RUnlock()
 
 		if count >= 3 {
-			// No real user messages for 3 consecutive iterations - go idle
+			// No real user messages for 3 consecutive autonomous turns - go idle
 			a.setIdle("No user messages after 3 encouragements")
 			return nil
 		}
@@ -682,6 +691,26 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			Message:   &MessageData{Role: "assistant", Content: finalResponse},
 			Timestamp: time.Now(),
 		})
+
+		// Increment encouragement counter if this was an autonomous turn (no user message)
+		// If synthetic encouragement was added, this means no real user message existed
+		if addedSyntheticEncouragement {
+			a.mu.Lock()
+			a.encouragementCount++
+			count := a.encouragementCount
+			a.mu.Unlock()
+
+			log.Debug().
+				Str("mysis", a.name).
+				Int("count", count).
+				Msg("Autonomous turn completed - incremented encouragement counter")
+
+			// If we've hit the limit, transition to idle immediately
+			if count >= 3 {
+				a.setIdle("No user messages after 3 encouragements")
+				return nil
+			}
+		}
 
 		return nil
 	}
@@ -1169,11 +1198,14 @@ func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
 //	  {role: assistant, content: "[TOOL_CALLS]call_2:get_status:{\"session_id\":\"abc123\"}"},
 //	  {role: tool, content: "call_2:Ship health: 100%"}
 //	]
-func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
+func (m *Mysis) getContextMemories() ([]*store.Memory, bool, error) {
+	// Track if synthetic encouragement was added this call
+	addedSynthetic := false
+
 	// Get all recent memories
 	allMemories, err := m.store.GetRecentMemories(m.id, constants.MaxContextMessages)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Find current turn boundary
@@ -1209,7 +1241,7 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 		broadcast, err := m.store.GetMostRecentBroadcast(m.id)
 		if err != nil {
 			// Database error - return error to caller rather than treating as "no broadcast"
-			return nil, fmt.Errorf("check for broadcast: %w", err)
+			return nil, false, fmt.Errorf("check for broadcast: %w", err)
 		}
 
 		if broadcast != nil {
@@ -1257,24 +1289,13 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, error) {
 			}
 			result = append(result, nudgeMemory)
 
-			// Increment encouragement counter since we added synthetic message
-			m.mu.Lock()
-			m.encouragementCount++
-			count := m.encouragementCount
-			m.mu.Unlock()
-
-			// If 3 encouragements sent, prepare to idle (will be checked in loop)
-			if count >= 3 {
-				// Store that we hit limit - the loop will handle state transition
-				log.Warn().
-					Str("mysis", m.name).
-					Int("count", count).
-					Msg("Encouragement limit reached - mysis should idle")
-			}
+			// Mark that synthetic encouragement was added
+			// Counter will be incremented once per turn by caller after turn completes
+			addedSynthetic = true
 		}
 	}
 
-	return result, nil
+	return result, addedSynthetic, nil
 }
 
 // compactSnapshots removes redundant snapshot tool results, keeping only the most recent

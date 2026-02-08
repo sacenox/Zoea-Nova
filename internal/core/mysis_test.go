@@ -459,7 +459,7 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	}
 
 	// Get context memories
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
@@ -581,7 +581,7 @@ func TestGetContextMemories_CurrentTurnBoundary(t *testing.T) {
 			tt.setupMemories()
 
 			// Get context memories
-			memories, err := mysis.getContextMemories()
+			memories, _, err := mysis.getContextMemories()
 			if err != nil {
 				t.Fatalf("getContextMemories() error: %v", err)
 			}
@@ -1190,8 +1190,8 @@ func TestStopAtVariousTimings(t *testing.T) {
 // Encouragement counter now increments in getContextMemories() when no user message exists.
 // See TestEncouragementLimit and TestEncouragementReset for new behavior.
 
-// TestEncouragementLimit tests that encouragementCount reaches 3 after 3 getContextMemories() calls
-// with no user messages, and that a warning is logged.
+// TestEncouragementLimit tests that getContextMemories() returns the correct addedSynthetic flag
+// when no user messages exist. The counter increment happens in SendMessageFrom(), not here.
 func TestEncouragementLimit(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
@@ -1210,34 +1210,27 @@ func TestEncouragementLimit(t *testing.T) {
 		t.Fatalf("AddMemory error: %v", err)
 	}
 
-	// Call getContextMemories() 3 times with no user messages
-	for i := 1; i <= 3; i++ {
-		_, err := mysis.getContextMemories()
-		if err != nil {
-			t.Fatalf("getContextMemories() error on call %d: %v", i, err)
-		}
-
-		// Check counter value
-		mysis.mu.RLock()
-		count := mysis.encouragementCount
-		mysis.mu.RUnlock()
-
-		if count != i {
-			t.Errorf("after call %d: expected encouragementCount=%d, got %d", i, i, count)
-		}
+	// Call getContextMemories() with no user messages - should return addedSynthetic=true
+	_, addedSynthetic, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// Verify counter reached 3
+	if !addedSynthetic {
+		t.Errorf("expected addedSynthetic=true when no user message exists, got false")
+	}
+
+	// Verify counter is still 0 (increment happens in SendMessageFrom, not here)
 	mysis.mu.RLock()
-	finalCount := mysis.encouragementCount
+	count := mysis.encouragementCount
 	mysis.mu.RUnlock()
 
-	if finalCount != 3 {
-		t.Errorf("expected final encouragementCount=3, got %d", finalCount)
+	if count != 0 {
+		t.Errorf("expected encouragementCount=0 (not incremented by getContextMemories), got %d", count)
 	}
 
-	// Note: Testing the warning log would require capturing log output,
-	// which is not done here. The warning is verified in integration tests.
+	// Note: Full autonomous turn behavior (counter increment after turn completes)
+	// is tested in TestMysisCounterBehavior_* tests.
 }
 
 // TestEncouragementReset tests that encouragementCount resets to 0 when a real user message
@@ -1339,7 +1332,7 @@ func TestEncouragementReset(t *testing.T) {
 		mysis.mu.Unlock()
 
 		// Call getContextMemories() - should NOT reset counter because real user message exists
-		_, err = mysis.getContextMemories()
+		_, _, err = mysis.getContextMemories()
 		if err != nil {
 			t.Fatalf("getContextMemories() error: %v", err)
 		}
@@ -1966,7 +1959,7 @@ func TestGetContextMemories_CurrentTurnPreserved(t *testing.T) {
 		t.Fatalf("AddMemory error: %v", err)
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories error: %v", err)
 	}
@@ -2031,7 +2024,7 @@ func TestGetContextMemories_NoUserPrompt(t *testing.T) {
 		t.Fatalf("AddMemory error: %v", err)
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories error: %v", err)
 	}
@@ -2074,7 +2067,7 @@ func TestGetContextMemories_OnlyHistoricalTurns(t *testing.T) {
 		t.Fatalf("AddMemory error: %v", err)
 	}
 
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories error: %v", err)
 	}
@@ -2452,7 +2445,7 @@ func TestBroadcastSlidingWindowBug(t *testing.T) {
 
 	// Call getContextMemories - this should find the broadcast even though
 	// it's outside the 20-message sliding window
-	memories, err := mysis.getContextMemories()
+	memories, _, err := mysis.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
@@ -2555,7 +2548,7 @@ func TestNewMysisInheritsGlobalBroadcast(t *testing.T) {
 	mock := provider.NewMock("mock", "Continuing mission...")
 	mysisInstance := NewMysis(mysis2.ID, mysis2.Name, mysis2.CreatedAt, mock, s, bus)
 
-	memories, err := mysisInstance.getContextMemories()
+	memories, _, err := mysisInstance.getContextMemories()
 	if err != nil {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
