@@ -1471,12 +1471,12 @@ func (m *Mysis) isSnapshotTool(toolName string) bool {
 }
 
 // run is the mysis main processing loop.
-// Processes one initial turn after Start(), then waits for external messages.
+// Takes autonomous turns until reaching idle state (after 3 encouragements with no user messages).
 // According to MESSAGE_FORMAT_GUARANTEES.md lines 100-121:
-// - Iteration 1: getContextMemories() adds synthetic, counter=1, LLM responds
-// - Iteration 2: Still no user message, synthetic added, counter=2, LLM responds
-// - Iteration 3: Still no user message, synthetic added, counter=3, transitions to idle
-// External messages (broadcast/direct) call SendMessageFrom which handles subsequent turns.
+// - Turn 1: getContextMemories() adds synthetic, counter=1, LLM responds
+// - Turn 2: Still no user message, synthetic added, counter=2, LLM responds
+// - Turn 3: Still no user message, synthetic added, counter=3, transitions to idle
+// External messages (broadcast/direct) call SendMessageFrom directly, which handles subsequent turns.
 func (m *Mysis) run(ctx context.Context) {
 	a := m
 	// Signal goroutine completion when exiting
@@ -1484,28 +1484,45 @@ func (m *Mysis) run(ctx context.Context) {
 		defer a.commander.wg.Done()
 	}
 
-	// Process one initial turn using existing SendMessageFrom infrastructure
-	// Use empty content - getContextMemories() will add synthetic encouragement if needed
-	// This reuses all the complex LLM loop logic, tool calling, error handling, etc.
-	if err := a.SendMessageFrom("", store.MemorySourceSystem, ""); err != nil {
-		log.Debug().Err(err).Str("mysis", a.name).Msg("Error processing initial turn")
-		// Error already handled by SendMessageFrom -> setError()
-		return
+	// Autonomous turn loop - continues until idle, stopped, errored, or context canceled
+	for {
+		// Process one turn using existing SendMessageFrom infrastructure
+		// Use empty content - getContextMemories() will add synthetic encouragement if needed
+		// This reuses all the complex LLM loop logic, tool calling, error handling, etc.
+		if err := a.SendMessageFrom("", store.MemorySourceSystem, ""); err != nil {
+			log.Debug().Err(err).Str("mysis", a.name).Msg("Error processing autonomous turn")
+			// Error already handled by SendMessageFrom -> setError()
+			return
+		}
+
+		// Check state after turn completes
+		a.mu.RLock()
+		state := a.state
+		a.mu.RUnlock()
+
+		// Exit if mysis transitioned to terminal state
+		switch state {
+		case MysisStateIdle:
+			log.Debug().Str("mysis", a.name).Msg("Autonomous turn loop exiting - mysis idle")
+			return
+		case MysisStateStopped:
+			log.Debug().Str("mysis", a.name).Msg("Autonomous turn loop exiting - mysis stopped")
+			return
+		case MysisStateErrored:
+			log.Debug().Str("mysis", a.name).Msg("Autonomous turn loop exiting - mysis errored")
+			return
+		}
+
+		// Wait before next turn (2 seconds delay)
+		select {
+		case <-time.After(2 * time.Second):
+			// Continue to next turn
+		case <-ctx.Done():
+			// Context canceled (Stop() called)
+			log.Debug().Str("mysis", a.name).Msg("Autonomous turn loop exiting - context canceled")
+			return
+		}
 	}
-
-	// Check if we transitioned to idle during the initial turn
-	a.mu.RLock()
-	state := a.state
-	a.mu.RUnlock()
-
-	if state == MysisStateIdle {
-		// Mysis went idle (3 encouragements reached or other reason)
-		return
-	}
-
-	// Wait for context cancellation
-	// External messages call SendMessageFrom directly, which handles its own turn processing
-	<-ctx.Done()
 }
 
 // buildSystemPrompt creates the system prompt with the latest swarm broadcast injected.
