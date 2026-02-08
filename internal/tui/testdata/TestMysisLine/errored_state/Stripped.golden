@@ -1,1 +1,2 @@
-[  ] ✖  test-... ollama       errored  @crab_miner  │ Error: connection lost                        
+[  ] ✖  test-... ollama       errored  @crab_miner                                                  
+  └─ Error: connection lost

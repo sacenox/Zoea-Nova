@@ -198,7 +198,8 @@ func TestStateIndicators(t *testing.T) {
 				CreatedAt:       time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC),
 			}
 
-			output := renderMysisLine(mysis, false, tt.isLoading, tt.spinnerView, 100, 0)
+			lines := renderMysisLine(mysis, false, tt.isLoading, tt.spinnerView, 100, 0)
+			output := strings.Join(lines, "\n")
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -249,11 +250,12 @@ func TestStateIndicatorAlignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := renderMysisLine(mysis, false, false, tt.frame, 100, 0)
+			lines := renderMysisLine(mysis, false, false, tt.frame, 100, 0)
+			output := strings.Join(lines, "\n")
 			stripped := stripANSIForGolden(output)
 
-			// Check width consistency
-			width := lipgloss.Width(output)
+			// Check width consistency (use first line for width since that's the info row)
+			width := lipgloss.Width(lines[0])
 			strippedWidth := len(strings.TrimSpace(stripped))
 
 			widths = append(widths, width)

@@ -6,10 +6,10 @@ T0 ⬡ [11:00] [alpha] All units: proceed to sector 7
 T0 ⬡ [11:05] [beta] Target rich environment detected                                                                    
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║[→ ] ⠋  alpha    ollama       running  @crab_war... │ T0 ⬡ [10:45] Mining asteroid belt                               ║
-║[  ] ◦  beta     opencode_zen idle     @crab_trader │ T0 ⬡ [10:46] Waiting for orders                                 ║
-║                                                                                                                      ║
-║                                                                                                                      ║
+║[→ ] ⠋  alpha    ollama       running  @crab_war...                                                                   ║
+║  └─ T0 ⬡ [10:45] Mining asteroid belt                                                                                ║
+║[  ] ◦  beta     opencode_zen idle     @crab_trader                                                                   ║
+║  └─ T0 ⬡ [10:46] Waiting for orders                                                                                  ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

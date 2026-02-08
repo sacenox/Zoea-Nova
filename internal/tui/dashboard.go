@@ -133,8 +133,9 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	usedHeight += 2
 
 	mysisListHeight := height - usedHeight
-	if mysisListHeight < 3 {
-		mysisListHeight = 3
+	// Each mysis takes 2 lines (info + message), minimum 4 lines for 2 rows
+	if mysisListHeight < 4 {
+		mysisListHeight = 4
 	}
 
 	// Mysis list - DoubleBorder adds 2 chars each side, so content width is width-4
@@ -151,8 +152,10 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		var mysisLines []string
 		for i, m := range myses {
 			isLoading := loadingSet[m.ID]
-			line := renderMysisLine(m, i == selectedIdx, isLoading, spinnerView, contentWidth, currentTick)
-			mysisLines = append(mysisLines, line)
+			lines := renderMysisLine(m, i == selectedIdx, isLoading, spinnerView, contentWidth, currentTick)
+			// lines[0] = info row, lines[1] = message row
+			mysisLines = append(mysisLines, lines[0])
+			mysisLines = append(mysisLines, lines[1])
 		}
 		content := strings.Join(mysisLines, "\n")
 		mysisList := mysisListStyle.Width(width - 2).Height(mysisListHeight).Render(content)
@@ -166,7 +169,17 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int, currentTick int64) string {
+func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, width int, currentTick int64) []string {
+	// Build info row (first line)
+	infoRow := buildInfoRow(m, selected, isLoading, spinnerView, width)
+
+	// Build message row (second line)
+	messageRow := buildMessageRow(m, width, currentTick)
+
+	return []string{infoRow, messageRow}
+}
+
+func buildInfoRow(m MysisInfo, selected, isLoading bool, spinnerView string, width int) string {
 	// State indicator: activity-specific for running myses, static for others
 	var stateIndicator string
 	if isLoading {
@@ -240,41 +253,16 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 	accountFormatted = fmt.Sprintf("%-12s", accountFormatted)
 	accountText := dimmedStyle.Render(accountFormatted)
 
-	// Content part: name + provider + state + account (NO indicator - it goes outside)
-	// New order: name (8) + space + provider (12) + space + state (8) + space + account (12)
+	// Content part: name + provider + state + account (NO message content)
+	// Order: name (8) + space + provider (12) + space + state (8) + space + account (12)
 	contentPart := fmt.Sprintf("%-8s %s %s %s", name, provider, stateText, accountText)
 
-	// Calculate remaining width for last message
-	// Account for the prefix "│ " for the message
-	// Use lipgloss.Width() for proper Unicode width calculation
-	// Format: name(16) + space(1) + state(8) + space(1) + provider + space(1) + account
-
-	// Calculate prefix width based on selection state
-	// Both selected and unselected now use same total prefix width:
+	// Calculate prefix width
 	// Format: "[→ ] ⠋  " or "[  ] ⠋  " = 4 (bracket) + 1 (space) + 1 (indicator) + 2 (spaces) = 8 chars total
-	prefixWidth := cursorDisplayWidth + 1 + stateIndicatorDisplayWidth + 2 // cursor + space + indicator + 2 spaces
+	prefixWidth := cursorDisplayWidth + 1 + stateIndicatorDisplayWidth + 2
 
-	// Calculate available content width after prefix
-	contentWidth := width - prefixWidth
-
-	// Calculate message width from remaining space
-	// Format: name(8) + space(1) + provider(12) + space(1) + state(8) + space(1) + account(12) + separator(4 for " │ ")
-	usedWidth := 8 + 1 + 12 + 1 + 8 + 1 + 12 + 4
-	msgWidth := contentWidth - usedWidth
-	if msgWidth < 10 {
-		msgWidth = 10
-	}
-
-	// Format last message using dedicated rendering with priority system
-	msgPart := formatMessageRow(m, currentTick, msgWidth)
-
-	line := contentPart + msgPart
-
-	// Apply style with full width to ensure background fills the line
-	// Cursor format: [→ ] for selected, [  ] for unselected
-	// Total prefix: cursor (4 chars) + space + indicator + 2 spaces = 8 chars total
-	// Content width: width - cursorDisplayWidth - 1 (space) - stateIndicatorDisplayWidth - 2 (spaces)
-	contentStyleWidth := width - cursorDisplayWidth - 1 - stateIndicatorDisplayWidth - 2
+	// Content width: width - prefix
+	contentStyleWidth := width - prefixWidth
 
 	if selected {
 		// Dim purple background, bright purple foreground on [→ ] (4 chars), then normal space
@@ -284,12 +272,33 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 		cursorSpace := cursorStyle.Render(" ")
 		cursorBracketClose := cursorStyle.Render("]")
 		cursor := cursorBracketOpen + cursorArrow + cursorSpace + cursorBracketClose
-		return cursor + " " + stateIndicator + "  " + mysisItemSelectedStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(line)
+		return cursor + " " + stateIndicator + "  " + mysisItemSelectedStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(contentPart)
 	}
 	// Unselected: [  ] with dim purple brackets, no background
 	unselectedBracketStyle := lipgloss.NewStyle().Foreground(colorBrandDim)
 	unselectedCursor := unselectedBracketStyle.Render("[") + "  " + unselectedBracketStyle.Render("]")
-	return unselectedCursor + " " + stateIndicator + "  " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(line)
+	return unselectedCursor + " " + stateIndicator + "  " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(contentPart)
+}
+
+func buildMessageRow(m MysisInfo, width int, currentTick int64) string {
+	prefix := "  └─ " // 2 spaces + corner + dash + space = 5 chars
+	prefixWidth := 5
+
+	// Calculate available width for message content
+	// Subtract prefix (5) and borders (2)
+	availableWidth := width - prefixWidth - 2
+	if availableWidth < 10 {
+		availableWidth = 10
+	}
+
+	// Get message content using existing formatMessageRow
+	messageContent := formatMessageRow(m, currentTick, availableWidth)
+
+	if messageContent == "" {
+		messageContent = dimmedStyle.Render("(no recent activity)")
+	}
+
+	return dimmedStyle.Render(prefix) + messageContent
 }
 
 // formatMessageRow formats the message row based on message type and priority.
@@ -347,7 +356,7 @@ func formatLegacyMessage(msg string, currentTick int64, timestamp time.Time, max
 		content = truncateToWidth(content, availableWidth-3) + "..."
 	}
 
-	return dimmedStyle.Render(" │ " + prefix + content)
+	return dimmedStyle.Render(prefix + content)
 }
 
 // formatErrorMessage formats error messages.
@@ -364,7 +373,7 @@ func formatErrorMessage(errMsg string, currentTick int64, timestamp time.Time, m
 		msg = truncateToWidth(msg, availableWidth-3) + "..."
 	}
 
-	return dimmedStyle.Render(" │ " + prefix + msg)
+	return dimmedStyle.Render(prefix + msg)
 }
 
 // formatAIReply formats AI assistant replies.
@@ -378,7 +387,7 @@ func formatAIReply(mem *store.Memory, currentTick int64, maxWidth int) string {
 		msg = truncateToWidth(msg, availableWidth-3) + "..."
 	}
 
-	return dimmedStyle.Render(" │ " + prefix + msg)
+	return dimmedStyle.Render(prefix + msg)
 }
 
 // formatToolCall formats tool call messages.
@@ -428,7 +437,7 @@ func formatToolCall(mem *store.Memory, currentTick int64, maxWidth int) string {
 		argsStyled = lipgloss.NewStyle().Foreground(colorTool).Render("(" + argsFormatted + ")")
 	}
 
-	return dimmedStyle.Render(" │ ") + prefix + funcName + argsStyled
+	return prefix + funcName + argsStyled
 }
 
 // formatToolArgs formats tool arguments for display.
@@ -497,7 +506,7 @@ func formatUserMessage(mem *store.Memory, currentTick int64, maxWidth int) strin
 		msg = truncateToWidth(msg, availableWidth-3) + "..."
 	}
 
-	return dimmedStyle.Render(" │ " + prefix + msg)
+	return dimmedStyle.Render(prefix + msg)
 }
 
 // MysisInfoFromCore converts a core.Mysis to MysisInfo.

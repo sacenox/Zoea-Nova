@@ -478,7 +478,8 @@ func TestMysisLineWidth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Render mysis line (not selected, not loading, static spinner)
-			line := renderMysisLine(tt.mysis, false, false, "◦", tt.terminalWidth, 0)
+			lines := renderMysisLine(tt.mysis, false, false, "◦", tt.terminalWidth, 0)
+			line := lines[0] // Check first line (info row) for width
 
 			// Strip ANSI codes to get display width
 			stripped := stripANSI(line)
@@ -525,7 +526,8 @@ func TestMysisLineWidthConsistency(t *testing.T) {
 					mysis.LastError = "test error"
 				}
 
-				line := renderMysisLine(mysis, false, false, "◦", width, 0)
+				lines := renderMysisLine(mysis, false, false, "◦", width, 0)
+				line := lines[0] // Check first line (info row) for width
 				stripped := stripANSI(line)
 				lineWidth := lipgloss.Width(stripped)
 

@@ -672,7 +672,8 @@ func TestMysisLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := renderMysisLine(tt.mysis, false, tt.loading, "⬡", tt.width, 0)
+			lines := renderMysisLine(tt.mysis, false, tt.loading, "⬡", tt.width, 0)
+			output := strings.Join(lines, "\n")
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

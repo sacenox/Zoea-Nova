@@ -5,16 +5,16 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║[→ ] ⠋  alpha    ollama       running  @crab_1      │ T0 ⬡ [10:00] Running                                            ║
+║[→ ] ⠋  alpha    ollama       running  @crab_1                                                                        ║
+║  └─ T0 ⬡ [10:00] Running                                                                                             ║
 ║[  ] ◦  beta     ollama       idle     @crab_2                                                                        ║
+║  └─ (no recent activity)                                                                                             ║
 ║[  ] ◌  gamma    opencode_zen stopped  @crab_3                                                                        ║
-║[  ] ✖  delta    ollama       errored  @crab_4      │ Error: Network error                                            ║
-║[  ] ⠋  epsilon  opencode_zen running  logged out   │ T0 ⬡ [10:05] No account                                         ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
+║  └─ (no recent activity)                                                                                             ║
+║[  ] ✖  delta    ollama       errored  @crab_4                                                                        ║
+║  └─ Error: Network error                                                                                             ║
+║[  ] ⠋  epsilon  opencode_zen running  logged out                                                                     ║
+║  └─ T0 ⬡ [10:05] No account                                                                                          ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

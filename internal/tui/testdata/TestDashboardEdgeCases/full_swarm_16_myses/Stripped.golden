@@ -5,36 +5,37 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║[→ ] ⠋  alpha    ollama       running  @crab_war... │ T0 ⬡ [10:00] Mining asteroid belt                               ║
-║[  ] ⠋  beta     opencode_zen running  @crab_trader │ T0 ⬡ [10:01] Traveling to sector 7                              ║
-║[  ] ⠋  gamma    ollama       running  @crab_exp... │ T0 ⬡ [10:02] Trading at station                                 ║
-║[  ] ⠋  delta    opencode_zen running  @crab_miner  │ T0 ⬡ [10:03] Scanning for targets                               ║
-║[  ] ⠋  epsilon  ollama       running  @crab_scout  │ T0 ⬡ [10:04] Docked at base                                     ║
-║[  ] ⠋  zeta     opencode_zen running  @crab_war... │ T0 ⬡ [10:05] Mining asteroid belt                               ║
-║[  ] ⠋  eta      ollama       running  @crab_trader │ T0 ⬡ [10:06] Traveling to sector 7                              ║
-║[  ] ⠋  theta    opencode_zen running  @crab_exp... │ T0 ⬡ [10:07] Trading at station                                 ║
-║[  ] ⠋  iota     ollama       running  @crab_miner  │ T0 ⬡ [10:08] Scanning for targets                               ║
-║[  ] ⠋  kappa    opencode_zen running  @crab_scout  │ T0 ⬡ [10:09] Docked at base                                     ║
-║[  ] ⠋  mysis-0  ollama       running  @crab_war... │ T0 ⬡ [10:10] Mining asteroid belt                               ║
-║[  ] ⠋  mysis-1  opencode_zen running  @crab_trader │ T0 ⬡ [10:11] Traveling to sector 7                              ║
-║[  ] ⠋  mysis-2  ollama       running  @crab_exp... │ T0 ⬡ [10:12] Trading at station                                 ║
-║[  ] ⠋  mysis-3  opencode_zen running  @crab_miner  │ T0 ⬡ [10:13] Scanning for targets                               ║
-║[  ] ⠋  mysis-4  ollama       running  @crab_scout  │ T0 ⬡ [10:14] Docked at base                                     ║
-║[  ] ⠋  mysis-5  opencode_zen running  @crab_war... │ T0 ⬡ [10:15] Mining asteroid belt                               ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
-║                                                                                                                      ║
+║[→ ] ⠋  alpha    ollama       running  @crab_war...                                                                   ║
+║  └─ T0 ⬡ [10:00] Mining asteroid belt                                                                                ║
+║[  ] ⠋  beta     opencode_zen running  @crab_trader                                                                   ║
+║  └─ T0 ⬡ [10:01] Traveling to sector 7                                                                               ║
+║[  ] ⠋  gamma    ollama       running  @crab_exp...                                                                   ║
+║  └─ T0 ⬡ [10:02] Trading at station                                                                                  ║
+║[  ] ⠋  delta    opencode_zen running  @crab_miner                                                                    ║
+║  └─ T0 ⬡ [10:03] Scanning for targets                                                                                ║
+║[  ] ⠋  epsilon  ollama       running  @crab_scout                                                                    ║
+║  └─ T0 ⬡ [10:04] Docked at base                                                                                      ║
+║[  ] ⠋  zeta     opencode_zen running  @crab_war...                                                                   ║
+║  └─ T0 ⬡ [10:05] Mining asteroid belt                                                                                ║
+║[  ] ⠋  eta      ollama       running  @crab_trader                                                                   ║
+║  └─ T0 ⬡ [10:06] Traveling to sector 7                                                                               ║
+║[  ] ⠋  theta    opencode_zen running  @crab_exp...                                                                   ║
+║  └─ T0 ⬡ [10:07] Trading at station                                                                                  ║
+║[  ] ⠋  iota     ollama       running  @crab_miner                                                                    ║
+║  └─ T0 ⬡ [10:08] Scanning for targets                                                                                ║
+║[  ] ⠋  kappa    opencode_zen running  @crab_scout                                                                    ║
+║  └─ T0 ⬡ [10:09] Docked at base                                                                                      ║
+║[  ] ⠋  mysis-0  ollama       running  @crab_war...                                                                   ║
+║  └─ T0 ⬡ [10:10] Mining asteroid belt                                                                                ║
+║[  ] ⠋  mysis-1  opencode_zen running  @crab_trader                                                                   ║
+║  └─ T0 ⬡ [10:11] Traveling to sector 7                                                                               ║
+║[  ] ⠋  mysis-2  ollama       running  @crab_exp...                                                                   ║
+║  └─ T0 ⬡ [10:12] Trading at station                                                                                  ║
+║[  ] ⠋  mysis-3  opencode_zen running  @crab_miner                                                                    ║
+║  └─ T0 ⬡ [10:13] Scanning for targets                                                                                ║
+║[  ] ⠋  mysis-4  ollama       running  @crab_scout                                                                    ║
+║  └─ T0 ⬡ [10:14] Docked at base                                                                                      ║
+║[  ] ⠋  mysis-5  opencode_zen running  @crab_war...                                                                   ║
+║  └─ T0 ⬡ [10:15] Mining asteroid belt                                                                                ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 [ ? ] HELP  ·  [ n ] NEW MYSIS  ·  [ b ] BROADCAST                                                                      

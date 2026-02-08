@@ -617,14 +617,14 @@ func TestRenderMysisLineStates(t *testing.T) {
 			}
 
 			// Test both selected and unselected
-			line := renderMysisLine(mysis, false, tt.isLoading, spinnerView, 80, 0)
-			if line == "" {
-				t.Error("expected non-empty mysis line")
+			lines := renderMysisLine(mysis, false, tt.isLoading, spinnerView, 80, 0)
+			if len(lines) != 2 || lines[0] == "" || lines[1] == "" {
+				t.Error("expected two non-empty mysis lines")
 			}
 
-			selectedLine := renderMysisLine(mysis, true, tt.isLoading, spinnerView, 80, 0)
-			if selectedLine == "" {
-				t.Error("expected non-empty selected mysis line")
+			selectedLines := renderMysisLine(mysis, true, tt.isLoading, spinnerView, 80, 0)
+			if len(selectedLines) != 2 || selectedLines[0] == "" || selectedLines[1] == "" {
+				t.Error("expected two non-empty selected mysis lines")
 			}
 		})
 	}
@@ -640,17 +640,17 @@ func TestMysisLineWidthFill(t *testing.T) {
 	}
 
 	width := 80
-	line := renderMysisLine(mysis, false, false, "⠋", width, 0)
+	lines := renderMysisLine(mysis, false, false, "⠋", width, 0)
 
-	// The line should be rendered (non-empty)
-	if line == "" {
-		t.Error("expected non-empty mysis line")
+	// The lines should be rendered (non-empty, two lines)
+	if len(lines) != 2 || lines[0] == "" || lines[1] == "" {
+		t.Error("expected two non-empty mysis lines")
 	}
 
-	// Selected line should also be rendered
-	selectedLine := renderMysisLine(mysis, true, false, "⠋", width, 0)
-	if selectedLine == "" {
-		t.Error("expected non-empty selected mysis line")
+	// Selected lines should also be rendered
+	selectedLines := renderMysisLine(mysis, true, false, "⠋", width, 0)
+	if len(selectedLines) != 2 || selectedLines[0] == "" || selectedLines[1] == "" {
+		t.Error("expected two non-empty selected mysis lines")
 	}
 }
 
