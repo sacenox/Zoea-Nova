@@ -6,13 +6,6 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## Medium Priority
 
-### Testing / Concurrency
-
-- [ ] **TestStateTransition_Running_To_Idle hangs** - Test hangs during cleanup
-  - **Location:** `internal/core/state_machine_test.go:260`
-  - **Skip Reason:** "Goroutine not exiting after idle transition"
-  - **Action:** Investigate potential goroutine leak in idle transition
-
 ## Low Priority
 
 ### TUI / Rendering
@@ -67,6 +60,8 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ---
 
 ## Recently Resolved
+
+- [x] **TestStateTransition_Running_To_Idle hangs** (2026-02-08) - Fixed goroutine leak in idle transition. Root cause: `setIdle()` wasn't canceling the context, causing the run loop goroutine to continue running. Added context cancellation to `setIdle()` method (lines 1092-1096 in `mysis.go`). The run loop now exits cleanly when transitioning to idle state. Test passes consistently in ~0.003-0.005s. Fixed in commit `d7a675a`.
 
 - [x] **Network indicator shows idle despite active Myses** (2026-02-07) - Fixed missing `EventNetworkIdle` after successful MCP tool execution and added counter tracking for network operations. Root cause: `EventNetworkMCP` was published for each tool call but `EventNetworkIdle` was only published on errors, causing counter to grow unbounded. Added `activeNetworkOps` counter in TUI that increments on LLM/MCP events and decrements on idle events. Indicator now correctly shows activity for both user-initiated and autonomous operations. See `documentation/architecture/NETWORK_EVENT_GUARANTEES.md` for event contract. Coverage improved from 85.0% to 85.3%.
 
