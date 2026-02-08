@@ -595,7 +595,7 @@ func TestValidateOpenAIMessages_OnlySystemMessages(t *testing.T) {
 		{Role: "system", Content: "System 2"},
 	}
 
-	// Only system messages is valid (but will trigger fallback user message in merging)
+	// Only system messages is valid at provider layer (core layer ensures user messages exist via getContextMemories)
 	err := validateOpenAIMessages(messages)
 	if err != nil {
 		t.Errorf("Expected no error for only system messages, got: %v", err)
