@@ -715,10 +715,38 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		return nil
 	}
 
-	// Signal network idle on max iterations
+	// Max tool iterations reached - end this turn gracefully and continue to next turn
+	// This is NOT an error - the mysis made progress and should continue autonomous operation
+	log.Warn().
+		Str("mysis", a.name).
+		Int("max_iterations", constants.MaxToolIterations).
+		Msg("Max tool iterations reached - ending turn, will continue next turn")
+
+	// Signal network idle
 	a.bus.Publish(Event{Type: EventNetworkIdle, MysisID: a.id, Timestamp: time.Now()})
 
-	return fmt.Errorf("max tool iterations (%d) exceeded", constants.MaxToolIterations)
+	// Increment encouragement counter if this was an autonomous turn
+	// Same logic as successful turn completion (lines 697-713)
+	if addedSyntheticEncouragement {
+		a.mu.Lock()
+		a.encouragementCount++
+		count := a.encouragementCount
+		a.mu.Unlock()
+
+		log.Debug().
+			Str("mysis", a.name).
+			Int("count", count).
+			Msg("Autonomous turn completed (max iterations) - incremented encouragement counter")
+
+		// If we've hit the limit, transition to idle immediately
+		if count >= 3 {
+			a.setIdle("No user messages after 3 encouragements")
+			return nil
+		}
+	}
+
+	// Return success - turn completed, continue to next turn
+	return nil
 }
 
 // SendMessage sends a message to the mysis for processing.
