@@ -1331,6 +1331,10 @@ func (m *Mysis) getContextMemories() ([]*store.Memory, bool, error) {
 		}
 	}
 
+	// Apply compression to reduce context size and ensure API compliance
+	result = m.compactSnapshots(result)
+	result = m.removeOrphanedToolCalls(result)
+
 	return result, addedSynthetic, nil
 }
 
