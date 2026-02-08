@@ -13,9 +13,7 @@
 
 ---
 
-- Myses appear running, but network indicator shows idle, this should be impossible. Specially with 4 myses.
-
-- sending direct message to mysis doesn't reset the message input box. Needs test coverage and fix.
+- network activity indicator revision
 
 - remove zoea_list_mysis()
 

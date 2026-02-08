@@ -4,22 +4,10 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ## High Priority
 
-### State Machine / Broadcast System
-- [ ] **REGRESSION: Broadcast doesn't start idle myses** - Broadcasting to idle myses doesn't trigger Start()
-  - **Impact:** Idle myses don't respond to broadcasts
-  - **Root Cause:** State machine allows broadcasts to idle state (commit f7797cc) without triggering Start()
-  - **Action:** Verify behavior, add test coverage, fix
-  - **Test Coverage Gap:** No integration test for broadcast → idle → running transition
-
 ## Medium Priority
 
-### Prompt System
-- [ ] **Myses idle despite pending broadcasts** - Myses transition to idle even when broadcasts are queued
-  - **Impact:** Broadcasts not consumed as user messages, lost communication
-  - **Root Cause:** ContinuePrompt doesn't check broadcast queue before idling
-  - **Action:** Modify idle transition logic to check message queue
-
 ### Testing / Concurrency
+
 - [ ] **TestStateTransition_Running_To_Idle hangs** - Test hangs during cleanup
   - **Location:** `internal/core/state_machine_test.go:260`
   - **Skip Reason:** "Goroutine not exiting after idle transition"
@@ -28,6 +16,7 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 ## Low Priority
 
 ### TUI / Rendering
+
 - [ ] **Exit splash screen** - Display branding, connection cleanup status, and animated loading bar during shutdown
   - **Trigger:** User presses q/ESC/CTRL+C
   - **Purpose:** Provide visual feedback during graceful shutdown
@@ -39,18 +28,21 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
   - **Action:** Audit JSON detection logic for consistency
 
 ### Testing / Coverage
+
 - [ ] **TUI integration tests skipped (config setup)** - Two tests skipped due to missing provider config
   - **Tests:** `TestIntegration_NewMysisInput`, `TestIntegration_CreateAndStartMysis`
   - **Root Cause:** Tests need temp config file after DefaultConfig() removal (commit 068a5a6)
   - **Action:** Update tests to use setupTUITest() pattern from tui_test.go:32-56
 
 ### Provider Reliability
+
 - [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
   - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
   - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)
   - **Recent evidence (2026-02-05):** Ollama logs show prompt truncation (`limit=32768`, `prompt=41611`) followed by bursts of `400` responses on `/v1/chat/completions` and one `500` response. No corresponding errors in `~/.zoea-nova/zoea.log`.
 
 ### Documentation & Tooling
+
 - [ ] **Add plan enforcement command** - OpenCode slash command to require plan/todo creation before implementation
   - **Purpose:** Enforce workflow discipline for complex changes
 
@@ -58,6 +50,7 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
   - **Purpose:** Keep documentation in sync with code changes
 
 ### Operations
+
 - [ ] **Validate game server API changes** - Monitor and validate MCP and SpaceMolt game server updates for breaking changes
   - **Reference:** `documentation/current/KNOWN_SERVER_ISSUES.md`
   - **Process:** Periodic checks against upstream API
