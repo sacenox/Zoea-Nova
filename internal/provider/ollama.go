@@ -197,6 +197,13 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 
 	url := p.baseURL + "/chat/completions"
 
+	log.Debug().
+		Str("provider", "ollama").
+		Str("model", p.model).
+		Int("messages", len(req.Messages)).
+		Int("body_bytes", len(body)).
+		Msg("Sending request to Ollama")
+
 	maxRetries := len(ollamaRetryDelays)
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -229,6 +236,11 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 
 		resp, err := p.httpClient.Do(httpReq)
 		if err != nil {
+			// Do not retry on context cancellation or timeout
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+
 			lastErr = err
 			continue
 		}
@@ -251,6 +263,13 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			payload, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
+
+			log.Error().
+				Str("provider", "ollama").
+				Int("status", resp.StatusCode).
+				Str("body", string(payload)).
+				Msg("Ollama non-retryable error")
+
 			return nil, fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
 		}
 

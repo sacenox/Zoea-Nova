@@ -226,6 +226,10 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 
 		resp, err := p.httpClient.Do(httpReq)
 		if err != nil {
+			// Do not retry on context cancellation or timeout
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
 			lastErr = err
 			continue // Network error - retry
 		}
