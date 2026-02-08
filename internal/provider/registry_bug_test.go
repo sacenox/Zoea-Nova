@@ -36,13 +36,13 @@ func TestZenNanoRegistration(t *testing.T) {
 	// This is EXACTLY what initProviders does
 	for name, provCfg := range cfg.Providers {
 		if strings.Contains(provCfg.Endpoint, "localhost:11434") || strings.Contains(provCfg.Endpoint, "/ollama") {
-			factory := NewOllamaFactory(provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			factory := NewOllamaFactory(name, provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
 			registry.RegisterFactory(name, factory)
 			t.Logf("Registered Ollama provider: %s", name)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
 			apiKey := creds.GetAPIKey("opencode_zen")
 			if apiKey != "" {
-				factory := NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				factory := NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)
 				t.Logf("Registered OpenCode provider: %s", name)
 			}

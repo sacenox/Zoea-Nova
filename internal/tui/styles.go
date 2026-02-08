@@ -66,8 +66,7 @@ var (
 			Padding(0, 1)
 
 	mysisItemSelectedStyle = lipgloss.NewStyle().
-				Foreground(colorBg).
-				Background(colorBrand).
+				Foreground(colorTeal).
 				Bold(true).
 				Padding(0, 1)
 

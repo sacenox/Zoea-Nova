@@ -18,6 +18,7 @@ import (
 
 // OllamaProvider implements the Provider interface for Ollama.
 type OllamaProvider struct {
+	name        string
 	client      *openai.Client
 	baseURL     string
 	httpClient  *http.Client
@@ -31,15 +32,16 @@ var ollamaRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * 
 // NewOllama creates a new Ollama provider.
 // Ollama exposes an OpenAI-compatible API at /v1.
 func NewOllama(endpoint, model string) *OllamaProvider {
-	return NewOllamaWithTemp(endpoint, model, 0.7, nil)
+	return NewOllamaWithTemp("ollama", endpoint, model, 0.7, nil)
 }
 
-func NewOllamaWithTemp(endpoint, model string, temperature float64, limiter *rate.Limiter) *OllamaProvider {
+func NewOllamaWithTemp(name string, endpoint, model string, temperature float64, limiter *rate.Limiter) *OllamaProvider {
 	config := openai.DefaultConfig("")
 	baseURL := strings.TrimRight(endpoint, "/") + "/v1"
 	config.BaseURL = baseURL
 
 	return &OllamaProvider{
+		name:        name,
 		client:      openai.NewClientWithConfig(config),
 		baseURL:     baseURL,
 		httpClient:  &http.Client{},
@@ -51,7 +53,7 @@ func NewOllamaWithTemp(endpoint, model string, temperature float64, limiter *rat
 
 // Name returns the provider identifier.
 func (p *OllamaProvider) Name() string {
-	return "ollama"
+	return p.name
 }
 
 // Chat sends messages and returns the complete response.

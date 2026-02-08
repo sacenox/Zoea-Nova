@@ -9,6 +9,13 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 )
 
+const (
+	// Mysis list row prefix widths
+	cursorDisplayWidth         = 4 // "[→ ]" with backgrounds
+	stateIndicatorDisplayWidth = 1 // Single Unicode character
+	rowPrefixSpacing           = 3 // Spaces around indicator (1 before + 2 after)
+)
+
 // MysisInfo holds display info for a mysis.
 type MysisInfo struct {
 	ID              string
@@ -199,32 +206,56 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 
 	// Build line - use display width for truncation
 	name := m.Name
-	if lipgloss.Width(name) > 16 {
-		name = truncateToWidth(name, 13) + "..."
+	if lipgloss.Width(name) > 8 {
+		name = truncateToWidth(name, 5) + "..."
 	}
+
+	// Format provider without brackets and pad to 12 chars
+	providerFormatted := m.Provider
+	if lipgloss.Width(providerFormatted) > 12 {
+		providerFormatted = truncateToWidth(providerFormatted, 9) + "..."
+	}
+	providerFormatted = fmt.Sprintf("%-12s", providerFormatted)
+	provider := dimmedStyle.Render(providerFormatted)
 
 	stateText := StateStyle(m.State).Render(fmt.Sprintf("%-8s", m.State))
-	provider := dimmedStyle.Render(fmt.Sprintf("[%s]", m.Provider))
 
-	// Account username display
-	var accountText string
+	// Account username display - fixed width 12 chars
+	var accountFormatted string
 	if m.AccountUsername != "" {
-		accountText = dimmedStyle.Render(fmt.Sprintf("@%s", m.AccountUsername))
+		accountFormatted = fmt.Sprintf("@%s", m.AccountUsername)
 	} else {
-		accountText = dimmedStyle.Render("(no account)")
+		accountFormatted = "logged out"
 	}
+	// Truncate if longer than 12 chars
+	if lipgloss.Width(accountFormatted) > 12 {
+		accountFormatted = truncateToWidth(accountFormatted, 9) + "..."
+	}
+	// Pad to 12 chars
+	accountFormatted = fmt.Sprintf("%-12s", accountFormatted)
+	accountText := dimmedStyle.Render(accountFormatted)
 
-	// Content part: name + state + provider + account (NO indicator - it goes outside)
-	contentPart := fmt.Sprintf("%-16s %s %s %s", name, stateText, provider, accountText)
+	// Content part: name + provider + state + account (NO indicator - it goes outside)
+	// New order: name (8) + space + provider (12) + space + state (8) + space + account (12)
+	contentPart := fmt.Sprintf("%-8s %s %s %s", name, provider, stateText, accountText)
 
 	// Calculate remaining width for last message
 	// Account for the prefix "│ " for the message
 	// Use lipgloss.Width() for proper Unicode width calculation
 	// Format: name(16) + space(1) + state(8) + space(1) + provider + space(1) + account
-	providerWidth := lipgloss.Width(m.Provider)
-	accountTextWidth := lipgloss.Width(accountText)
-	usedWidth := 16 + 1 + 8 + 1 + providerWidth + 2 + 1 + accountTextWidth + 4
-	msgWidth := width - usedWidth - 8
+
+	// Calculate prefix width based on selection state
+	// Both selected and unselected now use same total prefix width:
+	// Format: "[→ ] ⠋  " or "[  ] ⠋  " = 4 (bracket) + 1 (space) + 1 (indicator) + 2 (spaces) = 8 chars total
+	prefixWidth := cursorDisplayWidth + 1 + stateIndicatorDisplayWidth + 2 // cursor + space + indicator + 2 spaces
+
+	// Calculate available content width after prefix
+	contentWidth := width - prefixWidth
+
+	// Calculate message width from remaining space
+	// Format: name(8) + space(1) + provider(12) + space(1) + state(8) + space(1) + account(12) + separator(4 for " │ ")
+	usedWidth := 8 + 1 + 12 + 1 + 8 + 1 + 12 + 4
+	msgWidth := contentWidth - usedWidth
 	if msgWidth < 10 {
 		msgWidth = 10
 	}
@@ -260,13 +291,25 @@ func renderMysisLine(m MysisInfo, selected, isLoading bool, spinnerView string, 
 	line := contentPart + msgPart
 
 	// Apply style with full width to ensure background fills the line
-	// Render indicator and space OUTSIDE the styled content so they don't get background color
-	// Format: space + indicator + space + [styled content]
-	// Remove left padding from style (PaddingLeft(0)) and add right padding only
+	// Cursor format: [→ ] for selected, [  ] for unselected
+	// Total prefix: cursor (4 chars) + space + indicator + 2 spaces = 8 chars total
+	// Content width: width - cursorDisplayWidth - 1 (space) - stateIndicatorDisplayWidth - 2 (spaces)
+	contentStyleWidth := width - cursorDisplayWidth - 1 - stateIndicatorDisplayWidth - 2
+
 	if selected {
-		return " " + stateIndicator + " " + mysisItemSelectedStyle.PaddingLeft(0).PaddingRight(1).Width(width-3).Render(line)
+		// Dim purple background, bright purple foreground on [→ ] (4 chars), then normal space
+		cursorStyle := lipgloss.NewStyle().Background(colorBrandDim).Foreground(colorBrand)
+		cursorBracketOpen := cursorStyle.Render("[")
+		cursorArrow := cursorStyle.Render("→")
+		cursorSpace := cursorStyle.Render(" ")
+		cursorBracketClose := cursorStyle.Render("]")
+		cursor := cursorBracketOpen + cursorArrow + cursorSpace + cursorBracketClose
+		return cursor + " " + stateIndicator + "  " + mysisItemSelectedStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(line)
 	}
-	return " " + stateIndicator + " " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(width-3).Render(line)
+	// Unselected: [  ] with dim purple brackets, no background
+	unselectedBracketStyle := lipgloss.NewStyle().Foreground(colorBrandDim)
+	unselectedCursor := unselectedBracketStyle.Render("[") + "  " + unselectedBracketStyle.Render("]")
+	return unselectedCursor + " " + stateIndicator + "  " + mysisItemStyle.PaddingLeft(0).PaddingRight(1).Width(contentStyleWidth).Render(line)
 }
 
 // MysisInfoFromCore converts a core.Mysis to MysisInfo.

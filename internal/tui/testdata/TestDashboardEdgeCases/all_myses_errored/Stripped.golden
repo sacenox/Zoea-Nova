@@ -5,11 +5,11 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ✖ alpha            errored  [ollama] @crab_warrior │ T0 ⬡ [10:00] Error: Connection timeout                          ║
-║ ✖ beta             errored  [opencode_zen] @crab_trader │ T0 ⬡ [10:01] Error: Connection timeout                     ║
-║ ✖ gamma            errored  [ollama] @crab_explorer │ T0 ⬡ [10:02] Error: Connection timeout                         ║
-║ ✖ delta            errored  [opencode_zen] @crab_miner │ T0 ⬡ [10:03] Error: Connection timeout                      ║
-║ ✖ epsilon          errored  [ollama] @crab_scout │ T0 ⬡ [10:04] Error: Connection timeout                            ║
+║[→ ] ✖  alpha    ollama       errored  @crab_war... │ T0 ⬡ [10:00] Error: Connection timeout                          ║
+║[  ] ✖  beta     opencode_zen errored  @crab_trader │ T0 ⬡ [10:01] Error: Connection timeout                          ║
+║[  ] ✖  gamma    ollama       errored  @crab_exp... │ T0 ⬡ [10:02] Error: Connection timeout                          ║
+║[  ] ✖  delta    opencode_zen errored  @crab_miner  │ T0 ⬡ [10:03] Error: Connection timeout                          ║
+║[  ] ✖  epsilon  ollama       errored  @crab_scout  │ T0 ⬡ [10:04] Error: Connection timeout                          ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

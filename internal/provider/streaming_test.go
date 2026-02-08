@@ -196,7 +196,7 @@ func TestOllamaProvider_Stream_RateLimit(t *testing.T) {
 	defer server.Close()
 
 	limiter := rate.NewLimiter(2, 1) // 2 requests per second
-	provider := NewOllamaWithTemp(server.URL, "test", 0.7, limiter)
+	provider := NewOllamaWithTemp("ollama", server.URL, "test", 0.7, limiter)
 
 	ctx := context.Background()
 	messages := []Message{{Role: "user", Content: "test"}}
@@ -366,7 +366,7 @@ func TestOpenCodeProvider_Stream_RateLimit(t *testing.T) {
 	defer server.Close()
 
 	limiter := rate.NewLimiter(2, 1)
-	provider := NewOpenCodeWithTemp(server.URL, "test", "key", 0.7, limiter)
+	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test", "key", 0.7, limiter)
 
 	ctx := context.Background()
 	messages := []Message{{Role: "user", Content: "test"}}

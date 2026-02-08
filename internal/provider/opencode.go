@@ -28,6 +28,7 @@ type openCodeRequest struct {
 
 // OpenCodeProvider implements the Provider interface for OpenCode Zen.
 type OpenCodeProvider struct {
+	name        string
 	client      *openai.Client
 	baseURL     string
 	apiKey      string
@@ -58,15 +59,16 @@ var opencodeModelEndpoints = map[string]string{
 
 // NewOpenCode creates a new OpenCode Zen provider.
 func NewOpenCode(endpoint, model, apiKey string) *OpenCodeProvider {
-	return NewOpenCodeWithTemp(endpoint, model, apiKey, 0.7, nil)
+	return NewOpenCodeWithTemp("opencode_zen", endpoint, model, apiKey, 0.7, nil)
 }
 
-func NewOpenCodeWithTemp(endpoint, model, apiKey string, temperature float64, limiter *rate.Limiter) *OpenCodeProvider {
+func NewOpenCodeWithTemp(name string, endpoint, model, apiKey string, temperature float64, limiter *rate.Limiter) *OpenCodeProvider {
 	config := openai.DefaultConfig(apiKey)
 	baseURL := strings.TrimRight(endpoint, "/")
 	config.BaseURL = baseURL
 
 	return &OpenCodeProvider{
+		name:        name,
 		client:      openai.NewClientWithConfig(config),
 		baseURL:     baseURL,
 		apiKey:      apiKey,
@@ -79,7 +81,7 @@ func NewOpenCodeWithTemp(endpoint, model, apiKey string, temperature float64, li
 
 // Name returns the provider identifier.
 func (p *OpenCodeProvider) Name() string {
-	return "opencode_zen"
+	return p.name
 }
 
 // Chat sends messages and returns the complete response.

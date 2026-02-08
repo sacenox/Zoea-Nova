@@ -3,7 +3,7 @@ package provider
 import "testing"
 
 func TestOllamaFactorySharesLimiter(t *testing.T) {
-	factory := NewOllamaFactory("http://example.com", 1.0, 2)
+	factory := NewOllamaFactory("ollama-test", "http://example.com", 1.0, 2)
 
 	p1 := factory.Create("model-a", 0.7)
 	p2 := factory.Create("model-b", 0.5)
@@ -26,7 +26,7 @@ func TestOllamaFactorySharesLimiter(t *testing.T) {
 }
 
 func TestOpenCodeFactorySharesLimiter(t *testing.T) {
-	factory := NewOpenCodeFactory("https://api.opencode.ai/v1", "test-key", 5.0, 3)
+	factory := NewOpenCodeFactory("zen-test", "https://api.opencode.ai/v1", "test-key", 5.0, 3)
 
 	p1 := factory.Create("model-a", 0.7)
 	p2 := factory.Create("model-b", 0.5)

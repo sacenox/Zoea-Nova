@@ -46,14 +46,14 @@ func TestZenNanoWithProductionConfig(t *testing.T) {
 
 	for name, provCfg := range cfg.Providers {
 		if provCfg.Endpoint == "http://localhost:11434" {
-			factory := provider.NewOllamaFactory(provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			factory := provider.NewOllamaFactory(name, provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
 			registry.RegisterFactory(name, factory)
 			registeredCount++
 			t.Logf("Registered Ollama: %s", name)
 		} else if provCfg.Endpoint == "https://opencode.ai/zen/v1" {
 			apiKey := creds.GetAPIKey("opencode_zen")
 			if apiKey != "" {
-				factory := provider.NewOpenCodeFactory(provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)
 				registeredCount++
 				t.Logf("Registered OpenCode: %s", name)

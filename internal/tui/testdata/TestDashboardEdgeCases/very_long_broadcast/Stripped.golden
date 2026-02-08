@@ -5,8 +5,8 @@
 T0 ⬡ [11:00] [alpha] This is a very long broadcast message that should be truncated when displayed in the UI. This ...  
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ⠋ alpha            running  [ollama] @crab_warrior │ T0 ⬡ [10:00] Mining asteroid belt                               ║
-║ ⠋ beta             running  [opencode_zen] @crab_trader │ T0 ⬡ [10:01] Traveling to sector 7                         ║
+║[→ ] ⠋  alpha    ollama       running  @crab_war... │ T0 ⬡ [10:00] Mining asteroid belt                               ║
+║[  ] ⠋  beta     opencode_zen running  @crab_trader │ T0 ⬡ [10:01] Traveling to sector 7                              ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║
