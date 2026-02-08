@@ -255,21 +255,21 @@ func TestRenderDashboard(t *testing.T) {
 
 	loadingSet := make(map[string]bool)
 	swarmMsgs := []SwarmMessageInfo{}
-	dashboard := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0)
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0, nil)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard")
 	}
 
 	// Test with loading state
 	loadingSet["1"] = true
-	dashboardWithLoading := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0)
+	dashboardWithLoading := RenderDashboard(myses, swarmMsgs, 0, 80, 24, loadingSet, "⠋", 0, nil)
 	if dashboardWithLoading == "" {
 		t.Error("expected non-empty dashboard with loading")
 	}
 }
 
 func TestRenderDashboardEmpty(t *testing.T) {
-	dashboard := RenderDashboard([]MysisInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋", 0)
+	dashboard := RenderDashboard([]MysisInfo{}, []SwarmMessageInfo{}, 0, 80, 24, make(map[string]bool), "⠋", 0, nil)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard even with no myses")
 	}
@@ -282,13 +282,13 @@ func TestRenderFocusView(t *testing.T) {
 		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
 	}
 
-	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋", false, 1, 1, 0)
+	view := RenderFocusView(mysis, logs, 80, 24, false, "⠋", false, 1, 1, 0, nil)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}
 
 	// Test with loading state
-	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋", false, 1, 1, 0)
+	viewLoading := RenderFocusView(mysis, logs, 80, 24, true, "⠋", false, 1, 1, 0, nil)
 	if viewLoading == "" {
 		t.Error("expected non-empty focus view with loading")
 	}
@@ -521,7 +521,7 @@ func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 		{SenderID: "mysis-2", SenderName: "beta", Content: "Do the thing", CreatedAt: time.Now()},
 	}
 
-	dashboard := RenderDashboard(myses, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋", 0)
+	dashboard := RenderDashboard(myses, swarmMsgs, 0, 100, 30, make(map[string]bool), "⠋", 0, nil)
 	if dashboard == "" {
 		t.Error("expected non-empty dashboard with swarm messages")
 	}
@@ -541,7 +541,7 @@ func TestRenderFocusViewWithAllRoles(t *testing.T) {
 		{Role: "tool", Content: "Tool result"},
 	}
 
-	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋", false, 1, 1, 0)
+	view := RenderFocusView(mysis, logs, 100, 30, false, "⠋", false, 1, 1, 0, nil)
 	if view == "" {
 		t.Error("expected non-empty focus view")
 	}

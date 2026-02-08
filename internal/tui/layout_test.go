@@ -86,7 +86,7 @@ func TestDashboardLayoutCalculations(t *testing.T) {
 
 			// Render dashboard (account for input bar height: -3)
 			contentHeight := tt.termHeight - 3
-			output := RenderDashboard(myses, swarmMsgs, 0, tt.termWidth, contentHeight, loadingSet, spinnerView, 0)
+			output := RenderDashboard(myses, swarmMsgs, 0, tt.termWidth, contentHeight, loadingSet, spinnerView, 0, nil)
 
 			// Basic validations
 			if output == "" {
@@ -206,7 +206,7 @@ func TestFocusViewLayoutCalculations(t *testing.T) {
 			}()
 
 			// Render focus view
-			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, tt.numLogs, 1, 1, 0)
+			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, tt.numLogs, 1, 1, 0, nil)
 
 			// Basic validations
 			if output == "" {

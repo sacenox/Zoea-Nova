@@ -73,7 +73,7 @@ func TestFocusViewHeaderPresence(t *testing.T) {
 			vp.GotoTop()
 
 			// Render focus view
-			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, len(contentLines), 1, 1, 0)
+			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, len(contentLines), 1, 1, 0, nil)
 
 			// Split into lines
 			lines := strings.Split(output, "\n")

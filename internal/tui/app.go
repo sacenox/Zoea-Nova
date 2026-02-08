@@ -325,7 +325,7 @@ func (m Model) View() string {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
 		focusIndex, totalMyses := m.focusPosition(m.focusID)
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick)
+		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick, m.err)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -338,7 +338,7 @@ func (m Model) View() string {
 				CreatedAt:  msg.CreatedAt,
 			}
 		}
-		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View(), m.currentTick)
+		content = RenderDashboard(m.myses, swarmInfos, m.selectedIdx, m.width, contentHeight-3, m.loadingSet, m.spinner.View(), m.currentTick, m.err)
 	}
 
 	// Always show message bar
@@ -354,12 +354,6 @@ func (m Model) View() string {
 		}
 	}
 	content += "\n" + m.input.ViewAlways(m.width, m.sending, sendingLabel, m.spinner.View())
-
-	// Add error if present
-	if m.err != nil {
-		errMsg := stateErroredStyle.Render(fmt.Sprintf("Error: %v", m.err))
-		content += "\n" + errMsg
-	}
 
 	// Build status bar
 	statusBar := m.renderStatusBar()

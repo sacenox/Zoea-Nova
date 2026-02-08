@@ -152,7 +152,7 @@ func TestDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋", 0)
+			output := RenderDashboard(tt.myses, tt.swarmMsgs, tt.selectedIdx, tt.width, tt.height, tt.loadingSet, "⠋", 0, nil)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -267,7 +267,7 @@ func TestFocusView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1, 0)
+			output := RenderFocusView(tt.mysis, tt.logs, tt.width, tt.height, false, "⠋", false, 1, 1, 0, nil)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))
@@ -473,7 +473,7 @@ func TestFocusViewWithViewport(t *testing.T) {
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
-			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", false, tt.totalLines, 1, 1, 0)
+			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", false, tt.totalLines, 1, 1, 0, nil)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

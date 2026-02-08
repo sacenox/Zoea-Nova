@@ -95,7 +95,7 @@ func wrapText(text string, maxWidth int) []string {
 }
 
 // RenderFocusView renders the detailed mysis view (legacy, without viewport).
-func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int, currentTick int64) string {
+func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoading bool, spinnerView string, verbose bool, focusIndex, totalMyses int, currentTick int64, err error) string {
 	var sections []string
 
 	// Header with mysis name - spans full width (2 lines)
@@ -158,15 +158,15 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 	logPanel := logStyle.Width(width-2).Height(logHeight).Padding(0, 2).Render(logContent)
 	sections = append(sections, logPanel)
 
-	// Footer
-	hint := dimmedStyle.Render("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ r ] RELAUNCH  ·  [ s ] STOP")
+	// Footer with hint and error status
+	hint := renderHintWithError("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ r ] RELAUNCH  ·  [ s ] STOP", err, width)
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64, err error) string {
 	var sections []string
 
 	// Header with mysis name - spans full width (2 lines)
@@ -240,14 +240,15 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	logBottomBorder := renderSectionTitle("", width)
 	sections = append(sections, logBottomBorder)
 
-	// Footer with scroll hints and verbose toggle
+	// Footer with scroll hints, verbose toggle, and error status
 	verboseHint := ""
 	if verbose {
 		verboseHint = "  ·  [ v ] VERBOSE: ON"
 	} else {
 		verboseHint = "  ·  [ v ] VERBOSE: OFF"
 	}
-	hint := dimmedStyle.Render(fmt.Sprintf("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM%s", verboseHint))
+	hintText := fmt.Sprintf("[ ESC ] BACK  ·  [ m ] MESSAGE  ·  [ ↑↓ ] SCROLL  ·  [ G ] BOTTOM%s", verboseHint)
+	hint := renderHintWithError(hintText, err, width)
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)

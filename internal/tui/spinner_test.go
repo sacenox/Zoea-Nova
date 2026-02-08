@@ -320,7 +320,7 @@ func TestSpinnerInDashboard(t *testing.T) {
 				},
 			}
 
-			output := RenderDashboard(myses, []SwarmMessageInfo{}, 0, TestTerminalWidth, TestTerminalHeight, map[string]bool{}, tt.spinnerView, 0)
+			output := RenderDashboard(myses, []SwarmMessageInfo{}, 0, TestTerminalWidth, TestTerminalHeight, map[string]bool{}, tt.spinnerView, 0, nil)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

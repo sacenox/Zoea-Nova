@@ -44,7 +44,7 @@ type SwarmMessageInfo struct {
 }
 
 // RenderDashboard renders the main dashboard view.
-func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string, currentTick int64) string {
+func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, selectedIdx int, width, height int, loadingSet map[string]bool, spinnerView string, currentTick int64, err error) string {
 	var sections []string
 
 	// Header - retro-futuristic command center banner with hexagonal motif (matching logo)
@@ -162,8 +162,8 @@ func RenderDashboard(myses []MysisInfo, swarmMessages []SwarmMessageInfo, select
 		sections = append(sections, mysisList)
 	}
 
-	// Footer with hint
-	hint := dimmedStyle.Render("[ ? ] HELP  ·  [ n ] NEW MYSIS  ·  [ b ] BROADCAST")
+	// Footer with hint and error status
+	hint := renderHintWithError("[ ? ] HELP  ·  [ n ] NEW MYSIS  ·  [ b ] BROADCAST", err, width)
 	sections = append(sections, hint)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -528,4 +528,48 @@ func formatCoreError(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// renderHintWithError renders a hint line with optional error status on the right.
+func renderHintWithError(hintText string, err error, width int) string {
+	if err == nil {
+		return dimmedStyle.Render(hintText)
+	}
+
+	// Format error message
+	errMsg := fmt.Sprintf("Error: %v", err)
+	styledError := stateErroredStyle.Render(errMsg)
+
+	// Calculate available space
+	hintWidth := lipgloss.Width(hintText)
+	errorWidth := lipgloss.Width(styledError)
+	separator := "  "
+	sepWidth := lipgloss.Width(separator)
+
+	// If error is too long, truncate it
+	maxErrorWidth := width - hintWidth - sepWidth
+	if maxErrorWidth < 15 {
+		// Not enough space for meaningful error, just show hint
+		return dimmedStyle.Render(hintText)
+	}
+
+	if errorWidth > maxErrorWidth {
+		// Truncate error message
+		plainErr := fmt.Sprintf("Error: %v", err)
+		if maxErrorWidth > 10 {
+			plainErr = truncateToWidth(plainErr, maxErrorWidth-3) + "..."
+		} else {
+			plainErr = truncateToWidth(plainErr, maxErrorWidth)
+		}
+		styledError = stateErroredStyle.Render(plainErr)
+		errorWidth = lipgloss.Width(styledError)
+	}
+
+	// Calculate padding between hint and error
+	padding := width - hintWidth - errorWidth
+	if padding < sepWidth {
+		padding = sepWidth
+	}
+
+	return dimmedStyle.Render(hintText) + strings.Repeat(" ", padding-sepWidth) + separator + styledError
 }
