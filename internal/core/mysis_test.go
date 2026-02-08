@@ -464,32 +464,26 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 		t.Fatalf("getContextMemories() error: %v", err)
 	}
 
-	// With turn-aware composition:
+	// With turn-aware composition + snapshot compression:
 	// - Historical context: latest tool loop from turns 0-3 (mysis-3)
 	// - Current turn: all of turn 4 (user + assistant + tool for mysis-4)
-	// So we expect 2 tool results: mysis-3 and mysis-4
+	// - Compression: zoea_list_myses is a snapshot tool, so only the LATEST is kept (mysis-4)
+	// So we expect 1 tool result: mysis-4 (most recent)
 	listResults := 0
-	hasMysis3 := false
 	hasMysis4 := false
 	for _, m := range memories {
 		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-`) {
 			listResults++
-			if strings.Contains(m.Content, `"id":"mysis-3"`) {
-				hasMysis3 = true
-			}
 			if strings.Contains(m.Content, `"id":"mysis-4"`) {
 				hasMysis4 = true
 			}
 		}
 	}
-	if listResults != 2 {
-		t.Errorf("expected 2 zoea_list_myses results (historical latest + current turn), got %d", listResults)
-	}
-	if !hasMysis3 {
-		t.Error("expected mysis-3 result from historical context compression")
+	if listResults != 1 {
+		t.Errorf("expected 1 zoea_list_myses result after compression, got %d", listResults)
 	}
 	if !hasMysis4 {
-		t.Error("expected mysis-4 result from current turn")
+		t.Error("expected mysis-4 result (latest snapshot after compression)")
 	}
 }
 
@@ -2588,5 +2582,212 @@ func TestNewMysisInheritsGlobalBroadcast(t *testing.T) {
 
 	if foundSynthetic {
 		t.Error("synthetic encouragement added despite global broadcast existing")
+	}
+}
+
+// TestGetContextMemories_WithCompression verifies that getContextMemories()
+// applies both compactSnapshots() and removeOrphanedToolCalls() to ensure:
+// 1. Duplicate snapshot tool results are removed (only latest kept)
+// 2. Orphaned assistant tool calls without matching results are removed
+func TestGetContextMemories_WithCompression(t *testing.T) {
+	mysis, cleanup := setupTestMysis(t)
+	defer cleanup()
+
+	// Add current turn with duplicate snapshots and orphaned tool calls
+	// User prompt
+	err := mysis.store.AddMemory(mysis.id, store.MemoryRoleUser, store.MemorySourceDirect, "Check game status", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// First get_status call (will be compacted - duplicate)
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_status_1:get_status:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_status_1:old status data", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// First get_system call (will be compacted - duplicate)
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_system_1:get_system:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_system_1:old system data", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Second get_status call (latest - will be kept)
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_status_2:get_status:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_status_2:latest status data", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Second get_system call (latest - will be kept)
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_system_2:get_system:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_system_2:latest system data", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	// Orphaned tool call (no matching tool result - will be removed)
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleAssistant, store.MemorySourceLLM, "[TOOL_CALLS]call_orphan:get_notifications:{}", "", "")
+	if err != nil {
+		t.Fatalf("AddMemory error: %v", err)
+	}
+
+	memories, _, err := mysis.getContextMemories()
+	if err != nil {
+		t.Fatalf("getContextMemories error: %v", err)
+	}
+
+	// Verify compression applied: only latest snapshots present
+	statusCount := 0
+	systemCount := 0
+	hasLatestStatus := false
+	hasLatestSystem := false
+	hasOrphanedCall := false
+
+	for _, mem := range memories {
+		if mem.Role == store.MemoryRoleTool {
+			if strings.Contains(mem.Content, "call_status_1") {
+				t.Error("Found old get_status result - compactSnapshots() not applied")
+			}
+			if strings.Contains(mem.Content, "call_system_1") {
+				t.Error("Found old get_system result - compactSnapshots() not applied")
+			}
+			if strings.Contains(mem.Content, "call_status_2") && strings.Contains(mem.Content, "latest status") {
+				statusCount++
+				hasLatestStatus = true
+			}
+			if strings.Contains(mem.Content, "call_system_2") && strings.Contains(mem.Content, "latest system") {
+				systemCount++
+				hasLatestSystem = true
+			}
+		}
+		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, "call_orphan") {
+			hasOrphanedCall = true
+		}
+	}
+
+	if !hasLatestStatus {
+		t.Error("Missing latest get_status snapshot")
+	}
+	if !hasLatestSystem {
+		t.Error("Missing latest get_system snapshot")
+	}
+	if statusCount != 1 {
+		t.Errorf("Expected exactly 1 get_status result, got %d", statusCount)
+	}
+	if systemCount != 1 {
+		t.Errorf("Expected exactly 1 get_system result, got %d", systemCount)
+	}
+	if hasOrphanedCall {
+		t.Error("Found orphaned tool call - removeOrphanedToolCalls() not applied")
+	}
+}
+
+// TestCompactSnapshots_MultipleSnapshots verifies that compactSnapshots()
+// correctly removes duplicate snapshot tool results, keeping only the latest
+// for each tool type while preserving order and non-snapshot tools.
+func TestCompactSnapshots_MultipleSnapshots(t *testing.T) {
+	mysis, cleanup := setupTestMysis(t)
+	defer cleanup()
+
+	// Create test memories with multiple snapshots
+	memories := []*store.Memory{
+		{Role: store.MemoryRoleUser, Content: "user message", Source: store.MemorySourceDirect},
+		// First get_status (old - should be removed)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_status_1:get_status:{}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_status_1:old status", Source: store.MemorySourceTool},
+		// Non-snapshot tool (should be kept)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_action:send_message:{\"text\":\"hello\"}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_action:message sent", Source: store.MemorySourceTool},
+		// Second get_status (latest - should be kept)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_status_2:get_status:{}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_status_2:latest status", Source: store.MemorySourceTool},
+		// First get_system (old - should be removed)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_system_1:get_system:{}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_system_1:old system", Source: store.MemorySourceTool},
+		// Third get_status (latest - should be kept)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_status_3:get_status:{}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_status_3:newest status", Source: store.MemorySourceTool},
+		// Second get_system (latest - should be kept)
+		{Role: store.MemoryRoleAssistant, Content: "[TOOL_CALLS]call_system_2:get_system:{}", Source: store.MemorySourceLLM},
+		{Role: store.MemoryRoleTool, Content: "call_system_2:latest system", Source: store.MemorySourceTool},
+		{Role: store.MemoryRoleAssistant, Content: "Based on the data...", Source: store.MemorySourceLLM},
+	}
+
+	result := mysis.compactSnapshots(memories)
+
+	// Count snapshots and verify correct ones kept
+	statusCount := 0
+	systemCount := 0
+	nonSnapshotCount := 0
+	hasNewestStatus := false
+	hasLatestSystem := false
+	hasOldStatus := false
+	hasOldSystem := false
+
+	for _, mem := range result {
+		if mem.Role == store.MemoryRoleTool {
+			if strings.Contains(mem.Content, "call_status_1") {
+				hasOldStatus = true
+			}
+			if strings.Contains(mem.Content, "call_status_2") {
+				hasOldStatus = true
+			}
+			if strings.Contains(mem.Content, "call_status_3") && strings.Contains(mem.Content, "newest") {
+				statusCount++
+				hasNewestStatus = true
+			}
+			if strings.Contains(mem.Content, "call_system_1") {
+				hasOldSystem = true
+			}
+			if strings.Contains(mem.Content, "call_system_2") && strings.Contains(mem.Content, "latest") {
+				systemCount++
+				hasLatestSystem = true
+			}
+			if strings.Contains(mem.Content, "call_action") && strings.Contains(mem.Content, "message sent") {
+				nonSnapshotCount++
+			}
+		}
+	}
+
+	if hasOldStatus {
+		t.Error("Found old get_status results - should be compacted")
+	}
+	if hasOldSystem {
+		t.Error("Found old get_system results - should be compacted")
+	}
+	if !hasNewestStatus {
+		t.Error("Missing newest get_status snapshot")
+	}
+	if !hasLatestSystem {
+		t.Error("Missing latest get_system snapshot")
+	}
+	if statusCount != 1 {
+		t.Errorf("Expected exactly 1 get_status result, got %d", statusCount)
+	}
+	if systemCount != 1 {
+		t.Errorf("Expected exactly 1 get_system result, got %d", systemCount)
+	}
+	if nonSnapshotCount != 1 {
+		t.Errorf("Expected 1 non-snapshot tool result, got %d - non-snapshots should be preserved", nonSnapshotCount)
+	}
+
+	// Verify order preserved (user message should still be first)
+	if len(result) > 0 && result[0].Role != store.MemoryRoleUser {
+		t.Error("Message order not preserved - user message should be first")
 	}
 }
