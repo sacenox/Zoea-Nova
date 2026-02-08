@@ -1022,6 +1022,9 @@ func (m *Mysis) formatToolResultDisplay(result *mcp.ToolResult, err error) strin
 func (m *Mysis) setError(err error) {
 	a := m
 	a.mu.Lock()
+
+	// Check state AFTER acquiring lock to close race window
+	// This prevents Stop() from being overridden by concurrent setError() calls
 	oldState := a.state
 
 	// If mysis was intentionally stopped, don't override with error state
@@ -1085,6 +1088,11 @@ func (m *Mysis) setIdle(reason string) {
 		Str("old_state", string(oldState)).
 		Str("reason", reason).
 		Msg("Mysis transitioning to idle state")
+
+	// Cancel context to stop run loop goroutine (like Stop() does)
+	if a.cancel != nil {
+		a.cancel()
+	}
 
 	a.state = MysisStateIdle
 	a.lastError = nil
