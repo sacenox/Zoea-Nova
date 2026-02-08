@@ -421,6 +421,20 @@ A successful workflow execution should achieve:
 
 ---
 
+## Troubleshooting
+
+**Phase 1: Can't define truth table** - Break into sub-problems, clarify requirements, abort after 90 min
+
+**Phase 2: Agents blocked** - Revise task breakdown, extract shared dependencies, abort if >50% blocked
+
+**Phase 3: Too many errors** - Check truth table vs implementation, abort if >20 errors persist
+
+**Phase 4: Arch flaws found** - Review truth table, validate with user, update and restart
+
+**Phase 5: All fixes fail** - Review truth table, discuss requirements, abort after 3 attempts
+
+---
+
 ## Tool Usage
 
 ### Agent Coordination
