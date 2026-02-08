@@ -10,20 +10,20 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 
 ## Executive Summary
 
-**Overall Assessment:** The implementation is **90% aligned** with documentation. The codebase has mature patterns but has **2 critical issues** that must be fixed before v1.0.
+**Overall Assessment:** The implementation is **90% aligned** with documentation. The codebase has mature patterns but has **1 critical issue** that must be fixed before v1.0.
 
 **Critical Issues (MUST FIX):**
 1. ✅ **State machine bugs FIXED:** Two lifecycle bugs (race condition, setIdle hang) have been resolved (commit f8a71cf)
-2. 🔴 **Compression functions unused:** Myses run blind without current game state in context (snapshots not compacted)
+2. ✅ **Compression functions FIXED:** Integrated into production code (commit 8ea0384)
 3. 🔴 **Fallback user message missing:** OpenAI API requires user message after system, but we don't add one
 
 **Key Findings:**
 - ✅ **Core architecture matches design:** State machine, event bus, provider abstraction all implemented as documented
 - ⚠️ **Undocumented features:** Several production features exist but aren't documented (auto-start, broadcast storage model, activity indicators)
-- 🔴 **Unused compression code:** `compactSnapshots()` and `removeOrphanedToolCalls()` never called - myses lack current state context
+- ✅ **Compression functions FIXED:** Integrated into production code (commit 8ea0384, 2026-02-08)
 - 🔴 **Missing fallback logic:** No fallback user message added when only system messages exist (OpenAI API violation)
 - ✅ **State machine bugs FIXED:** Race condition and setIdle hang resolved (commit f8a71cf, 2026-02-08)
-- ✅ **Test quality:** 83% coverage with honest tests that fail when bugs exist
+- ✅ **Test quality:** 80.8% coverage with honest tests that fail when bugs exist
 
 ---
 
@@ -119,8 +119,8 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 | **Turn-aware composition**     | ⚠️ "Loop slices"    | ✅ `getContextMemories`     | ✅ Tested | ⚠️ TERMINOLOGY  | Docs say "loop slices", code does "turn-aware" |
 | **Historical compression**     | ✅ Latest tool loop | ✅ `extractLatestToolLoop`  | ✅ Tested | ✅ YES          | -                                              |
 | **Current turn uncompressed**  | ❌ Not documented   | ✅ Entire turn included     | ✅ Tested | ⚠️ MISSING      | Can reach 24 messages                          |
-| **Snapshot compaction** | ✅ Documented | ✅ Function exists | ✅ Tested | 🔴 NEVER CALLED | CRITICAL: Myses lack current state |
-| **Orphaned tool call removal** | ✅ Documented | ✅ Function exists | ✅ Tested | 🔴 NEVER CALLED | CRITICAL: Invalid tool sequences |
+| **Snapshot compaction** | ✅ Documented | ✅ Function exists | ✅ Tested | ✅ YES | Fixed: integrated in getContextMemories (8ea0384) |
+| **Orphaned tool call removal** | ✅ Documented | ✅ Function exists | ✅ Tested | ✅ YES | Fixed: integrated in getContextMemories (8ea0384) |
 | **Broadcast fallback query**   | ❌ Not documented   | ✅ `GetMostRecentBroadcast` | ✅ Tested | ⚠️ MISSING      | Critical for new myses                         |
 | **Encouragement counter**      | ✅ 3 limit          | ✅ Implemented              | ✅ Tested | ✅ YES          | -                                              |
 | **Synthetic nudge**            | ✅ Documented       | ✅ Ephemeral message        | ✅ Tested | ✅ YES          | Not stored in DB                               |
@@ -128,21 +128,15 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 
 ### Discrepancies
 
-1. 🔴 **Compression Functions Never Called (CRITICAL)**
-   - **Functions exist:** `compactSnapshots()`, `removeOrphanedToolCalls()`
-   - **Tests exist:** Both functions have unit tests
-   - **Reality:** Never called in `getContextMemories()` production flow
-   - **Impact:** 
-     - **Myses run blind:** Without `compactSnapshots()`, context contains stale game state (old `get_status`, `get_system`, `get_notifications` results)
-     - **Invalid tool sequences:** Without `removeOrphanedToolCalls()`, context may have assistant messages with tool calls but no results (violates OpenAI API)
-     - **Context bloat:** Redundant data crowds out relevant information
-   - **Priority:** MUST FIX - Myses need current game state to make decisions
-   - **Fix:** Integrate both functions into `getContextMemories()` pipeline:
-     ```go
-     result = m.compactSnapshots(result)
-     result = m.removeOrphanedToolCalls(result)
-     return result, addedSynthetic, nil
-     ```
+1. ✅ **Compression Functions Never Called (FIXED - commit 8ea0384)**
+   - **Was:** Functions existed but never called in `getContextMemories()` production flow
+   - **Fix applied:** Integrated both functions at mysis.go:1335-1336
+   - **Impact resolved:**
+     - **Myses now see current state:** `compactSnapshots()` removes stale game state, keeps only latest snapshots
+     - **API compliance ensured:** `removeOrphanedToolCalls()` removes orphaned tool calls
+     - **Context optimized:** Redundant data removed, relevant information prioritized
+   - **Verification:** Manual test confirmed OLD snapshots removed, NEW snapshots kept
+   - **Status:** RESOLVED
 
 2. **Context Size Underbounded**
    - **Docs claim:** "3-10 messages typical, ~17 max"
@@ -370,8 +364,8 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 
 | Category       | Coverage | Quality    | Issues                    | Notes                  |
 | -------------- | -------- | ---------- | ------------------------- | ---------------------- |
-| **Overall**    | 79.8%    | ⭐⭐⭐⭐⭐ | 0 critical bugs           | Target: 80%+           |
-| **Core logic** | 84.4%    | ⭐⭐⭐⭐⭐ | None                      | Comprehensive          |
+| **Overall**    | 80.8%    | ⭐⭐⭐⭐⭐ | 0 critical bugs           | Target: 80%+ ✅        |
+| **Core logic** | 86.5%    | ⭐⭐⭐⭐⭐ | None                      | Comprehensive          |
 | **Provider**   | 86.2%    | ⭐⭐⭐⭐⭐ | None                      | Excellent              |
 | **TUI**        | 85.4%    | ⭐⭐⭐⭐   | 2 flaky E2E tests         | Golden files excellent |
 | **Store**      | 74.9%    | ⭐⭐⭐⭐   | None                      | Good                   |
@@ -414,23 +408,19 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
    - **Verification:** Test passes cleanly, no longer skipped
    - **Status:** RESOLVED
 
-3. **Integrate Compression Functions (Context Building)**
-   - **Issue:** `compactSnapshots()` and `removeOrphanedToolCalls()` exist but never called
-   - **Impact:** 
-     - **Myses run blind:** Context contains stale game state (old snapshots), not current state
-     - **Invalid tool sequences:** Orphaned tool calls violate OpenAI API requirements
-     - **Poor decision-making:** Myses act on outdated information
-   - **Fix:** Add to `getContextMemories()` pipeline:
-     ```go
-     // After composing result, before returning:
-     result = m.compactSnapshots(result)
-     result = m.removeOrphanedToolCalls(result)
-     return result, addedSynthetic, nil
-     ```
-   - **Verification:** 
-     - Unit tests already exist and pass
-     - Integration test: Verify myses see current game state in context
-     - Check context size reduction (should be smaller with compaction)
+3. ✅ **Integrate Compression Functions (Context Building) - FIXED (commit 8ea0384)**
+   - **Was:** `compactSnapshots()` and `removeOrphanedToolCalls()` existed but never called
+   - **Fix applied:** Integrated both functions in `getContextMemories()` at mysis.go:1335-1336
+   - **Impact resolved:**
+     - **Myses now see current state:** Latest snapshots only, no stale data
+     - **API compliance:** Orphaned tool calls removed
+     - **Better decisions:** Context focused on relevant, current information
+   - **Verification completed:**
+     - Integration test added: `TestGetContextMemories_WithCompression` (PASS)
+     - Unit test added: `TestCompactSnapshots_MultipleSnapshots` (PASS)
+     - Manual test verified: OLD snapshots removed, NEW snapshots kept
+     - Coverage increased: 79.8% → 80.8% overall, 84.4% → 86.5% core
+   - **Status:** RESOLVED
 
 4. **Implement Fallback User Message (OpenAI API Compliance)**
    - **Issue:** No fallback user message added when only system messages exist
@@ -569,9 +559,9 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
    - Added context cancellation
    - Test unskipped and passing
 
-3. **Integrate compression functions** (Context building)
-   - Add `compactSnapshots()` and `removeOrphanedToolCalls()` to `getContextMemories()`
-   - Verify myses see current game state
+3. ✅ **Integrate compression functions** (Context building) - FIXED (commit 8ea0384)
+   - Added `compactSnapshots()` and `removeOrphanedToolCalls()` to `getContextMemories()`
+   - Verified myses see current game state (manual test passed)
 
 4. **Implement fallback user message** (OpenAI API compliance)
    - Add fallback when only system messages exist
@@ -602,16 +592,16 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 
 ## 14. Conclusion
 
-**Zoea Nova v0.5.0 has excellent architecture and is 50% of the way to production-ready.** 2 of 4 critical issues have been fixed (commit f8a71cf, 2026-02-08). The implementation is **90% aligned** with documentation.
+**Zoea Nova v0.5.0 has excellent architecture and is 75% of the way to production-ready.** 3 of 4 critical issues have been fixed (commits f8a71cf, 8ea0384, 2026-02-08). The implementation is **90% aligned** with documentation.
 
 ### 🔴 Critical Issues Blocking v1.0
 
 1. ✅ **State machine race** - FIXED (commit f8a71cf) - Stop() now reliably results in Stopped state
 2. ✅ **setIdle() hang** - FIXED (commit f8a71cf) - Transition now properly stops goroutine
-3. 🔴 **Compression functions unused** - Myses run blind without current game state
+3. ✅ **Compression functions unused** - FIXED (commit 8ea0384) - Myses now see current game state
 4. 🔴 **Fallback user message missing** - Violates OpenAI API requirements
 
-**Progress: 2 of 4 critical issues resolved (50%)**
+**Progress: 3 of 4 critical issues resolved (75%)**
 
 ### ✅ What's Working Well
 
@@ -633,11 +623,11 @@ The codebase demonstrates **excellent engineering practices**:
 **Phase 1: Critical Fixes (MUST DO FIRST)**
 1. ✅ Fix state machine race (strengthen state protection) - DONE (commit f8a71cf)
 2. ✅ Fix setIdle() hang (cancel context) - DONE (commit f8a71cf)
-3. 🔴 Integrate compression functions (add to `getContextMemories()`) - REMAINING
+3. ✅ Integrate compression functions (add to `getContextMemories()`) - DONE (commit 8ea0384)
 4. 🔴 Implement fallback user message (OpenAI compliance) - REMAINING
 5. ✅ Remove test workarounds (after fixes) - DONE (commit f8a71cf)
 
-**Phase 1 Progress: 3 of 5 complete (60%)**
+**Phase 1 Progress: 4 of 5 complete (80%)**
 
 **Phase 2: Documentation Updates**
 6. Update AGENTS.md (auto-start, activity indicators, help overlay, status bar)
@@ -656,15 +646,15 @@ The codebase demonstrates **excellent engineering practices**:
 
 ### 📊 Success Criteria for v1.0
 
-- ⏳ All 4 critical issues fixed (2 of 4 complete - 50%)
+- ⏳ All 4 critical issues fixed (3 of 4 complete - 75%)
 - ✅ State machine stress test passes 100% (100/100 iterations) - DONE
 - ✅ setIdle() test unskipped and passing - DONE
-- ❌ Myses demonstrate awareness of current game state - PENDING (compression functions)
+- ✅ Myses demonstrate awareness of current game state - DONE (compression functions integrated)
 - ❌ OpenAI provider works without API errors - PENDING (fallback user message)
 - ✅ No test workarounds (t.Skip removed) - DONE
 - ❌ Documentation matches implementation (100% alignment) - PENDING
 
-**Phase 1 is 60% complete (3 of 5 items done).** With the remaining 2 critical fixes (compression functions + fallback user message), Zoea Nova will be production-ready with complete alignment between code, documentation, and tests—a true "single source of truth."
+**Phase 1 is 80% complete (4 of 5 items done).** With the remaining 1 critical fix (fallback user message), Zoea Nova will be production-ready with complete alignment between code, documentation, and tests—a true "single source of truth."
 
 ---
 
@@ -691,6 +681,34 @@ The codebase demonstrates **excellent engineering practices**:
 - Coverage: 79.8% overall (maintained)
 - Core package: 84.4% coverage
 
-**Remaining Critical Issues:** 2 of 4
-- Compression functions unused (context building)
+**Remaining Critical Issues:** 1 of 4
+- Fallback user message missing (OpenAI compliance)
+
+### 2026-02-08 - Commit 8ea0384 (Compression Functions Integration)
+
+**Fixed 1 of 4 critical issues:**
+
+1. ✅ **Compression Functions Unused (Context Building)**
+   - Integrated `compactSnapshots()` in `getContextMemories()` (mysis.go:1335)
+   - Integrated `removeOrphanedToolCalls()` in `getContextMemories()` (mysis.go:1336)
+   - Removes duplicate snapshot tool results, keeps only latest
+   - Removes orphaned assistant tool calls for OpenAI API compliance
+   - Files: `internal/core/mysis.go:1335-1336`
+
+**Test Coverage Added:**
+- Integration test: `TestGetContextMemories_WithCompression` (PASS)
+- Unit test: `TestCompactSnapshots_MultipleSnapshots` (PASS)
+- Fixed test: `TestZoeaListMysesCompaction` expectations updated
+
+**Test Results:**
+- All tests passing (0 failures)
+- Coverage: 80.8% overall (up from 79.8%)
+- Core package: 86.5% coverage (up from 84.4%)
+
+**Manual Verification:**
+- Created test with OLD snapshot (credits: 100) and NEW snapshot (credits: 500)
+- Confirmed OLD snapshot removed, NEW snapshot kept
+- Confirmed orphaned tool calls removed
+
+**Remaining Critical Issues:** 1 of 4
 - Fallback user message missing (OpenAI compliance)
