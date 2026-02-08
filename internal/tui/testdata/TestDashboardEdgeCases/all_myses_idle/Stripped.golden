@@ -5,15 +5,15 @@
 No broadcasts yet. Press 'b' to broadcast.                                                                              
 ⬧──────────────────────────────────────────────────── MYSIS SWARM ─────────────────────────────────────────────────────⬧
 ╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-║[→ ] ◦  alpha    ollama       idle     @crab_war...                                                                   ║
+║[→ ] ◦  alpha    ollama-qwen  idle     @crab_war...                                                                   ║
 ║  └─ T0 ⬡ [10:00] Mining asteroid belt                                                                                ║
 ║[  ] ◦  beta     opencode_zen idle     @crab_trader                                                                   ║
 ║  └─ T0 ⬡ [10:01] Traveling to sector 7                                                                               ║
-║[  ] ◦  gamma    ollama       idle     @crab_exp...                                                                   ║
+║[  ] ◦  gamma    ollama-qwen  idle     @crab_exp...                                                                   ║
 ║  └─ T0 ⬡ [10:02] Trading at station                                                                                  ║
 ║[  ] ◦  delta    opencode_zen idle     @crab_miner                                                                    ║
 ║  └─ T0 ⬡ [10:03] Scanning for targets                                                                                ║
-║[  ] ◦  epsilon  ollama       idle     @crab_scout                                                                    ║
+║[  ] ◦  epsilon  ollama-qwen  idle     @crab_scout                                                                    ║
 ║  └─ T0 ⬡ [10:04] Docked at base                                                                                      ║
 ║                                                                                                                      ║
 ║                                                                                                                      ║

@@ -43,7 +43,7 @@ func TestFocusViewHeaderPresence(t *testing.T) {
 				ID:              "test-id",
 				Name:            tt.mysisName,
 				State:           "running",
-				Provider:        "ollama",
+				Provider:        "ollama-qwen",
 				AccountUsername: "test_account",
 				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			}

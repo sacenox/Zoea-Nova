@@ -51,7 +51,7 @@ var opencodeModelEndpoints = map[string]string{
 	"gemini-3-pro":               "/models/gemini-3-pro",
 	"gemini-3-flash":             "/models/gemini-3-flash",
 	"glm-4.7-free":               opencodeChatCompletionsEndpoint,
-	"gpt-5-nano":                 opencodeResponsesEndpoint,
+	"gpt-5-nano":                 opencodeChatCompletionsEndpoint, // Using chat/completions despite docs saying /responses (500 errors)
 	"kimi-k2.5-free":             opencodeChatCompletionsEndpoint,
 	"minimax-m2.1-free":          opencodeMessagesEndpoint,
 	"trinity-large-preview-free": opencodeChatCompletionsEndpoint,
@@ -124,7 +124,7 @@ func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message
 
 	if len(resp.Choices) == 0 {
 		log.Error().
-			Str("provider", "opencode_zen").
+			Str("provider", p.name).
 			Msg("OpenCode returned empty choices array")
 		return nil, errors.New("no response choices")
 	}
@@ -136,7 +136,7 @@ func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message
 	}
 
 	log.Debug().
-		Str("provider", "opencode_zen").
+		Str("provider", p.name).
 		Str("content", choice.Message.Content).
 		Int("tool_call_count", len(choice.Message.ToolCalls)).
 		Msg("OpenCode ChatWithTools result")
@@ -151,7 +151,7 @@ func (p *OpenCodeProvider) ChatWithTools(ctx context.Context, messages []Message
 				Arguments: json.RawMessage(tc.Function.Arguments),
 			}
 			log.Debug().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Str("tool_call_id", tc.ID).
 				Str("tool_name", tc.Function.Name).
 				Str("arguments", tc.Function.Arguments).
@@ -186,7 +186,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		if attempt > 0 {
 			delay := opencodeRetryDelays[attempt-1]
 			log.Warn().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Int("attempt", attempt).
 				Dur("delay", delay).
 				Msg("Retrying OpenCode request after transient error")
@@ -205,7 +205,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		}
 
 		log.Debug().
-			Str("provider", "opencode_zen").
+			Str("provider", p.name).
 			Str("url", url).
 			Str("model", req.Model).
 			Bool("has_api_key", p.apiKey != "").
@@ -232,7 +232,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		defer resp.Body.Close()
 
 		log.Debug().
-			Str("provider", "opencode_zen").
+			Str("provider", p.name).
 			Str("url", url).
 			Int("status", resp.StatusCode).
 			Int("attempt", attempt+1).
@@ -245,7 +245,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 			lastErr = fmt.Errorf("chat completion status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
 
 			log.Warn().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Int("status", resp.StatusCode).
 				Int("attempt", attempt+1).
 				Str("body", string(payload)).
@@ -259,7 +259,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			payload, _ := io.ReadAll(resp.Body)
 			log.Error().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Int("status", resp.StatusCode).
 				Str("body", string(payload)).
 				Msg("OpenCode non-2xx response")
@@ -270,7 +270,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Error().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Err(err).
 				Msg("OpenCode failed to read response body")
 			return nil, fmt.Errorf("read response body: %w", err)
@@ -279,7 +279,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		var decoded openaiChatResponse
 		if err := json.Unmarshal(bodyBytes, &decoded); err != nil {
 			log.Error().
-				Str("provider", "opencode_zen").
+				Str("provider", p.name).
 				Err(err).
 				Str("body", string(bodyBytes)).
 				Msg("OpenCode JSON decode failed")
@@ -287,7 +287,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 		}
 
 		log.Debug().
-			Str("provider", "opencode_zen").
+			Str("provider", p.name).
 			Int("choice_count", len(decoded.Choices)).
 			Msg("OpenCode response decoded")
 
@@ -296,7 +296,7 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 
 	// All retries exhausted
 	log.Error().
-		Str("provider", "opencode_zen").
+		Str("provider", p.name).
 		Int("max_retries", maxRetries).
 		Err(lastErr).
 		Msg("OpenCode request failed after all retries")

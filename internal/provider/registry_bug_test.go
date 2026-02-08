@@ -15,12 +15,12 @@ func TestZenNanoRegistration(t *testing.T) {
 		Swarm: config.SwarmConfig{
 			MaxMyses:        16,
 			DefaultProvider: "zen-nano",
-			DefaultModel:    "gpt-5-nano",
 		},
 		Providers: map[string]config.ProviderConfig{
 			"zen-nano": {
 				Endpoint:    "https://opencode.ai/zen/v1",
 				Model:       "gpt-5-nano",
+				APIKeyName:  "opencode_zen",
 				Temperature: 0.7,
 				RateLimit:   1.0,
 				RateBurst:   2,
@@ -40,11 +40,16 @@ func TestZenNanoRegistration(t *testing.T) {
 			registry.RegisterFactory(name, factory)
 			t.Logf("Registered Ollama provider: %s", name)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
-			apiKey := creds.GetAPIKey("opencode_zen")
+			// Use explicit api_key_name if provided, otherwise use provider config name
+			keyName := provCfg.APIKeyName
+			if keyName == "" {
+				keyName = name
+			}
+			apiKey := creds.GetAPIKey(keyName)
 			if apiKey != "" {
 				factory := NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)
-				t.Logf("Registered OpenCode provider: %s", name)
+				t.Logf("Registered OpenCode provider: %s (using key: %s)", name, keyName)
 			}
 		}
 	}

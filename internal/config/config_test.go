@@ -286,7 +286,7 @@ func TestLoadEnvOverridePrecedence(t *testing.T) {
 [swarm]
 max_myses = 16
 
-[providers.ollama]
+[providers.ollama-qwen]
 endpoint = "http://file-endpoint"
 model = "file-model"
 temperature = 0.7
@@ -297,11 +297,9 @@ rate_burst = 3
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	os.Setenv("ZOEA_OLLAMA_MODEL", "env-model")
-	os.Setenv("ZOEA_OLLAMA_ENDPOINT", "http://env-endpoint")
+	os.Setenv("ZOEA_MAX_MYSES", "32")
 	defer func() {
-		os.Unsetenv("ZOEA_OLLAMA_MODEL")
-		os.Unsetenv("ZOEA_OLLAMA_ENDPOINT")
+		os.Unsetenv("ZOEA_MAX_MYSES")
 	}()
 
 	cfg, err := Load(configPath)
@@ -309,11 +307,12 @@ rate_burst = 3
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Providers["ollama"].Model != "env-model" {
-		t.Errorf("expected env model override, got %s", cfg.Providers["ollama"].Model)
+	if cfg.Swarm.MaxMyses != 32 {
+		t.Errorf("expected env max_myses override=32, got %d", cfg.Swarm.MaxMyses)
 	}
-	if cfg.Providers["ollama"].Endpoint != "http://env-endpoint" {
-		t.Errorf("expected env endpoint override, got %s", cfg.Providers["ollama"].Endpoint)
+	// Verify file values remain unchanged
+	if cfg.Providers["ollama-qwen"].Model != "file-model" {
+		t.Errorf("expected file model, got %s", cfg.Providers["ollama-qwen"].Model)
 	}
 }
 
@@ -325,9 +324,9 @@ func TestLoadIgnoresInvalidEnvOverrides(t *testing.T) {
 [swarm]
 max_myses = 16
 
-[providers.ollama]
+[providers.ollama-qwen]
 endpoint = "http://localhost:11434"
-model = "qwen3:4b"
+model = "qwen3:8b"
 temperature = 0.7
 rate_limit = 2.0
 rate_burst = 3
@@ -337,14 +336,8 @@ rate_burst = 3
 	}
 
 	os.Setenv("ZOEA_MAX_MYSES", "not-a-number")
-	os.Setenv("ZOEA_OLLAMA_TEMPERATURE", "bad")
-	os.Setenv("ZOEA_OLLAMA_RATE_LIMIT", "bad")
-	os.Setenv("ZOEA_OLLAMA_RATE_BURST", "bad")
 	defer func() {
 		os.Unsetenv("ZOEA_MAX_MYSES")
-		os.Unsetenv("ZOEA_OLLAMA_TEMPERATURE")
-		os.Unsetenv("ZOEA_OLLAMA_RATE_LIMIT")
-		os.Unsetenv("ZOEA_OLLAMA_RATE_BURST")
 	}()
 
 	cfg, err := Load(configPath)
@@ -356,14 +349,8 @@ rate_burst = 3
 	if cfg.Swarm.MaxMyses != 16 {
 		t.Errorf("expected max_myses=16, got %d", cfg.Swarm.MaxMyses)
 	}
-	if cfg.Providers["ollama"].Temperature != 0.7 {
-		t.Errorf("expected temperature=0.7, got %v", cfg.Providers["ollama"].Temperature)
-	}
-	if cfg.Providers["ollama"].RateLimit != 2.0 {
-		t.Errorf("expected rate_limit=2.0, got %v", cfg.Providers["ollama"].RateLimit)
-	}
-	if cfg.Providers["ollama"].RateBurst != 3 {
-		t.Errorf("expected rate_burst=3, got %d", cfg.Providers["ollama"].RateBurst)
+	if cfg.Providers["ollama-qwen"].Temperature != 0.7 {
+		t.Errorf("expected temperature=0.7, got %v", cfg.Providers["ollama-qwen"].Temperature)
 	}
 }
 
@@ -543,17 +530,16 @@ rate_burst = %d
 	}
 }
 
-func TestLoadDefaultProviderModel(t *testing.T) {
+func TestLoadDefaultProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
 
 	configContent := `
 [swarm]
 max_myses = 16
-default_provider = "ollama"
-default_model = "qwen3:8b"
+default_provider = "ollama-qwen"
 
-[providers.ollama]
+[providers.ollama-qwen]
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
 temperature = 0.7
@@ -569,12 +555,8 @@ rate_burst = 3
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	if cfg.Swarm.DefaultProvider != "ollama" {
-		t.Errorf("expected default_provider=ollama, got %s", cfg.Swarm.DefaultProvider)
-	}
-
-	if cfg.Swarm.DefaultModel != "qwen3:8b" {
-		t.Errorf("expected default_model=qwen3:8b, got %s", cfg.Swarm.DefaultModel)
+	if cfg.Swarm.DefaultProvider != "ollama-qwen" {
+		t.Errorf("expected default_provider=ollama-qwen, got %s", cfg.Swarm.DefaultProvider)
 	}
 }
 
@@ -586,19 +568,12 @@ func TestLoadAllEnvOverrides(t *testing.T) {
 [swarm]
 max_myses = 16
 
-[providers.ollama]
+[providers.ollama-qwen]
 endpoint = "http://localhost:11434"
-model = "qwen3:4b"
+model = "qwen3:8b"
 temperature = 0.7
 rate_limit = 2.0
 rate_burst = 3
-
-[providers.opencode_zen]
-endpoint = "https://zen.example.com"
-model = "gpt-5-nano"
-temperature = 0.8
-rate_limit = 3.0
-rate_burst = 4
 
 [mcp]
 upstream = "https://mcp.example.com"
@@ -607,32 +582,12 @@ upstream = "https://mcp.example.com"
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	// Set all env vars
+	// Set env vars
 	os.Setenv("ZOEA_MAX_MYSES", "32")
 	os.Setenv("ZOEA_MCP_ENDPOINT", "https://env-mcp.example.com")
-	os.Setenv("ZOEA_OLLAMA_ENDPOINT", "http://env-ollama:11434")
-	os.Setenv("ZOEA_OLLAMA_MODEL", "env-model")
-	os.Setenv("ZOEA_OLLAMA_TEMPERATURE", "0.5")
-	os.Setenv("ZOEA_OLLAMA_RATE_LIMIT", "5.0")
-	os.Setenv("ZOEA_OLLAMA_RATE_BURST", "10")
-	os.Setenv("ZOEA_OPENCODE_ENDPOINT", "https://env-zen.example.com")
-	os.Setenv("ZOEA_OPENCODE_MODEL", "env-zen-model")
-	os.Setenv("ZOEA_OPENCODE_TEMPERATURE", "0.6")
-	os.Setenv("ZOEA_OPENCODE_RATE_LIMIT", "6.0")
-	os.Setenv("ZOEA_OPENCODE_RATE_BURST", "12")
 	defer func() {
 		os.Unsetenv("ZOEA_MAX_MYSES")
 		os.Unsetenv("ZOEA_MCP_ENDPOINT")
-		os.Unsetenv("ZOEA_OLLAMA_ENDPOINT")
-		os.Unsetenv("ZOEA_OLLAMA_MODEL")
-		os.Unsetenv("ZOEA_OLLAMA_TEMPERATURE")
-		os.Unsetenv("ZOEA_OLLAMA_RATE_LIMIT")
-		os.Unsetenv("ZOEA_OLLAMA_RATE_BURST")
-		os.Unsetenv("ZOEA_OPENCODE_ENDPOINT")
-		os.Unsetenv("ZOEA_OPENCODE_MODEL")
-		os.Unsetenv("ZOEA_OPENCODE_TEMPERATURE")
-		os.Unsetenv("ZOEA_OPENCODE_RATE_LIMIT")
-		os.Unsetenv("ZOEA_OPENCODE_RATE_BURST")
 	}()
 
 	cfg, err := Load(configPath)
@@ -640,42 +595,12 @@ upstream = "https://mcp.example.com"
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	// Verify all overrides
+	// Verify overrides
 	if cfg.Swarm.MaxMyses != 32 {
 		t.Errorf("expected max_myses=32, got %d", cfg.Swarm.MaxMyses)
 	}
 	if cfg.MCP.Upstream != "https://env-mcp.example.com" {
 		t.Errorf("expected env mcp endpoint, got %s", cfg.MCP.Upstream)
-	}
-	if cfg.Providers["ollama"].Endpoint != "http://env-ollama:11434" {
-		t.Errorf("expected env ollama endpoint, got %s", cfg.Providers["ollama"].Endpoint)
-	}
-	if cfg.Providers["ollama"].Model != "env-model" {
-		t.Errorf("expected env ollama model, got %s", cfg.Providers["ollama"].Model)
-	}
-	if cfg.Providers["ollama"].Temperature != 0.5 {
-		t.Errorf("expected env ollama temperature=0.5, got %v", cfg.Providers["ollama"].Temperature)
-	}
-	if cfg.Providers["ollama"].RateLimit != 5.0 {
-		t.Errorf("expected env ollama rate_limit=5.0, got %v", cfg.Providers["ollama"].RateLimit)
-	}
-	if cfg.Providers["ollama"].RateBurst != 10 {
-		t.Errorf("expected env ollama rate_burst=10, got %d", cfg.Providers["ollama"].RateBurst)
-	}
-	if cfg.Providers["opencode_zen"].Endpoint != "https://env-zen.example.com" {
-		t.Errorf("expected env zen endpoint, got %s", cfg.Providers["opencode_zen"].Endpoint)
-	}
-	if cfg.Providers["opencode_zen"].Model != "env-zen-model" {
-		t.Errorf("expected env zen model, got %s", cfg.Providers["opencode_zen"].Model)
-	}
-	if cfg.Providers["opencode_zen"].Temperature != 0.6 {
-		t.Errorf("expected env zen temperature=0.6, got %v", cfg.Providers["opencode_zen"].Temperature)
-	}
-	if cfg.Providers["opencode_zen"].RateLimit != 6.0 {
-		t.Errorf("expected env zen rate_limit=6.0, got %v", cfg.Providers["opencode_zen"].RateLimit)
-	}
-	if cfg.Providers["opencode_zen"].RateBurst != 12 {
-		t.Errorf("expected env zen rate_burst=12, got %d", cfg.Providers["opencode_zen"].RateBurst)
 	}
 }
 
@@ -687,9 +612,9 @@ func TestLoadPartialEnvOverrides(t *testing.T) {
 [swarm]
 max_myses = 16
 
-[providers.ollama]
+[providers.ollama-qwen]
 endpoint = "http://localhost:11434"
-model = "qwen3:4b"
+model = "qwen3:8b"
 temperature = 0.7
 rate_limit = 2.0
 rate_burst = 3
@@ -698,12 +623,10 @@ rate_burst = 3
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	// Override only model and temperature
-	os.Setenv("ZOEA_OLLAMA_MODEL", "partial-model")
-	os.Setenv("ZOEA_OLLAMA_TEMPERATURE", "0.9")
+	// Override only max_myses
+	os.Setenv("ZOEA_MAX_MYSES", "8")
 	defer func() {
-		os.Unsetenv("ZOEA_OLLAMA_MODEL")
-		os.Unsetenv("ZOEA_OLLAMA_TEMPERATURE")
+		os.Unsetenv("ZOEA_MAX_MYSES")
 	}()
 
 	cfg, err := Load(configPath)
@@ -711,19 +634,16 @@ rate_burst = 3
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	// Verify partial overrides
-	if cfg.Providers["ollama"].Model != "partial-model" {
-		t.Errorf("expected partial model override, got %s", cfg.Providers["ollama"].Model)
-	}
-	if cfg.Providers["ollama"].Temperature != 0.9 {
-		t.Errorf("expected partial temperature override=0.9, got %v", cfg.Providers["ollama"].Temperature)
+	// Verify partial override
+	if cfg.Swarm.MaxMyses != 8 {
+		t.Errorf("expected max_myses override=8, got %d", cfg.Swarm.MaxMyses)
 	}
 	// Verify file values remain
-	if cfg.Providers["ollama"].Endpoint != "http://localhost:11434" {
-		t.Errorf("expected file endpoint, got %s", cfg.Providers["ollama"].Endpoint)
+	if cfg.Providers["ollama-qwen"].Endpoint != "http://localhost:11434" {
+		t.Errorf("expected file endpoint, got %s", cfg.Providers["ollama-qwen"].Endpoint)
 	}
-	if cfg.Providers["ollama"].RateLimit != 2.0 {
-		t.Errorf("expected file rate_limit=2.0, got %v", cfg.Providers["ollama"].RateLimit)
+	if cfg.Providers["ollama-qwen"].Model != "qwen3:8b" {
+		t.Errorf("expected file model, got %s", cfg.Providers["ollama-qwen"].Model)
 	}
 }
 

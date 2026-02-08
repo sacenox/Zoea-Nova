@@ -12,7 +12,7 @@ These models are free during their beta period:
 | Kimi K2.5 Free | `kimi-k2.5-free` | `/v1/chat/completions` | Yes |
 | MiniMax M2.1 Free | `minimax-m2.1-free` | `/v1/messages` | Yes |
 | Big Pickle | `big-pickle` | `/v1/chat/completions` | Yes |
-| GPT 5 Nano | `gpt-5-nano` | `/v1/responses` | Yes |
+| GPT 5 Nano | `gpt-5-nano` | `/v1/chat/completions` | Yes |
 
 ## Configuration
 

@@ -1,8 +1,8 @@
  ⬥───────────── ⬡ MYSIS: narrow-focus (1/1) ⬡ ─────────────⬥    
   ID: narrow-focus-mysis    Created: 2026-01-15 10:00           
 ╭──────────────────────────────────────────────────────────╮    
-│ State: running  Provider: ollama  Account: (not logged   │    
-│ in)                                                      │    
+│ State: running  Provider: ollama-qwen  Account: (not     │    
+│ logged in)                                               │    
 ╰──────────────────────────────────────────────────────────╯    
 ⬧──────────────────── CONVERSATION LOG ────────────────────⬧    
                                                                 

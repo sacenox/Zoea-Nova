@@ -13,6 +13,23 @@
 
 ---
 
+Recommendations
+
+1. Fix rate limiter: Share rate.Limiter instances across provider entries with same endpoint/API key
+2. Cargo management: Add logic to check cargo capacity before mining, trigger dock/sell when full
+3. POI validation: Require get_poi before mine, use get_system for travel targets (stop hallucinating names)
+4. Docking sequence: Ensure dock succeeds before calling station services (buy, sell, missions)
+5. Increase iteration limit: From 10 to 15-20 to reduce turn overhead for complex tasks
+6. Add jitter to login: Prevent simultaneous requests from multiple Myses hitting rate limits
+   The system is stable and efficient, but the rate limiting bug and low mining success rate (4.3%) are the primary blockers to swarm effectiveness.
+
+7. Refactor OpenCode Zen provider factory: Make endpoint selection intelligent based on model type
+   - Reference: https://opencode.ai/docs/zen/#models
+   - Current: Hardcoded model→endpoint mapping in opencodeModelEndpoints map
+   - Goal: Automatically route to correct endpoint (/chat/completions, /messages, /responses, /models/*) based on model prefix/type
+   - Benefits: Support new models without code changes, align with official OpenCode Zen API structure
+   - Note: /responses endpoint format is currently undocumented and incompatible with our OpenAI SDK usage
+
 - network activity indicator revision
 
 - remove zoea_list_mysis()

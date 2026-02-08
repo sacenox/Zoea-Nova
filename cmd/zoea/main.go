@@ -241,11 +241,12 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 			registry.RegisterFactory(name, factory)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
 			// OpenCode-based provider
-			// Try provider-specific key first, fallback to default "opencode_zen"
-			apiKey := creds.GetAPIKey(name)
-			if apiKey == "" {
-				apiKey = creds.GetAPIKey("opencode_zen")
+			// Use explicit api_key_name if provided, otherwise use provider config name
+			keyName := provCfg.APIKeyName
+			if keyName == "" {
+				keyName = name
 			}
+			apiKey := creds.GetAPIKey(keyName)
 			if apiKey != "" {
 				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
 				registry.RegisterFactory(name, factory)

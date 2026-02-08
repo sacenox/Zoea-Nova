@@ -1,16 +1,8 @@
 [swarm]
 max_myses = 16
-default_provider = "opencode_zen"
-default_model = "gpt-5-nano"
+default_provider = "ollama-qwen"
 
 # Ollama providers (local)
-[providers.ollama]
-endpoint = "http://localhost:11434"
-model = "qwen3:8b"
-temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
-
 [providers.ollama-qwen]
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
@@ -33,16 +25,10 @@ rate_limit = 2.0
 rate_burst = 3
 
 # OpenCode Zen providers (cloud)
-[providers.opencode_zen]
-endpoint = "https://opencode.ai/zen/v1"
-model = "gpt-5-nano"
-temperature = 0.7
-rate_limit = 1.0
-rate_burst = 2
-
 [providers.zen-nano]
 endpoint = "https://opencode.ai/zen/v1"
 model = "gpt-5-nano"
+api_key_name = "opencode_zen"
 temperature = 0.7
 rate_limit = 1.0
 rate_burst = 2
@@ -50,6 +36,7 @@ rate_burst = 2
 [providers.zen-pickle]
 endpoint = "https://opencode.ai/zen/v1"
 model = "big-pickle"
+api_key_name = "opencode_zen"
 temperature = 0.7
 rate_limit = 1.0
 rate_burst = 2

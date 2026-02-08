@@ -49,8 +49,8 @@ func TestIntegration_DashboardNavigation(t *testing.T) {
 	defer cleanup()
 
 	// Create two myses for navigation
-	m.commander.CreateMysis("mysis-1", "ollama")
-	m.commander.CreateMysis("mysis-2", "ollama")
+	m.commander.CreateMysis("mysis-1", "ollama-qwen")
+	m.commander.CreateMysis("mysis-2", "ollama-qwen")
 	m.refreshMysisList()
 
 	// Initial state: selectedIdx should be 0
@@ -95,8 +95,8 @@ func TestIntegration_DashboardNavigationUp(t *testing.T) {
 	defer cleanup()
 
 	// Create two myses
-	m.commander.CreateMysis("mysis-1", "ollama")
-	m.commander.CreateMysis("mysis-2", "ollama")
+	m.commander.CreateMysis("mysis-1", "ollama-qwen")
+	m.commander.CreateMysis("mysis-2", "ollama-qwen")
 	m.refreshMysisList()
 	m.selectedIdx = 1 // Start at second mysis
 
@@ -126,7 +126,7 @@ func TestIntegration_FocusViewTransition(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	_, _ = m.commander.CreateMysis("test-mysis", "ollama")
+	_, _ = m.commander.CreateMysis("test-mysis", "ollama-qwen")
 	m.refreshMysisList()
 
 	tm := teatest.NewTestModel(
@@ -217,7 +217,7 @@ func TestIntegration_BroadcastInput(t *testing.T) {
 	defer cleanup()
 
 	// Create a running mysis to receive broadcast
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 	m.refreshMysisList()
 
@@ -266,7 +266,7 @@ func TestIntegration_MessageInput(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 	m.refreshMysisList()
 
@@ -379,7 +379,7 @@ func TestIntegration_ConfigProviderInput(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	mysisID := mysis.ID()
 	m.refreshMysisList()
 
@@ -419,7 +419,7 @@ func TestIntegration_ConfigModelInput(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	_, _ = m.commander.CreateMysis("mysis-1", "ollama")
+	_, _ = m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.refreshMysisList()
 
 	tm := teatest.NewTestModel(
@@ -443,7 +443,7 @@ func TestIntegration_ConfigModelInput(t *testing.T) {
 	)
 
 	// Type provider name
-	provider := "ollama"
+	provider := "ollama-qwen"
 	for _, r := range provider {
 		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
@@ -549,7 +549,7 @@ func TestIntegration_ViewportScroll(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis and add some messages
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 
 	// Add enough messages to require scrolling
@@ -609,7 +609,7 @@ func TestIntegration_ViewportBounds(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis with minimal content
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.refreshMysisList()
 	m.focusID = mysis.ID()
 	m.view = ViewFocus
@@ -647,7 +647,7 @@ func TestIntegration_MysisStartedEvent(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis in idle state
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.refreshMysisList()
 
 	tm := teatest.NewTestModel(
@@ -684,7 +684,7 @@ func TestIntegration_MysisStoppedEvent(t *testing.T) {
 	defer cleanup()
 
 	// Create and start a mysis
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 	m.refreshMysisList()
 
@@ -722,7 +722,7 @@ func TestIntegration_BroadcastEvent(t *testing.T) {
 	defer cleanup()
 
 	// Create a running mysis
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 	m.refreshMysisList()
 
@@ -844,8 +844,8 @@ func TestIntegration_MultipleKeySequence(t *testing.T) {
 	defer cleanup()
 
 	// Create two myses
-	m.commander.CreateMysis("mysis-1", "ollama")
-	m.commander.CreateMysis("mysis-2", "ollama")
+	m.commander.CreateMysis("mysis-1", "ollama-qwen")
+	m.commander.CreateMysis("mysis-2", "ollama-qwen")
 	m.refreshMysisList()
 
 	tm := teatest.NewTestModel(
@@ -897,7 +897,7 @@ func TestIntegration_VerboseToggle(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis and focus on it
-	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+	mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 	m.refreshMysisList()
 	m.focusID = mysis.ID()
 	m.view = ViewFocus
@@ -962,8 +962,8 @@ func TestIntegration_BorderRendering(t *testing.T) {
 		defer cleanup()
 
 		// Create myses to populate the bordered list
-		m.commander.CreateMysis("mysis-1", "ollama")
-		m.commander.CreateMysis("mysis-2", "ollama")
+		m.commander.CreateMysis("mysis-1", "ollama-qwen")
+		m.commander.CreateMysis("mysis-2", "ollama-qwen")
 		m.refreshMysisList()
 
 		tm := teatest.NewTestModel(
@@ -1002,7 +1002,7 @@ func TestIntegration_BorderRendering(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis and focus on it
-		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.refreshMysisList()
 		m.focusID = mysis.ID()
 		m.view = ViewFocus
@@ -1041,7 +1041,7 @@ func TestIntegration_BorderRendering(t *testing.T) {
 
 		// Create multiple myses to test layout with borders
 		for i := 0; i < 5; i++ {
-			m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama")
+			m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama-qwen")
 		}
 		m.refreshMysisList()
 
@@ -1074,7 +1074,7 @@ func TestIntegration_SpinnerAnimation(t *testing.T) {
 		defer cleanup()
 
 		// Create and start a mysis
-		mysis, _ := m.commander.CreateMysis("running-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("running-mysis", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 
@@ -1112,7 +1112,7 @@ func TestIntegration_SpinnerAnimation(t *testing.T) {
 		defer cleanup()
 
 		// Create a running mysis
-		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 
@@ -1152,7 +1152,7 @@ func TestIntegration_SpinnerAnimation(t *testing.T) {
 
 		// Create multiple running myses
 		for i := 0; i < 3; i++ {
-			mysis, _ := m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama")
+			mysis, _ := m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama-qwen")
 			m.commander.StartMysis(mysis.ID())
 		}
 		m.refreshMysisList()
@@ -1199,7 +1199,7 @@ func TestIntegration_InputPrompt(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis to receive broadcast
-		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 
@@ -1239,7 +1239,7 @@ func TestIntegration_InputPrompt(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis to message
-		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 
@@ -1330,7 +1330,7 @@ func TestIntegration_InputPrompt(t *testing.T) {
 		defer cleanup()
 
 		// Create a running mysis
-		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 
@@ -1381,7 +1381,7 @@ func TestIntegration_StatusBar(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis
-		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama")
+		mysis, _ := m.commander.CreateMysis("mysis-1", "ollama-qwen")
 		m.refreshMysisList()
 
 		tm := teatest.NewTestModel(
@@ -1455,7 +1455,7 @@ func TestIntegration_StatusBar(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis
-		_, _ = m.commander.CreateMysis("test-mysis", "ollama")
+		_, _ = m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.refreshMysisList()
 
 		// Render status bar directly
@@ -1485,8 +1485,8 @@ func TestIntegration_WindowResize(t *testing.T) {
 		defer cleanup()
 
 		// Create myses to populate dashboard
-		m.commander.CreateMysis("mysis-1", "ollama")
-		m.commander.CreateMysis("mysis-2", "ollama")
+		m.commander.CreateMysis("mysis-1", "ollama-qwen")
+		m.commander.CreateMysis("mysis-2", "ollama-qwen")
 		m.refreshMysisList()
 
 		tm := teatest.NewTestModel(
@@ -1529,7 +1529,7 @@ func TestIntegration_WindowResize(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis and focus on it
-		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.refreshMysisList()
 		m.focusID = mysis.ID()
 		m.view = ViewFocus
@@ -1580,7 +1580,7 @@ func TestIntegration_WindowResize(t *testing.T) {
 
 		// Create myses
 		for i := 0; i < 3; i++ {
-			m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama")
+			m.commander.CreateMysis(fmt.Sprintf("mysis-%d", i), "ollama-qwen")
 		}
 		m.refreshMysisList()
 

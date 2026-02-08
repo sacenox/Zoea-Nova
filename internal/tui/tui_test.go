@@ -37,22 +37,19 @@ func setupTestModel(t *testing.T) (Model, func()) {
 
 	reg := provider.NewRegistry()
 	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("ollama", provider.NewMockFactoryWithLimiter("ollama", "mock response", limiter))
-	reg.RegisterFactory("opencode_zen", provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
+	reg.RegisterFactory("ollama-qwen", provider.NewMockFactoryWithLimiter("ollama-qwen", "mock response", limiter))
 	reg.RegisterFactory("zen-nano", provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
 	reg.RegisterFactory("zen-pickle", provider.NewMockFactoryWithLimiter("zen-pickle", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
 			MaxMyses:        16,
-			DefaultProvider: "opencode_zen",
-			DefaultModel:    "gpt-5-nano",
+			DefaultProvider: "ollama-qwen",
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama":       {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"opencode_zen": {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"zen-nano":     {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"zen-pickle":   {Endpoint: "http://mock", Model: "big-pickle", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"zen-pickle":  {Endpoint: "http://mock", Model: "big-pickle", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 		},
 	}
 
@@ -166,8 +163,8 @@ func TestModelNavigation(t *testing.T) {
 	defer cleanup()
 
 	// Create some myses
-	m.commander.CreateMysis("mysis-1", "ollama")
-	m.commander.CreateMysis("mysis-2", "ollama")
+	m.commander.CreateMysis("mysis-1", "ollama-qwen")
+	m.commander.CreateMysis("mysis-2", "ollama-qwen")
 	m.refreshMysisList()
 
 	if m.selectedIdx != 0 {
@@ -196,7 +193,7 @@ func TestModelFocusView(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis
-	mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+	mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 	m.refreshMysisList()
 
 	// Press enter to focus
@@ -249,8 +246,8 @@ func TestRenderHelp(t *testing.T) {
 
 func TestRenderDashboard(t *testing.T) {
 	myses := []MysisInfo{
-		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama"},
-		{ID: "2", Name: "mysis-2", State: "idle", Provider: "ollama"},
+		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama-qwen"},
+		{ID: "2", Name: "mysis-2", State: "idle", Provider: "ollama-qwen"},
 	}
 
 	loadingSet := make(map[string]bool)
@@ -276,7 +273,7 @@ func TestRenderDashboardEmpty(t *testing.T) {
 }
 
 func TestRenderFocusView(t *testing.T) {
-	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama"}
+	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama-qwen"}
 	logs := []LogEntry{
 		{Role: "user", Content: "Hello"},
 		{Role: "assistant", Content: "Hi there! This is a longer response that might span multiple lines when properly wrapped in the terminal window."},
@@ -513,7 +510,7 @@ func TestNetIndicatorBounce(t *testing.T) {
 
 func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 	myses := []MysisInfo{
-		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama"},
+		{ID: "1", Name: "mysis-1", State: "running", Provider: "ollama-qwen"},
 	}
 
 	swarmMsgs := []SwarmMessageInfo{
@@ -533,7 +530,7 @@ func TestRenderDashboardWithSwarmMessages(t *testing.T) {
 }
 
 func TestRenderFocusViewWithAllRoles(t *testing.T) {
-	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama"}
+	mysis := MysisInfo{ID: "1", Name: "test-mysis", State: "running", Provider: "ollama-qwen"}
 	logs := []LogEntry{
 		{Role: "system", Content: "System prompt"},
 		{Role: "user", Content: "User question"},
@@ -612,7 +609,7 @@ func TestRenderMysisLineStates(t *testing.T) {
 				ID:          "test-id",
 				Name:        "test-mysis",
 				State:       tt.state,
-				Provider:    "ollama",
+				Provider:    "ollama-qwen",
 				LastMessage: "Last message here",
 			}
 
@@ -636,7 +633,7 @@ func TestMysisLineWidthFill(t *testing.T) {
 		ID:       "test-id",
 		Name:     "test-mysis",
 		State:    "idle",
-		Provider: "ollama",
+		Provider: "ollama-qwen",
 	}
 
 	width := 80

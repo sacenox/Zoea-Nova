@@ -191,7 +191,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:              "empty-mysis",
 				Name:            "empty-test",
 				State:           "idle",
-				Provider:        "ollama",
+				Provider:        "ollama-qwen",
 				AccountUsername: "",
 				CreatedAt:       time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
@@ -205,7 +205,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "long-mysis",
 				Name:      "long-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -225,7 +225,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "reasoning-mysis",
 				Name:      "reasoning-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -246,7 +246,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "emoji-mysis",
 				Name:      "emoji-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -272,7 +272,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "cjk-mysis",
 				Name:      "cjk-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -298,7 +298,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "json-mysis",
 				Name:      "json-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -318,7 +318,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "many-logs-mysis",
 				Name:      "many-logs-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs:   generateManyLogs(100),
@@ -331,7 +331,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "narrow-focus-mysis",
 				Name:      "narrow-focus",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -351,7 +351,7 @@ func TestFocusViewEdgeCases(t *testing.T) {
 				ID:        "roles-mysis",
 				Name:      "roles-test",
 				State:     "running",
-				Provider:  "ollama",
+				Provider:  "ollama-qwen",
 				CreatedAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
 			},
 			logs: []LogEntry{
@@ -518,10 +518,10 @@ func generateMyses(count int, state string) []MysisInfo {
 
 func generateMixedStates() []MysisInfo {
 	return []MysisInfo{
-		{ID: "mysis-1", Name: "alpha", State: "running", Provider: "ollama", AccountUsername: "crab_1", LastMessage: "Running", LastMessageAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC), CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
-		{ID: "mysis-2", Name: "beta", State: "idle", Provider: "ollama", AccountUsername: "crab_2", LastMessage: "", CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
+		{ID: "mysis-1", Name: "alpha", State: "running", Provider: "ollama-qwen", AccountUsername: "crab_1", LastMessage: "Running", LastMessageAt: time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC), CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
+		{ID: "mysis-2", Name: "beta", State: "idle", Provider: "ollama-qwen", AccountUsername: "crab_2", LastMessage: "", CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
 		{ID: "mysis-3", Name: "gamma", State: "stopped", Provider: "opencode_zen", AccountUsername: "crab_3", LastMessage: "", CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
-		{ID: "mysis-4", Name: "delta", State: "errored", Provider: "ollama", AccountUsername: "crab_4", LastError: "Network error", CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
+		{ID: "mysis-4", Name: "delta", State: "errored", Provider: "ollama-qwen", AccountUsername: "crab_4", LastError: "Network error", CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
 		{ID: "mysis-5", Name: "epsilon", State: "running", Provider: "opencode_zen", AccountUsername: "", LastMessage: "No account", LastMessageAt: time.Date(2026, 1, 15, 10, 5, 0, 0, time.UTC), CreatedAt: time.Date(2026, 1, 15, 9, 0, 0, 0, time.UTC)},
 	}
 }
@@ -590,7 +590,7 @@ func generateCJKMyses() []MysisInfo {
 			ID:              "mysis-1",
 			Name:            "探索者",
 			State:           "running",
-			Provider:        "ollama",
+			Provider:        "ollama-qwen",
 			AccountUsername: "crab_explorer",
 			LastMessage:     "探索中",
 			LastMessageAt:   time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC),
@@ -664,7 +664,7 @@ func generateName(i int) string {
 
 func getProvider(i int) string {
 	if i%2 == 0 {
-		return "ollama"
+		return "ollama-qwen"
 	}
 	return "opencode_zen"
 }

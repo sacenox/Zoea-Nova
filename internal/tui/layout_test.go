@@ -346,7 +346,7 @@ func makeMysisInfo(id int, state string) MysisInfo {
 		ID:              fmt.Sprintf("mysis-%d", id),
 		Name:            fmt.Sprintf("test-mysis-%d", id),
 		State:           state,
-		Provider:        "ollama",
+		Provider:        "ollama-qwen",
 		AccountUsername: "test_user",
 		LastMessage:     "Test message",
 		LastError:       "",

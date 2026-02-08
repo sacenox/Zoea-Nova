@@ -23,13 +23,13 @@ type Config struct {
 type SwarmConfig struct {
 	MaxMyses        int    `toml:"max_myses"`
 	DefaultProvider string `toml:"default_provider"`
-	DefaultModel    string `toml:"default_model"`
 }
 
 // ProviderConfig holds LLM provider settings.
 type ProviderConfig struct {
 	Endpoint    string  `toml:"endpoint"`
 	Model       string  `toml:"model"`
+	APIKeyName  string  `toml:"api_key_name"`
 	Temperature float64 `toml:"temperature"`
 	RateLimit   float64 `toml:"rate_limit"`
 	RateBurst   int     `toml:"rate_burst"`
@@ -134,29 +134,12 @@ func validateEndpoint(value string) error {
 
 // applyEnvOverrides applies environment variable overrides to the configuration.
 func applyEnvOverrides(cfg *Config) {
-	updateProvider := func(name string, update func(ProviderConfig) ProviderConfig) {
-		providerCfg, ok := cfg.Providers[name]
-		if !ok {
-			return
-		}
-		cfg.Providers[name] = update(providerCfg)
-	}
-
 	applyInt := func(value string, set func(int)) {
 		if value == "" {
 			return
 		}
 		if n, err := strconv.Atoi(value); err == nil {
 			set(n)
-		}
-	}
-
-	applyFloat := func(value string, set func(float64)) {
-		if value == "" {
-			return
-		}
-		if f, err := strconv.ParseFloat(value, 64); err == nil {
-			set(f)
 		}
 	}
 
@@ -169,56 +152,6 @@ func applyEnvOverrides(cfg *Config) {
 			if v != "" {
 				cfg.MCP.Upstream = v
 			}
-		}},
-		{"ZOEA_OLLAMA_ENDPOINT", func(v string) {
-			if v != "" {
-				updateProvider("ollama", func(p ProviderConfig) ProviderConfig { p.Endpoint = v; return p })
-			}
-		}},
-		{"ZOEA_OLLAMA_MODEL", func(v string) {
-			if v != "" {
-				updateProvider("ollama", func(p ProviderConfig) ProviderConfig { p.Model = v; return p })
-			}
-		}},
-		{"ZOEA_OLLAMA_TEMPERATURE", func(v string) {
-			applyFloat(v, func(f float64) {
-				updateProvider("ollama", func(p ProviderConfig) ProviderConfig { p.Temperature = f; return p })
-			})
-		}},
-		{"ZOEA_OLLAMA_RATE_LIMIT", func(v string) {
-			applyFloat(v, func(f float64) {
-				updateProvider("ollama", func(p ProviderConfig) ProviderConfig { p.RateLimit = f; return p })
-			})
-		}},
-		{"ZOEA_OLLAMA_RATE_BURST", func(v string) {
-			applyInt(v, func(n int) {
-				updateProvider("ollama", func(p ProviderConfig) ProviderConfig { p.RateBurst = n; return p })
-			})
-		}},
-		{"ZOEA_OPENCODE_ENDPOINT", func(v string) {
-			if v != "" {
-				updateProvider("opencode_zen", func(p ProviderConfig) ProviderConfig { p.Endpoint = v; return p })
-			}
-		}},
-		{"ZOEA_OPENCODE_MODEL", func(v string) {
-			if v != "" {
-				updateProvider("opencode_zen", func(p ProviderConfig) ProviderConfig { p.Model = v; return p })
-			}
-		}},
-		{"ZOEA_OPENCODE_TEMPERATURE", func(v string) {
-			applyFloat(v, func(f float64) {
-				updateProvider("opencode_zen", func(p ProviderConfig) ProviderConfig { p.Temperature = f; return p })
-			})
-		}},
-		{"ZOEA_OPENCODE_RATE_LIMIT", func(v string) {
-			applyFloat(v, func(f float64) {
-				updateProvider("opencode_zen", func(p ProviderConfig) ProviderConfig { p.RateLimit = f; return p })
-			})
-		}},
-		{"ZOEA_OPENCODE_RATE_BURST", func(v string) {
-			applyInt(v, func(n int) {
-				updateProvider("opencode_zen", func(p ProviderConfig) ProviderConfig { p.RateBurst = n; return p })
-			})
 		}},
 	} {
 		setter.apply(os.Getenv(setter.env))

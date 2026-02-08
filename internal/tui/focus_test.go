@@ -260,7 +260,7 @@ func TestRenderFocusViewWithScrollbar(t *testing.T) {
 		ID:       "test-id",
 		Name:     "test-mysis",
 		State:    "running",
-		Provider: "ollama",
+		Provider: "ollama-qwen",
 	}
 
 	width := 100

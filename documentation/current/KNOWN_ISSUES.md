@@ -36,6 +36,15 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ### Provider Reliability
 
+- [ ] **OpenCode Zen endpoint workaround for gpt-5-nano** - Using `/chat/completions` instead of documented `/responses` endpoint
+  - **Issue:** Official docs specify `gpt-5-nano` uses `/v1/responses` endpoint, but this returns HTTP 500 errors
+  - **Error:** `request failed after 3 retries: chat completion status 500` with server error mentioning `input_tokens` (Anthropic field)
+  - **Root cause:** `/responses` endpoint appears to expect non-OpenAI request format; our code uses OpenAI SDK with Chat Completions format
+  - **Workaround:** Hardcoded `gpt-5-nano` to use `/chat/completions` endpoint (works but contradicts official docs)
+  - **Location:** `internal/provider/opencode.go` line 53
+  - **Action needed:** Contact OpenCode support to clarify `/responses` endpoint format or confirm `/chat/completions` is acceptable
+  - **Reference:** https://opencode.ai/docs/zen/#models
+
 - [ ] **Investigate Ollama timeout errors** - Occasional "context deadline exceeded" errors when calling Ollama chat completions
   - **Error:** `Post "http://localhost:11434/v1/chat/completions": context deadline exceeded`
   - **Needs:** Root cause analysis (model size, request timeout configuration, rate limiting interaction)

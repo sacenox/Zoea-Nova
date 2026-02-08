@@ -19,7 +19,7 @@ func TestInputReset_DirectMessage(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis to message
-		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 		m.selectedIdx = 0
@@ -96,7 +96,7 @@ func TestInputReset_DirectMessage(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis to message
-		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 		m.selectedIdx = 0
@@ -144,8 +144,8 @@ func TestInputReset_Broadcast(t *testing.T) {
 		defer cleanup()
 
 		// Create myses to broadcast to
-		m.commander.CreateMysis("mysis-1", "ollama")
-		m.commander.CreateMysis("mysis-2", "ollama")
+		m.commander.CreateMysis("mysis-1", "ollama-qwen")
+		m.commander.CreateMysis("mysis-2", "ollama-qwen")
 		m.refreshMysisList()
 
 		// Press 'b' to open broadcast input
@@ -232,7 +232,7 @@ func TestInputReset_Integration(t *testing.T) {
 		defer cleanup()
 
 		// Create a mysis
-		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama")
+		mysis, _ := m.commander.CreateMysis("test-mysis", "ollama-qwen")
 		m.commander.StartMysis(mysis.ID())
 		m.refreshMysisList()
 		m.selectedIdx = 0
@@ -318,23 +318,22 @@ func setupTestModelWithSlowProvider(t *testing.T) (Model, func()) {
 
 	// Create a mock factory that returns a provider with a 5-second delay
 	slowFactory := &slowMockFactory{
-		name:     "ollama",
+		name:     "ollama-qwen",
 		response: "mock response",
 		limiter:  limiter,
 		delay:    5 * time.Second,
 	}
-	reg.RegisterFactory("ollama", slowFactory)
-	reg.RegisterFactory("opencode_zen", provider.NewMockFactoryWithLimiter("opencode_zen", "mock response", limiter))
+	reg.RegisterFactory("ollama-qwen", slowFactory)
+	reg.RegisterFactory("zen-nano", provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
 			MaxMyses:        16,
-			DefaultProvider: "opencode_zen",
-			DefaultModel:    "gpt-5-nano",
+			DefaultProvider: "ollama-qwen",
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama":       {Endpoint: "http://mock", Model: "mock-model", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"opencode_zen": {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
 		},
 	}
 
@@ -383,7 +382,7 @@ func TestInputReset_SendingClearsImmediately(t *testing.T) {
 	defer cleanup()
 
 	// Create a mysis with the slow mock provider (5 second delay)
-	mysis, _ := m.commander.CreateMysis("slow-mysis", "ollama")
+	mysis, _ := m.commander.CreateMysis("slow-mysis", "ollama-qwen")
 	m.commander.StartMysis(mysis.ID())
 	m.refreshMysisList()
 	m.selectedIdx = 0

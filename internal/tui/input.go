@@ -64,7 +64,7 @@ func (m *InputModel) SetMode(mode InputMode, targetID string) {
 		m.textInput.Placeholder = "Enter mysis name..."
 		m.textInput.Prompt = inputPromptStyle.Render("⬡") + "  "
 	case InputModeConfigProvider:
-		m.textInput.Placeholder = "Enter provider (ollama/opencode_zen)..."
+		m.textInput.Placeholder = "Enter provider (ollama-qwen/zen-nano/zen-pickle)..."
 		m.textInput.Prompt = inputPromptStyle.Render("⚙") + "  "
 	case InputModeConfigModel:
 		m.textInput.Placeholder = "Enter model name..."
