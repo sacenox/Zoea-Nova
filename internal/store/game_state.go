@@ -138,16 +138,16 @@ func (s *GameStateSnapshot) RecencyMessage(currentTick int64) string {
 			// Future tick (shouldn't happen, but handle gracefully)
 			return "just now"
 		}
-		return fmt.Sprintf("%d ticks ago (%d seconds)", ticksAgo, ticksAgo*10)
+		return fmt.Sprintf("T%d ago (%ds)", ticksAgo, ticksAgo*10)
 	}
 
 	// Fallback to wall clock time
 	elapsed := time.Since(s.CapturedAt)
 	if elapsed < time.Minute {
-		return fmt.Sprintf("%.0f seconds ago", elapsed.Seconds())
+		return fmt.Sprintf("%.0fs ago", elapsed.Seconds())
 	}
 	if elapsed < time.Hour {
-		return fmt.Sprintf("%.0f minutes ago", elapsed.Minutes())
+		return fmt.Sprintf("%.0f m ago", elapsed.Minutes())
 	}
-	return fmt.Sprintf("%.1f hours ago", elapsed.Hours())
+	return fmt.Sprintf("%.1f h ago", elapsed.Hours())
 }

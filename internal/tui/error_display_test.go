@@ -69,6 +69,7 @@ func TestErrorDisplayInFocusView(t *testing.T) {
 		1,
 		1,
 		0,
+		nil, // gameStateSnapshots
 		testErr,
 	)
 

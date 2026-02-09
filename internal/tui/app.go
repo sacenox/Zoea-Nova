@@ -89,8 +89,9 @@ type Model struct {
 }
 
 const (
-	providerErrorWindow    = 10 * time.Minute
-	maxConversationEntries = 200 // Maximum conversation log entries to load for performance
+	providerErrorWindow     = 10 * time.Minute
+	maxConversationEntries  = 500 // Maximum conversation log entries to load for performance
+	MaxConversationMessages = 500 // Maximum conversation messages to display in focus view
 )
 
 // SwarmMessage represents a broadcast message for display.
@@ -181,14 +182,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width - 4)
 
-		// Update viewport size (account for header, info panel, title, footer)
-		headerHeight := 7 // 2 for header + 3 for info panel + 1 for conversation title + 1 margin
-		footerHeight := 2
-		vpHeight := msg.Height - headerHeight - footerHeight - 3
+		// Update viewport size (account for all UI chrome)
+		// Layout in RenderFocusViewWithViewport:
+		//   - Header: 2 lines (mysis name + ID/created)
+		//   - Info panel: 3 lines (top border + content + bottom border)
+		//   - Title row: 1 line (GAME STATE + CONVERSATION LOG titles)
+		//   - Content: max(sidebar_lines, vp.Height) lines (sidebar + conversation side-by-side)
+		//   - Bottom border: 1 line
+		//   - Footer: 1 line (hints)
+		// Added in View():
+		//   - Newline: 1 line (before message bar)
+		//   - Message bar: 1 line
+		//   - Newline: 1 line (before status bar)
+		//   - Status bar: 1 line
+		// Total: (2+3+1+1+1) + vp.Height + (1+1+1+1) = 12 + vp.Height
+		// Therefore: vp.Height = msg.Height - 12
+		vpHeight := msg.Height - 12
 		if vpHeight < 5 {
 			vpHeight = 5
 		}
-		m.viewport.Width = msg.Width - 4 // -2 for borders, -2 for scrollbar (space + char)
+		// Viewport width must match the conversation log width calculation in focus.go
+		// Two-column layout: Sidebar (24) + Gap (2) + Conversation
+		// Conversation width = total - 24 - 2 = total - 26
+		// Viewport content width = conversation - 2 (for scrollbar)
+		const sidebarWidth = 24
+		const columnGap = 2
+		conversationWidth := msg.Width - sidebarWidth - columnGap
+		m.viewport.Width = conversationWidth - 2 // -2 for scrollbar
 		m.viewport.Height = vpHeight
 
 		// Re-render content if in focus view
@@ -325,7 +345,18 @@ func (m Model) View() string {
 		content = RenderHelp(m.width, contentHeight)
 	} else if m.view == ViewFocus {
 		focusIndex, totalMyses := m.focusPosition(m.focusID)
-		content = RenderFocusViewWithViewport(m.mysisByID(m.focusID), m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick, m.err)
+
+		// Get game state snapshots for focused mysis
+		var gameStateSnapshots []*store.GameStateSnapshot
+		focusMysis := m.mysisByID(m.focusID)
+		if focusMysis.AccountUsername != "" {
+			snapshots, err := m.store.GetAllGameStateSnapshots(focusMysis.AccountUsername)
+			if err == nil {
+				gameStateSnapshots = snapshots
+			}
+		}
+
+		content = RenderFocusViewWithViewport(focusMysis, m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick, gameStateSnapshots, m.err)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -882,7 +913,7 @@ func (m *Model) loadMysisLogs() {
 		return
 	}
 
-	memories, err := m.store.GetRecentMemories(m.focusID, maxConversationEntries)
+	memories, err := m.store.GetRecentMemories(m.focusID, MaxConversationMessages)
 	if err != nil {
 		m.err = err
 		return
@@ -898,6 +929,12 @@ func (m *Model) loadMysisLogs() {
 		senderName := m.mysisNameByID(mem.SenderID)
 		filteredLogs = append(filteredLogs, LogEntryFromMemory(mem, m.focusID, senderName))
 	}
+
+	// Limit to MaxConversationMessages
+	if len(filteredLogs) > MaxConversationMessages {
+		filteredLogs = filteredLogs[len(filteredLogs)-MaxConversationMessages:]
+	}
+
 	m.logs = filteredLogs
 
 	m.updateViewportContent()
@@ -914,10 +951,14 @@ func (m *Model) updateViewportContent() {
 	// Remember if user was at bottom before updating content
 	wasAtBottom := m.viewport.AtBottom()
 
-	// Log entries must fill the panel content area exactly.
-	// Panel is rendered with logStyle.Width(m.width - 2) without padding (commit d023227)
-	// Content width = m.width - 2 (borders), minus 2 (scrollbar) = m.width - 4
-	panelContentWidth := m.width - 4 // -2 for borders, -2 for scrollbar
+	// Two-column layout: Game State Sidebar (24 chars) | Conversation Log
+	const sidebarWidth = 24
+	const columnGap = 2
+	conversationWidth := m.width - sidebarWidth - columnGap
+
+	// Content width for conversation log (accounting for scrollbar)
+	// No borders on conversation log, just scrollbar
+	panelContentWidth := conversationWidth - 2 // -2 for scrollbar
 
 	var lines []string
 	for _, entry := range m.logs {

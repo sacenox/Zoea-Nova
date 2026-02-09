@@ -206,7 +206,7 @@ func TestFocusViewLayoutCalculations(t *testing.T) {
 			}()
 
 			// Render focus view
-			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, tt.numLogs, 1, 1, 0, nil)
+			output := RenderFocusViewWithViewport(mysis, vp, tt.termWidth, false, "⬡", false, tt.numLogs, 1, 1, 0, nil, nil)
 
 			// Basic validations
 			if output == "" {

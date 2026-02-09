@@ -2075,15 +2075,35 @@ func (m *Mysis) cacheSnapshotToolResult(toolName string, result *mcp.ToolResult,
 		return
 	}
 
-	// Need active account to cache
-	username := m.CurrentAccountUsername()
-	if username == "" {
+	// Extract game tick and username from result
+	payload, ok := parseToolResultPayload(result)
+	if !ok {
 		return
 	}
 
-	// Extract game tick from result
-	payload, ok := parseToolResultPayload(result)
-	if !ok {
+	// Try to extract username from result (for myses with pre-provided credentials)
+	username := m.CurrentAccountUsername()
+	if username == "" {
+		// Try to extract from result payload (nested under player.username)
+		if payloadMap, ok := payload.(map[string]interface{}); ok {
+			if player, ok := payloadMap["player"].(map[string]interface{}); ok {
+				if extractedUsername, ok := player["username"].(string); ok && extractedUsername != "" {
+					username = extractedUsername
+					// Also extract session_id if present
+					sessionID := m.CurrentSessionID()
+					if sessionID == "" {
+						// Try to get from current tool arguments or system prompt
+						// For now, just set the username without session
+					}
+					// Set the account so future caching works
+					m.setCurrentAccount(username, "", sessionID)
+				}
+			}
+		}
+	}
+
+	// Still no username - can't cache
+	if username == "" {
 		return
 	}
 

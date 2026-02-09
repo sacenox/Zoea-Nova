@@ -166,7 +166,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64, err error) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64, gameStateSnapshots []*store.GameStateSnapshot, err error) string {
 	var sections []string
 
 	// Header with mysis name - spans full width (2 lines)
@@ -195,7 +195,12 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	infoPanel := panelStyle.Width(width - 2).Render(infoContent)
 	sections = append(sections, infoPanel)
 
-	// Conversation title with scroll indicator - spans full width
+	// Two-column layout: Game State Sidebar | Conversation Log
+	const sidebarWidth = 24 // Fixed width for game state sidebar (total including border)
+	const columnGap = 2     // Gap between columns
+	conversationWidth := width - sidebarWidth - columnGap
+
+	// Conversation title with scroll indicator
 	scrollInfo := ""
 	if !vp.AtBottom() && totalLines > 0 {
 		currentLine := vp.YOffset + 1
@@ -204,10 +209,27 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 		}
 		scrollInfo = fmt.Sprintf("  LINE %d/%d", currentLine, totalLines)
 	}
-	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", scrollInfo, width)
-	sections = append(sections, logTitle)
+	logTitle := renderSectionTitleWithSuffix("CONVERSATION LOG", scrollInfo, conversationWidth)
 
-	// Viewport content (scrollable) with scrollbar
+	// Game state title
+	gameStateTitle := renderSectionTitle("GAME STATE", sidebarWidth)
+
+	// Render game state sidebar content (returns lines without border)
+	gameStateSidebarContent := renderGameStateSidebar(gameStateSnapshots, currentTick, sidebarWidth)
+
+	// Render sidebar with border using lipgloss
+	// Width() sets CONTENT width, padding is added on top, border is INCLUDED in width
+	// So: content_width + padding(2) = sidebarWidth
+	// Therefore: content_width = sidebarWidth - 2
+	sidebarStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorder).
+		Width(sidebarWidth-2). // -2 for padding (border is included in width)
+		Padding(0, 1)          // 1 space padding on left/right
+
+	sidebarRendered := sidebarStyle.Render(strings.Join(gameStateSidebarContent, "\n"))
+	gameStateSidebarLines := strings.Split(sidebarRendered, "\n")
+
 	// Render scrollbar based on viewport state
 	scrollOffset := vp.YOffset
 	scrollbarStr := renderScrollbar(vp.Height, totalLines, scrollOffset)
@@ -216,8 +238,8 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	// Get viewport content lines
 	vpContentLines := strings.Split(vp.View(), "\n")
 
-	// Combine each line with scrollbar
-	combinedLines := make([]string, vp.Height)
+	// Combine viewport content with scrollbar
+	conversationLines := make([]string, vp.Height)
 	for i := 0; i < vp.Height; i++ {
 		var contentLine string
 		if i < len(vpContentLines) {
@@ -229,16 +251,55 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 		} else {
 			scrollLine = "  " // Empty if no scrollbar line
 		}
-		combinedLines[i] = contentLine + scrollLine
+		conversationLines[i] = contentLine + scrollLine
 	}
 
-	combinedContent := strings.Join(combinedLines, "\n")
-	vpView := logStyle.Width(width - 2).Render(combinedContent)
-	sections = append(sections, vpView)
+	// Render conversation log (no border, just content)
+	// The conversation log doesn't have a border, so we use the full conversationWidth
+	conversationContent := strings.Join(conversationLines, "\n")
+	conversationView := logStyle.Width(conversationWidth).Render(conversationContent)
+	conversationViewLines := strings.Split(conversationView, "\n")
+
+	// Combine titles
+	titleRow := lipgloss.JoinHorizontal(lipgloss.Top,
+		gameStateTitle,
+		strings.Repeat(" ", columnGap),
+		logTitle,
+	)
+	sections = append(sections, titleRow)
+
+	// Combine sidebar and conversation content side by side
+	maxLines := len(gameStateSidebarLines)
+	if len(conversationViewLines) > maxLines {
+		maxLines = len(conversationViewLines)
+	}
+
+	for i := 0; i < maxLines; i++ {
+		var leftLine, rightLine string
+
+		if i < len(gameStateSidebarLines) {
+			leftLine = gameStateSidebarLines[i]
+		} else {
+			leftLine = strings.Repeat(" ", sidebarWidth)
+		}
+
+		if i < len(conversationViewLines) {
+			rightLine = conversationViewLines[i]
+		} else {
+			rightLine = strings.Repeat(" ", conversationWidth)
+		}
+
+		combinedLine := lipgloss.JoinHorizontal(lipgloss.Top,
+			leftLine,
+			strings.Repeat(" ", columnGap),
+			rightLine,
+		)
+		sections = append(sections, combinedLine)
+	}
 
 	// Bottom border for conversation log - matches top border style
-	logBottomBorder := renderSectionTitle("", width)
-	sections = append(sections, logBottomBorder)
+	logBottomBorder := renderSectionTitle("", conversationWidth)
+	sections = append(sections, strings.Repeat(" ", sidebarWidth)+strings.Repeat(" ", columnGap)+logBottomBorder)
 
 	// Footer with scroll hints, verbose toggle, and error status
 	verboseHint := ""
@@ -254,106 +315,141 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// renderToolCallsEntry formats tool calls with special visual treatment.
-// Format: ⚡ Calling tools: with bulleted list of tool names and arguments.
-func renderToolCallsEntry(content string, contentWidth int, verbose bool) []string {
+// renderToolCallsCompact formats tool calls in compact format.
+// Format: ⚙ tool_name(args...) - truncated, no huge JSON
+func renderToolCallsCompact(content string, contentWidth int) []string {
 	// Parse tool calls from storage format
 	stored := strings.TrimPrefix(content, constants.ToolCallStoragePrefix)
 	if stored == "" {
-		return []string{"⚠️ Empty tool call record"}
+		return []string{dimmedStyle.Render("⚠ Empty tool call")}
 	}
 
 	var result []string
-	toolCallStyle := lipgloss.NewStyle().Foreground(colorTool).Bold(true)
+	toolIconStyle := lipgloss.NewStyle().Foreground(colorTool)
 	toolNameStyle := lipgloss.NewStyle().Foreground(colorTool).Bold(true)
-	toolArgStyle := lipgloss.NewStyle().Foreground(colorTool)
-	dimmedStyle := lipgloss.NewStyle().Foreground(colorMuted)
-
-	// Header line
-	header := toolCallStyle.Render("⚡ Calling tools:")
-	result = append(result, header)
+	toolArgStyle := lipgloss.NewStyle().Foreground(colorMuted)
 
 	// Parse each tool call record
 	parts := strings.Split(stored, constants.ToolCallStorageRecordDelimiter)
 	for _, part := range parts {
 		fields := strings.SplitN(part, constants.ToolCallStorageFieldDelimiter, constants.ToolCallStorageFieldCount)
 		if len(fields) < constants.ToolCallStorageFieldCount {
-			// Malformed: skip or show warning
 			continue
 		}
 
 		toolName := fields[1]
 		argsJSON := fields[2]
 
-		// Simplified argument format for non-verbose mode
-		if !verbose || argsJSON == "{}" {
-			// Show as: • tool_name() or • tool_name(arg: value)
-			var argsDisplay string
-			if argsJSON == "{}" {
-				argsDisplay = "()"
-			} else {
-				// Parse JSON and create simplified inline format
-				var args map[string]interface{}
-				if err := json.Unmarshal([]byte(argsJSON), &args); err == nil && len(args) > 0 {
-					// Sort keys for deterministic output
-					var keys []string
-					for k := range args {
-						keys = append(keys, k)
-					}
-					// Use simple lexicographic sort
-					for i := 0; i < len(keys); i++ {
-						for j := i + 1; j < len(keys); j++ {
-							if keys[i] > keys[j] {
-								keys[i], keys[j] = keys[j], keys[i]
-							}
-						}
-					}
-
-					var argParts []string
-					for _, k := range keys {
-						v := args[k]
-						// Format value based on type
-						var valStr string
-						switch v := v.(type) {
-						case string:
-							valStr = fmt.Sprintf("%q", v)
-						case float64, int, bool:
-							valStr = fmt.Sprintf("%v", v)
-						default:
-							// Complex types: use ellipsis
-							valStr = "{...}"
-						}
-						argParts = append(argParts, fmt.Sprintf("%s: %s", k, valStr))
-					}
-					argsDisplay = "(" + strings.Join(argParts, ", ") + ")"
-				} else {
-					argsDisplay = "(...)"
-				}
-			}
-
-			toolLine := "  • " + toolNameStyle.Render(toolName) + toolArgStyle.Render(argsDisplay)
-			result = append(result, toolLine)
+		// Format: ⚙ tool_name(args...)
+		var argsDisplay string
+		if argsJSON == "{}" {
+			argsDisplay = "()"
 		} else {
-			// Verbose mode: show tool name with JSON tree below
-			toolLine := "  • " + toolNameStyle.Render(toolName)
-			result = append(result, toolLine)
-
-			if argsJSON != "{}" {
-				// Render JSON as indented tree
-				var args map[string]interface{}
-				if err := json.Unmarshal([]byte(argsJSON), &args); err == nil {
-					// Simple indented JSON rendering
-					jsonBytes, _ := json.MarshalIndent(args, "    ", "  ")
-					jsonLines := strings.Split(string(jsonBytes), "\n")
-					for _, line := range jsonLines {
-						result = append(result, dimmedStyle.Render("    "+line))
+			// Parse JSON and create compact inline format
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(argsJSON), &args); err == nil && len(args) > 0 {
+				// Sort keys for deterministic output
+				var keys []string
+				for k := range args {
+					keys = append(keys, k)
+				}
+				// Simple lexicographic sort
+				for i := 0; i < len(keys); i++ {
+					for j := i + 1; j < len(keys); j++ {
+						if keys[i] > keys[j] {
+							keys[i], keys[j] = keys[j], keys[i]
+						}
 					}
 				}
+
+				var argParts []string
+				for _, k := range keys {
+					v := args[k]
+					// Format value based on type
+					var valStr string
+					switch v := v.(type) {
+					case string:
+						// Truncate long strings
+						if len(v) > 20 {
+							valStr = fmt.Sprintf("%q", v[:20]+"...")
+						} else {
+							valStr = fmt.Sprintf("%q", v)
+						}
+					case float64, int, bool:
+						valStr = fmt.Sprintf("%v", v)
+					default:
+						// Complex types: use ellipsis
+						valStr = "{...}"
+					}
+					argParts = append(argParts, fmt.Sprintf("%s=%s", k, valStr))
+				}
+				argsDisplay = "(" + strings.Join(argParts, ", ") + ")"
+			} else {
+				argsDisplay = "(...)"
 			}
 		}
+
+		// Truncate if too long
+		toolLine := toolIconStyle.Render("⚙") + " " + toolNameStyle.Render(toolName) + toolArgStyle.Render(argsDisplay)
+		if lipgloss.Width(toolLine) > contentWidth {
+			// Truncate args
+			maxArgsWidth := contentWidth - lipgloss.Width(toolIconStyle.Render("⚙")+" "+toolName) - 5
+			if maxArgsWidth < 5 {
+				maxArgsWidth = 5
+			}
+			argsDisplay = truncateWithEllipsis(argsDisplay, maxArgsWidth)
+			toolLine = toolIconStyle.Render("⚙") + " " + toolNameStyle.Render(toolName) + toolArgStyle.Render(argsDisplay)
+		}
+
+		result = append(result, toolLine)
 	}
 
 	return result
+}
+
+// renderToolResultCompact formats tool results compactly.
+// Success: just ✓ Success
+// Error: ✗ Error: message
+func renderToolResultCompact(content string, contentWidth int, verbose bool) []string {
+	// Strip tool call ID prefix if present (format: "call_xxx:json")
+	jsonContent := content
+	if idx := strings.Index(jsonContent, ":"); idx > 0 && strings.HasPrefix(jsonContent, "call_") {
+		jsonContent = jsonContent[idx+1:]
+	}
+
+	successStyle := lipgloss.NewStyle().Foreground(colorSuccess)
+	errorStyle := lipgloss.NewStyle().Foreground(colorError)
+
+	// Check if it's an error
+	if strings.Contains(jsonContent, "\"error\"") || strings.Contains(jsonContent, "\"isError\"") {
+		// Parse error message
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonContent), &data); err == nil {
+			if errMsg, ok := data["error"].(string); ok {
+				// Show error message
+				errorLine := errorStyle.Render("✗") + " " + errorStyle.Render("Error: "+errMsg)
+				if verbose {
+					// In verbose mode, show full error
+					return wrapText(errorLine, contentWidth)
+				}
+				// Truncate error message
+				if lipgloss.Width(errorLine) > contentWidth {
+					maxErrWidth := contentWidth - 10
+					if maxErrWidth < 10 {
+						maxErrWidth = 10
+					}
+					errMsg = truncateWithEllipsis(errMsg, maxErrWidth)
+					errorLine = errorStyle.Render("✗") + " " + errorStyle.Render("Error: "+errMsg)
+				}
+				return []string{errorLine}
+			}
+		}
+		// Fallback: generic error
+		return []string{errorStyle.Render("✗ Error")}
+	}
+
+	// Success: just show checkmark
+	return []string{successStyle.Render("✓ Success")}
 }
 
 func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick int64) []string {
@@ -403,10 +499,10 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 	// Inside padding: 1 space on left and right of all content
 	const padLeft = 1
 	const padRight = 1
+	const contentIndent = 4 // 4 spaces indent for content below header
 
-	// Calculate content width (accounting for prefix, padding, and gap after prefix)
-	prefixWidth := lipgloss.Width(prefix) + 1 // +1 for space after prefix
-	contentWidth := maxWidth - prefixWidth - padLeft - padRight
+	// Calculate content width (accounting for indent and padding)
+	contentWidth := maxWidth - contentIndent - padLeft - padRight
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
@@ -416,26 +512,13 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 
 	// Check for tool calls (assistant messages with [TOOL_CALLS] prefix)
 	if entry.Role == "assistant" && strings.HasPrefix(entry.Content, constants.ToolCallStoragePrefix) {
-		// Render tool calls with special visual treatment
-		wrappedLines = renderToolCallsEntry(entry.Content, contentWidth, verbose)
-	} else if entry.Role == "tool" && isJSON(entry.Content) {
-		// Extract JSON content (strip tool call ID prefix if present)
-		jsonContent := entry.Content
-		if idx := strings.Index(jsonContent, ":"); idx > 0 && strings.HasPrefix(jsonContent, "call_") {
-			jsonContent = jsonContent[idx+1:]
-		}
-
-		// Render JSON as tree structure with width constraint
-		treeStr, err := renderJSONTree(jsonContent, verbose, contentWidth)
-		if err == nil {
-			// Tree rendering succeeded
-			wrappedLines = strings.Split(treeStr, "\n")
-		} else {
-			// Fall back to normal wrapping if JSON parsing fails
-			wrappedLines = wrapText(entry.Content, contentWidth)
-		}
+		// Render tool calls with compact format
+		wrappedLines = renderToolCallsCompact(entry.Content, contentWidth)
+	} else if entry.Role == "tool" {
+		// Tool results: only show errors, success is just a checkmark
+		wrappedLines = renderToolResultCompact(entry.Content, contentWidth, verbose)
 	} else {
-		// Normal text wrapping
+		// Normal text wrapping (user messages, assistant replies)
 		wrappedLines = wrapText(entry.Content, contentWidth)
 	}
 
@@ -466,21 +549,22 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 	headerLine := leftPad + styledPrefix + styledSeparator + headerPadding
 	result = append(result, headerLine)
 
-	// Render content lines (start at left margin, no indentation)
+	// Render content lines (4 spaces indented below header)
 	for _, line := range wrappedLines {
 		// Pad the line content to fill remaining width
 		lineLen := lipgloss.Width(line)
-		remainingWidth := maxWidth - padLeft - lineLen - padRight
+		remainingWidth := maxWidth - padLeft - contentIndent - lineLen - padRight
 		if remainingWidth < 0 {
 			remainingWidth = 0
 		}
 		paddedLine := line + strings.Repeat(" ", remainingWidth)
 
-		// All content lines: left pad + content (no indent)
+		// All content lines: left pad + 4 space indent + content
 		contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+		indent := contentStyle.Render(strings.Repeat(" ", contentIndent))
 		styledContent := contentStyle.Render(paddedLine)
 		rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
-		result = append(result, contentLeftPad+styledContent+rightPad)
+		result = append(result, contentLeftPad+indent+styledContent+rightPad)
 	}
 
 	// Render reasoning if present
@@ -567,16 +651,18 @@ func renderLogEntryImpl(entry LogEntry, maxWidth int, verbose bool, currentTick 
 				truncPaddedLine := truncMsg + strings.Repeat(" ", truncRemainingWidth)
 
 				contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+				indent := contentStyle.Render(strings.Repeat(" ", contentIndent))
 				styledTrunc := dimmedStyle.Render(truncPaddedLine)
 				rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
-				result = append(result, contentLeftPad+styledTrunc+rightPad)
+				result = append(result, contentLeftPad+indent+styledTrunc+rightPad)
 			}
 
-			// All lines: left pad + content (no indent, matches main message rendering)
+			// All lines: left pad + 4 space indent + content (matches main message rendering)
 			contentLeftPad := contentStyle.Render(strings.Repeat(" ", padLeft))
+			indent := contentStyle.Render(strings.Repeat(" ", contentIndent))
 			styledContent := reasoningStyle.Render(paddedLine)
 			rightPad := contentStyle.Render(strings.Repeat(" ", padRight))
-			result = append(result, contentLeftPad+styledContent+rightPad)
+			result = append(result, contentLeftPad+indent+styledContent+rightPad)
 		}
 	}
 
@@ -656,4 +742,139 @@ func isJSON(s string) bool {
 
 	return (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) ||
 		(strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"))
+}
+
+// renderGameStateSidebar renders the game state sidebar showing all snapshots.
+func renderGameStateSidebar(snapshots []*store.GameStateSnapshot, currentTick int64, width int) []string {
+	var lines []string
+
+	if len(snapshots) == 0 {
+		lines = append(lines, dimmedStyle.Render("No game state"))
+		lines = append(lines, dimmedStyle.Render("available"))
+		return lines
+	}
+
+	// Group snapshots by category (same as buildGameStateSummary)
+	statusTools := []string{"get_status", "get_player"}
+	shipTools := []string{"get_ship", "get_cargo"}
+	locationTools := []string{"get_system", "get_location", "get_poi"}
+
+	// Helper to render a snapshot group
+	renderGroup := func(toolNames []string) {
+		for _, snapshot := range snapshots {
+			for _, toolName := range toolNames {
+				if snapshot.ToolName == toolName {
+					// Tool name with recency
+					recency := snapshot.RecencyMessage(currentTick)
+					toolHeader := labelStyle.Render(toolName)
+					recencyText := dimmedStyle.Render(fmt.Sprintf(" (%s)", recency))
+					lines = append(lines, toolHeader+recencyText)
+
+					// Extract and show compact info
+					compactInfo := extractCompactInfoForTUI(snapshot.Content, toolName, width-4)
+					lines = append(lines, compactInfo...)
+					lines = append(lines, "") // Empty line between groups
+				}
+			}
+		}
+	}
+
+	renderGroup(statusTools)
+	renderGroup(shipTools)
+	renderGroup(locationTools)
+
+	// Remove trailing empty line if present
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return lines
+}
+
+// extractCompactInfoForTUI extracts key info from snapshot for TUI display.
+func extractCompactInfoForTUI(content, toolName string, maxWidth int) []string {
+	var lines []string
+
+	// Parse JSON content
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &data); err != nil {
+		return lines
+	}
+
+	switch toolName {
+	case "get_status", "get_player":
+		// Extract player data
+		if player, ok := data["player"].(map[string]interface{}); ok {
+			if credits, ok := player["credits"].(float64); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Credits: %d", int(credits))))
+			}
+			if location, ok := player["current_system"].(string); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  System: %s", truncateWithEllipsis(location, maxWidth-10))))
+			}
+		}
+		// Extract ship data from get_status
+		if ship, ok := data["ship"].(map[string]interface{}); ok {
+			if name, ok := ship["name"].(string); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Ship: %s", truncateWithEllipsis(name, maxWidth-8))))
+			}
+			if fuel, ok := ship["fuel"].(float64); ok {
+				if maxFuel, ok := ship["max_fuel"].(float64); ok {
+					lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Fuel: %d/%d", int(fuel), int(maxFuel))))
+				}
+			}
+			if hull, ok := ship["hull"].(float64); ok {
+				if maxHull, ok := ship["max_hull"].(float64); ok {
+					lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Hull: %d/%d", int(hull), int(maxHull))))
+				}
+			}
+		}
+
+	case "get_ship":
+		if cargoUsed, ok := data["cargo_used"].(float64); ok {
+			if cargoMax, ok := data["cargo_max"].(float64); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Cargo: %d/%d", int(cargoUsed), int(cargoMax))))
+			}
+		}
+		if class, ok := data["class"].(map[string]interface{}); ok {
+			if className, ok := class["name"].(string); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Class: %s", truncateWithEllipsis(className, maxWidth-9))))
+			}
+		}
+
+	case "get_cargo":
+		if cargo, ok := data["cargo"].([]interface{}); ok {
+			cargoUsed := 0
+			for _, item := range cargo {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					name, _ := itemMap["name"].(string)
+					qty, _ := itemMap["quantity"].(float64)
+					if name != "" {
+						cargoUsed += int(qty)
+						lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  • %s x%d", truncateWithEllipsis(name, maxWidth-10), int(qty))))
+					}
+				}
+			}
+			if capacity, ok := data["capacity"].(float64); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Total: %d/%d", cargoUsed, int(capacity))))
+			}
+		}
+
+	case "get_system":
+		if pois, ok := data["pois"].([]interface{}); ok {
+			poiCount := len(pois)
+			lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  POIs: %d", poiCount)))
+		}
+
+	case "get_poi":
+		if poi, ok := data["poi"].(map[string]interface{}); ok {
+			if name, ok := poi["name"].(string); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  %s", truncateWithEllipsis(name, maxWidth-2))))
+			}
+			if poiType, ok := poi["type"].(string); ok {
+				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Type: %s", poiType)))
+			}
+		}
+	}
+
+	return lines
 }
