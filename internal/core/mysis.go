@@ -1447,7 +1447,9 @@ func (m *Mysis) setIdle(reason string) {
 	}
 
 	a.emitStateChange(oldState, MysisStateIdle)
-	a.releaseCurrentAccount()
+	// NOTE: Don't release account when going idle - idle is a "sleeping" state
+	// and the mysis should maintain its logged-in session for when it resumes.
+	// Account is only released on: Stop(), setError(), or explicit logout tool call.
 }
 
 // extractLatestToolLoop finds the most recent tool-call message (assistant role
@@ -2094,7 +2096,7 @@ func (m *Mysis) cacheSnapshotToolResult(toolName string, result *mcp.ToolResult,
 		return
 	}
 
-	// Try to extract username from result (for myses with pre-provided credentials)
+	// Get username from current account
 	username := m.CurrentAccountUsername()
 	if username == "" {
 		// Try to extract from result payload (nested under player.username)
@@ -2102,14 +2104,11 @@ func (m *Mysis) cacheSnapshotToolResult(toolName string, result *mcp.ToolResult,
 			if player, ok := payloadMap["player"].(map[string]interface{}); ok {
 				if extractedUsername, ok := player["username"].(string); ok && extractedUsername != "" {
 					username = extractedUsername
-					// Also extract session_id if present
-					sessionID := m.CurrentSessionID()
-					if sessionID == "" {
-						// Try to get from current tool arguments or system prompt
-						// For now, just set the username without session
-					}
-					// Set the account so future caching works
-					m.setCurrentAccount(username, "", sessionID)
+					// NOTE: Don't call setCurrentAccount here - we don't have the password
+					// and would overwrite it with empty string. The username extraction
+					// is only for caching purposes when account isn't set yet.
+					// If account needs to be set, it should be done during login/register
+					// tool execution where we have the full credentials.
 				}
 			}
 		}

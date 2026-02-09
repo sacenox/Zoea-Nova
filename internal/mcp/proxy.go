@@ -186,10 +186,16 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 					"password": poolAccount.Password,
 				}
 				result, err := p.callUpstreamWithRetry(ctx, "login", loginArgs)
-				if result != nil && !result.IsError && accountStore != nil {
-					// Mark account as in use
-					loginArgsJSON, _ := json.Marshal(loginArgs)
-					p.interceptAuthTools("login", loginArgsJSON, result, caller.MysisID)
+				if result != nil && !result.IsError {
+					// Inject password into result so mysis can extract it
+					// (login response doesn't include password, but register does)
+					p.injectPasswordIntoResult(result, poolAccount.Password)
+
+					if accountStore != nil {
+						// Mark account as in use
+						loginArgsJSON, _ := json.Marshal(loginArgs)
+						p.interceptAuthTools("login", loginArgsJSON, result, caller.MysisID)
+					}
 				}
 				return result, err
 			}
@@ -362,6 +368,31 @@ func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResu
 		// Clear game state cache on logout
 		if p.gameStateStore != nil {
 			_ = p.gameStateStore.DeleteGameStateSnapshotsForUsername(username)
+		}
+	}
+}
+
+// injectPasswordIntoResult adds the password field to a tool result payload.
+// This is used when substituting register with pool account login, since login
+// responses don't include the password but the mysis expects it (to match register behavior).
+func (p *Proxy) injectPasswordIntoResult(result *ToolResult, password string) {
+	if result == nil || len(result.Content) == 0 {
+		return
+	}
+
+	// Find the text content block with JSON payload
+	for i := range result.Content {
+		if result.Content[i].Type == "text" {
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(result.Content[i].Text), &data); err == nil {
+				// Add password to the payload
+				data["password"] = password
+				// Re-marshal and update the content
+				if updatedJSON, err := json.Marshal(data); err == nil {
+					result.Content[i].Text = string(updatedJSON)
+				}
+				return
+			}
 		}
 	}
 }
