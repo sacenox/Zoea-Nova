@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +54,37 @@ var (
 
 // Retry delays increased to respect SpaceMolt's "Try again in 5 seconds" rate limit
 var toolRetryDelays = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+
+// retryAfterRegex matches "Retry-After: N" in error messages
+var retryAfterRegex = regexp.MustCompile(`Retry-After:\s*(\d+)`)
+
+// parseRetryAfter extracts retry delay from error message containing "Retry-After: N seconds"
+func parseRetryAfter(err error) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+
+	errMsg := err.Error()
+
+	// Try to extract from "Retry-After: N" header format
+	if matches := retryAfterRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
+		if seconds, parseErr := strconv.Atoi(matches[1]); parseErr == nil {
+			return time.Duration(seconds) * time.Second, true
+		}
+	}
+
+	// Try to extract from "Try again in N seconds" message format
+	if strings.Contains(errMsg, "Try again in") {
+		re := regexp.MustCompile(`Try again in (\d+) seconds?`)
+		if matches := re.FindStringSubmatch(errMsg); len(matches) > 1 {
+			if seconds, parseErr := strconv.Atoi(matches[1]); parseErr == nil {
+				return time.Duration(seconds) * time.Second, true
+			}
+		}
+	}
+
+	return 0, false
+}
 
 // NewProxy creates a new MCP proxy.
 func NewProxy(upstream UpstreamClient) *Proxy {
@@ -192,7 +225,22 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 			// Check if error is a 429 rate limit
 			is429 := lastErr != nil && (strings.Contains(lastErr.Error(), "429") || strings.Contains(lastErr.Error(), "Rate limited"))
 
-			if is429 {
+			// Try to parse Retry-After from error message
+			if retryAfter, ok := parseRetryAfter(lastErr); ok {
+				// Use server-specified delay, but cap at 30 seconds for safety
+				if retryAfter > 30*time.Second {
+					retryAfter = 30 * time.Second
+				}
+				delay = retryAfter
+
+				log.Warn().
+					Str("tool", name).
+					Int("attempt", attempt).
+					Dur("delay", delay).
+					Dur("server_requested", retryAfter).
+					Err(lastErr).
+					Msg("MCP tool rate limited - respecting Retry-After")
+			} else if is429 {
 				log.Warn().
 					Str("tool", name).
 					Int("attempt", attempt).

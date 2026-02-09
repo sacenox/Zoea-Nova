@@ -82,6 +82,14 @@ func (c *Client) send(ctx context.Context, req *Request) (*Response, error) {
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
+
+		// For 429 rate limits, include Retry-After header if present
+		if httpResp.StatusCode == http.StatusTooManyRequests {
+			if retryAfter := httpResp.Header.Get("Retry-After"); retryAfter != "" {
+				return nil, fmt.Errorf("http error %d: %s (Retry-After: %s)", httpResp.StatusCode, string(respBody), retryAfter)
+			}
+		}
+
 		return nil, fmt.Errorf("http error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
