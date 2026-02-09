@@ -29,6 +29,20 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 ### Provider Reliability
 
+- [ ] **OpenCode provider crashes with undefined input_tokens** - Provider returns 500 errors when processing usage statistics
+  - **Error:** `Cannot read properties of undefined (reading 'input_tokens')`
+  - **Impact:** Causes myses to enter `errored` state and stop operating
+  - **Observed:** 2026-02-09 04:14:57 UTC - `nano` mysis (zen-nano provider) crashed after multiple successful turns
+  - **Pattern:** Error occurs during response processing, likely in usage statistics handling
+  - **Root cause:** OpenCode provider response format may not include expected `usage.input_tokens` field, or field is null/undefined
+  - **Location:** Provider response parsing in `internal/provider/opencode.go` or OpenCode SDK
+  - **Workaround:** None currently - requires provider restart to recover
+  - **Action needed:** 
+    - Add defensive null checks for usage statistics fields
+    - Make usage statistics optional/non-fatal
+    - Log raw response when usage parsing fails for debugging
+  - **Related:** May be connected to zen-nano vs zen-pickle provider differences
+
 - [ ] **OpenCode Zen endpoint workaround for gpt-5-nano** - Using `/chat/completions` instead of documented `/responses` endpoint
   - **Issue:** Official docs specify `gpt-5-nano` uses `/v1/responses` endpoint, but this returns HTTP 500 errors
   - **Error:** `request failed after 3 retries: chat completion status 500` with server error mentioning `input_tokens` (Anthropic field)
