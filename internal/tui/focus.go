@@ -167,7 +167,7 @@ func RenderFocusView(mysis MysisInfo, logs []LogEntry, width, height int, isLoad
 }
 
 // RenderFocusViewWithViewport renders the detailed mysis view using a scrollable viewport.
-func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64, gameStateSnapshots []*store.GameStateSnapshot, err error) string {
+func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, isLoading bool, spinnerView string, verbose bool, totalLines int, focusIndex, totalMyses int, currentTick int64, gameStateSnapshots []*store.GameStateSnapshot, sidebarScrollOffset int, err error) string {
 	var sections []string
 
 	// Header with mysis name - spans full width (2 lines)
@@ -199,7 +199,7 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	// Two-column layout: Game State Sidebar | Conversation Log
 	// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
 	sidebarWidth := (width * 33) / 100 // Total width including border
-	const columnGap = 2                // Gap between columns
+	const columnGap = 3                // Gap between columns (space + │ + space)
 	conversationWidth := width - sidebarWidth - columnGap
 
 	// Conversation title with scroll indicator
@@ -216,21 +216,69 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	// Game state title
 	gameStateTitle := renderSectionTitle("GAME STATE", sidebarWidth)
 
-	// Render game state sidebar content (returns lines without border)
-	gameStateSidebarContent := renderGameStateSidebar(gameStateSnapshots, currentTick, sidebarWidth)
+	// Render game state sidebar content directly (no border, just content + scrollbar)
+	// Content width: sidebarWidth - leftPadding(1) - scrollbar(1)
+	const sidebarScrollbarWidth = 1 // "█" or "│"
+	const sidebarLeftPadding = 1    // Space on left edge
+	sidebarContentWidth := sidebarWidth - sidebarLeftPadding - sidebarScrollbarWidth
+	gameStateSidebarAllContent := renderGameStateSidebar(gameStateSnapshots, currentTick, sidebarContentWidth)
+	sidebarTotalLines := len(gameStateSidebarAllContent)
 
-	// Render sidebar with border using lipgloss
-	// Width() sets CONTENT width, padding is added on top, border is INCLUDED in width
-	// So: content_width + padding(2) = sidebarWidth
-	// Therefore: content_width = sidebarWidth - 2
-	sidebarStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorBorder).
-		Width(sidebarWidth-2). // -2 for padding (border is included in width)
-		Padding(0, 1)          // 1 space padding on left/right
+	// Clip sidebar content to viewport height
+	sidebarHeight := vp.Height
+	gameStateSidebarContent := gameStateSidebarAllContent
 
-	sidebarRendered := sidebarStyle.Render(strings.Join(gameStateSidebarContent, "\n"))
-	gameStateSidebarLines := strings.Split(sidebarRendered, "\n")
+	// Clip to visible area if content exceeds height
+	if len(gameStateSidebarAllContent) > sidebarHeight {
+		startLine := sidebarScrollOffset
+		endLine := sidebarScrollOffset + sidebarHeight
+		if startLine < 0 {
+			startLine = 0
+		}
+		if endLine > len(gameStateSidebarAllContent) {
+			endLine = len(gameStateSidebarAllContent)
+			startLine = endLine - sidebarHeight
+			if startLine < 0 {
+				startLine = 0
+			}
+		}
+		gameStateSidebarContent = gameStateSidebarAllContent[startLine:endLine]
+	}
+
+	// Render sidebar scrollbar
+	sidebarScrollbarStr := renderScrollbar(sidebarHeight, sidebarTotalLines, sidebarScrollOffset)
+	sidebarScrollbarLines := strings.Split(sidebarScrollbarStr, "\n")
+
+	// Build sidebar lines with scrollbar (no border)
+	gameStateSidebarLines := make([]string, sidebarHeight)
+
+	for i := 0; i < sidebarHeight; i++ {
+		var contentLine string
+		if i < len(gameStateSidebarContent) {
+			contentLine = gameStateSidebarContent[i]
+		} else {
+			contentLine = ""
+		}
+
+		// Pad content to fill width
+		contentWidth := lipgloss.Width(contentLine)
+		padding := sidebarContentWidth - contentWidth
+		if padding < 0 {
+			padding = 0
+		}
+		contentLine = contentLine + strings.Repeat(" ", padding)
+
+		// Add scrollbar
+		var scrollLine string
+		if i < len(sidebarScrollbarLines) {
+			scrollLine = sidebarScrollbarLines[i]
+		} else {
+			scrollLine = " "
+		}
+
+		// Add left padding space
+		gameStateSidebarLines[i] = " " + contentLine + scrollLine
+	}
 
 	// Render scrollbar based on viewport state
 	scrollOffset := vp.YOffset
@@ -262,10 +310,14 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	conversationView := logStyle.Width(conversationWidth).Render(conversationContent)
 	conversationViewLines := strings.Split(conversationView, "\n")
 
-	// Combine titles
+	// Vertical border between columns
+	verticalBorderStyle := lipgloss.NewStyle().Foreground(colorBorder) // Purple-tinted border
+	verticalBorder := verticalBorderStyle.Render("│")
+
+	// Combine titles with vertical border
 	titleRow := lipgloss.JoinHorizontal(lipgloss.Top,
 		gameStateTitle,
-		strings.Repeat(" ", columnGap),
+		" "+verticalBorder+" ",
 		logTitle,
 	)
 	sections = append(sections, titleRow)
@@ -293,15 +345,21 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 
 		combinedLine := lipgloss.JoinHorizontal(lipgloss.Top,
 			leftLine,
-			strings.Repeat(" ", columnGap),
+			" "+verticalBorder+" ",
 			rightLine,
 		)
 		sections = append(sections, combinedLine)
 	}
 
-	// Bottom border for conversation log - matches top border style
+	// Bottom borders for both sidebar and conversation log with vertical border
+	sidebarBottomBorder := renderSectionTitle("", sidebarWidth)
 	logBottomBorder := renderSectionTitle("", conversationWidth)
-	sections = append(sections, strings.Repeat(" ", sidebarWidth)+strings.Repeat(" ", columnGap)+logBottomBorder)
+	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top,
+		sidebarBottomBorder,
+		" "+verticalBorder+" ",
+		logBottomBorder,
+	)
+	sections = append(sections, bottomRow)
 
 	// Footer with scroll hints, verbose toggle, and error status
 	verboseHint := ""

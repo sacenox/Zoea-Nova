@@ -265,7 +265,7 @@ func TestRenderFocusViewWithScrollbar(t *testing.T) {
 
 	width := 100
 	totalLines := 50
-	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", false, totalLines, 1, 1, 0, nil, nil)
+	output := RenderFocusViewWithViewport(mysis, vp, width, false, "⬡", false, totalLines, 1, 1, 0, nil, 0, nil)
 
 	// Should contain scrollbar characters
 	if !strings.Contains(output, "█") && !strings.Contains(output, "│") {

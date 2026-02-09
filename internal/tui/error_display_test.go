@@ -70,6 +70,7 @@ func TestErrorDisplayInFocusView(t *testing.T) {
 		1,
 		0,
 		nil, // gameStateSnapshots
+		0,   // sidebarScrollOffset
 		testErr,
 	)
 

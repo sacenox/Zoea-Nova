@@ -473,7 +473,7 @@ func TestFocusViewWithViewport(t *testing.T) {
 			vp.SetContent(strings.Join(contentLines, "\n"))
 			vp.GotoTop()
 
-			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", false, tt.totalLines, 1, 1, 0, nil, nil)
+			output := RenderFocusViewWithViewport(tt.mysis, vp, tt.width, false, "⠋", false, tt.totalLines, 1, 1, 0, nil, 0, nil)
 
 			t.Run("ANSI", func(t *testing.T) {
 				golden.RequireEqual(t, []byte(output))

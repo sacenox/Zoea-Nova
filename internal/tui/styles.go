@@ -215,6 +215,17 @@ func renderSectionTitle(title string, width int) string {
 
 // renderSectionTitleWithSuffix renders a section title with an optional suffix (like scroll indicator).
 func renderSectionTitleWithSuffix(title, suffix string, width int) string {
+	// If title is empty, render continuous dashes (for bottom borders)
+	if title == "" && suffix == "" {
+		// Format: ⬧────────────⬧ (continuous dashes, no gap)
+		dashCount := width - 4 // -4 for ⬧─ on each side
+		if dashCount < 0 {
+			dashCount = 0
+		}
+		line := "⬧─" + strings.Repeat("─", dashCount) + "─⬧"
+		return panelTitleStyle.Width(width).Render(line)
+	}
+
 	// Format: ⬧── TITLE ──⬧ [suffix] with dashes filling the remaining space
 	// Account for: 2 (⬧ markers) + 2 (─ adjacent to markers) + title + 2 (spaces around title) = 4
 	titleWithSpaces := " " + title + " "

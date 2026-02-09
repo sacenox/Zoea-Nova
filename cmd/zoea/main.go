@@ -148,7 +148,7 @@ func main() {
 		bus.Close()
 	})
 
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Handle shutdown in a goroutine
 	go func() {

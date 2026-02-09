@@ -78,6 +78,10 @@ type Model struct {
 	viewport           viewport.Model
 	viewportTotalLines int // total lines in viewport content
 
+	// Sidebar scroll state
+	sidebarScrollOffset int // current scroll position for game state sidebar
+	sidebarTotalLines   int // total lines in sidebar content
+
 	// Network activity indicator
 	netIndicator     NetIndicator
 	activeNetworkOps int // Count of active network operations (LLM/MCP calls)
@@ -202,11 +206,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			vpHeight = 5
 		}
 		// Viewport width must match the conversation log width calculation in focus.go
-		// Two-column layout: Sidebar (33% of width) + Gap (2) + Conversation
+		// Two-column layout: Sidebar (33% of width) + Gap (3: space+│+space) + Conversation
 		// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
 		// Viewport content width = conversation - 2 (for scrollbar)
 		sidebarWidth := (msg.Width * 33) / 100
-		const columnGap = 2
+		const columnGap = 3
 		conversationWidth := msg.Width - sidebarWidth - columnGap
 		m.viewport.Width = conversationWidth - 2 // -2 for scrollbar
 		m.viewport.Height = vpHeight
@@ -215,6 +219,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.view == ViewFocus {
 			m.updateViewportContent()
 		}
+
+	case tea.MouseMsg:
+		// Handle mouse wheel scrolling in focus view
+		if m.view == ViewFocus {
+			return m.handleMouseInFocus(msg)
+		}
+		// For other views, let viewport handle it
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
 
 	case tea.KeyMsg:
 		// Handle input mode first
@@ -356,7 +370,7 @@ func (m Model) View() string {
 			}
 		}
 
-		content = RenderFocusViewWithViewport(focusMysis, m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick, gameStateSnapshots, m.err)
+		content = RenderFocusViewWithViewport(focusMysis, m.viewport, m.width, isLoading, m.spinner.View(), m.verboseJSON, m.viewportTotalLines, focusIndex, totalMyses, m.currentTick, gameStateSnapshots, m.sidebarScrollOffset, m.err)
 	} else {
 		// Convert swarm messages for display (reversed so most recent is first)
 		swarmInfos := make([]SwarmMessageInfo, len(m.swarmMessages))
@@ -624,12 +638,60 @@ func (m Model) handleFocusKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Re-render viewport content with new verbose setting
 		m.updateViewportContent()
 		return m, nil
+
+	// Sidebar scrolling (Shift+Up/Down for sidebar, plain Up/Down for conversation)
+	case msg.String() == "shift+up":
+		if m.sidebarScrollOffset > 0 {
+			m.sidebarScrollOffset--
+		}
+		return m, nil
+
+	case msg.String() == "shift+down":
+		// sidebarTotalLines is calculated during render, but we need to constrain here
+		// For now, just increment - render will constrain to valid range
+		m.sidebarScrollOffset++
+		return m, nil
+
+	case msg.String() == "shift+home":
+		m.sidebarScrollOffset = 0
+		return m, nil
 	}
 
 	// Pass other keys to viewport for scrolling
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 
+	return m, cmd
+}
+
+func (m Model) handleMouseInFocus(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Only handle mouse wheel events
+	if msg.Type != tea.MouseWheelUp && msg.Type != tea.MouseWheelDown {
+		// Pass other mouse events to viewport
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
+	}
+
+	// Calculate sidebar width (same calculation as in rendering)
+	sidebarWidth := (m.width * 33) / 100
+
+	// Check if mouse is over sidebar (X coordinate < sidebarWidth)
+	if msg.X < sidebarWidth {
+		// Scroll sidebar
+		if msg.Type == tea.MouseWheelUp {
+			if m.sidebarScrollOffset > 0 {
+				m.sidebarScrollOffset--
+			}
+		} else if msg.Type == tea.MouseWheelDown {
+			m.sidebarScrollOffset++
+		}
+		return m, nil
+	}
+
+	// Mouse is over conversation - pass to viewport
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
 }
 
@@ -960,7 +1022,7 @@ func (m *Model) updateViewportContent() {
 	// Two-column layout: Game State Sidebar | Conversation Log
 	// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
 	sidebarWidth := (m.width * 33) / 100
-	const columnGap = 2
+	const columnGap = 3 // space + │ + space
 	conversationWidth := m.width - sidebarWidth - columnGap
 
 	// Content width for conversation log (accounting for scrollbar)

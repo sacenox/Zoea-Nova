@@ -15,6 +15,7 @@ TUI for orchestrating AI agents (Myses) that play SpaceMolt via MCP. Go 1.24.2, 
 **Tool call storage format** (`internal/constants/constants.go:71-81`): Assistant messages with tools stored as `[TOOL_CALLS]id:name:args|id:name:args`. Tool results stored as `id:content`. This allows parsing without JSON in hot path and survives SQLite TEXT storage.
 
 **Snapshot compaction** (`internal/core/mysis.go:1344-1403`): Only latest `get_*` tool result kept per tool. Prevents state-heavy tools (get_status, get_ship) from crowding context. Non-snapshot tools (login, travel, mine) always kept.
+  "small_model": "opencode/gpt-5-nano",
 
 **Orphaned tool call removal** (`internal/core/mysis.go:1429-1465`): Assistant messages with tool calls removed if no matching tool result exists. Prevents OpenAI API crashes from malformed sequences after context compression.
 

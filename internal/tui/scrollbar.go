@@ -24,7 +24,7 @@ func renderScrollbar(height int, totalLines int, scrollOffset int) string {
 	// If content fits in viewport, show empty track
 	if totalLines <= height {
 		track := make([]string, height)
-		trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dim gray
+		trackStyle := lipgloss.NewStyle().Foreground(colorBorder) // Purple-tinted border
 		for i := 0; i < height; i++ {
 			track[i] = trackStyle.Render(scrollbarTrack)
 		}
@@ -56,8 +56,8 @@ func renderScrollbar(height int, totalLines int, scrollOffset int) string {
 
 	// Build scrollbar lines
 	lines := make([]string, height)
-	trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dim gray
-	thumbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")) // Lighter gray
+	trackStyle := lipgloss.NewStyle().Foreground(colorBorder) // Purple-tinted border
+	thumbStyle := lipgloss.NewStyle().Foreground(colorBorder) // Purple-tinted border (same color)
 
 	for i := 0; i < height; i++ {
 		if i >= thumbPos && i < thumbPos+thumbSize {
