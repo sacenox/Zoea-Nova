@@ -40,7 +40,7 @@ func TestAccountReleaseOnError(t *testing.T) {
 	if err := s.MarkAccountInUse(acct.Username); err != nil {
 		t.Fatalf("Failed to mark account in use: %v", err)
 	}
-	mysis.setCurrentAccount(acct.Username)
+	mysis.setCurrentAccount(acct.Username, "", "")
 
 	// Verify account is acquired
 	if mysis.CurrentAccountUsername() != "test_account" {

@@ -101,6 +101,12 @@ func (s *Store) GetSystemMemory(mysisID string) (*Memory, error) {
 	return &m, nil
 }
 
+// DeleteSystemMemory deletes the system memory for a mysis
+func (s *Store) DeleteSystemMemory(mysisID string) error {
+	_, err := s.db.Exec(`DELETE FROM memories WHERE mysis_id = ? AND role = 'system'`, mysisID)
+	return err
+}
+
 // GetRecentMemories retrieves the most recent N memories for a mysis.
 func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error) {
 	rows, err := s.db.Query(`

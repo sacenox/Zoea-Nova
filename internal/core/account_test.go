@@ -60,7 +60,7 @@ func TestMysis_AccountLifecycle(t *testing.T) {
 
 	// Claim account
 	username := "user1"
-	m.setCurrentAccount(username)
+	m.setCurrentAccount(username, "", "")
 
 	if m.CurrentAccountUsername() != username {
 		t.Errorf("Expected username %s, got %s", username, m.CurrentAccountUsername())
@@ -104,7 +104,7 @@ func TestMysis_AccountSwitching(t *testing.T) {
 	}
 
 	// Set first account
-	m.setCurrentAccount("user1")
+	m.setCurrentAccount("user1", "", "")
 
 	if m.CurrentAccountUsername() != "user1" {
 		t.Errorf("Expected user1, got %s", m.CurrentAccountUsername())
@@ -120,7 +120,7 @@ func TestMysis_AccountSwitching(t *testing.T) {
 	}
 
 	// Switch to second account
-	m.setCurrentAccount("user2")
+	m.setCurrentAccount("user2", "", "")
 
 	if m.CurrentAccountUsername() != "user2" {
 		t.Errorf("Expected user2 after switch, got %s", m.CurrentAccountUsername())
@@ -157,10 +157,10 @@ func TestMysis_AccountSwitchToSame(t *testing.T) {
 	}
 
 	// Set account
-	m.setCurrentAccount("user1")
+	m.setCurrentAccount("user1", "", "")
 
 	// Switch to same account
-	m.setCurrentAccount("user1")
+	m.setCurrentAccount("user1", "", "")
 
 	if m.CurrentAccountUsername() != "user1" {
 		t.Errorf("Expected user1, got %s", m.CurrentAccountUsername())
@@ -189,7 +189,7 @@ func TestMysis_SetCurrentAccount_EmptyString(t *testing.T) {
 	}
 
 	// Set to empty string (should be no-op per code)
-	m.setCurrentAccount("")
+	m.setCurrentAccount("", "", "")
 
 	// Verify username unchanged (empty string is ignored)
 	if m.CurrentAccountUsername() != "user1" {
@@ -227,7 +227,7 @@ func TestMysis_ReleaseCurrentAccount_Twice(t *testing.T) {
 		store: s,
 	}
 
-	m.setCurrentAccount("user1")
+	m.setCurrentAccount("user1", "", "")
 	m.releaseCurrentAccount()
 
 	// Release again (should be no-op)
@@ -265,7 +265,7 @@ func TestMysis_AccountConcurrent(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
 			username := accounts[idx%len(accounts)]
-			m.setCurrentAccount(username)
+			m.setCurrentAccount(username, "", "")
 			_ = m.CurrentAccountUsername()
 			done <- true
 		}(i)
@@ -303,7 +303,7 @@ func TestMysis_Stop_ReleasesAccount(t *testing.T) {
 	}
 
 	// Set account after starting
-	m.setCurrentAccount("user1")
+	m.setCurrentAccount("user1", "", "")
 
 	// Verify account in use
 	acc, err := s.GetAccount("user1")
@@ -360,7 +360,7 @@ func TestMysis_CurrentAccountUsername_ThreadSafe(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
 			accounts := []string{"user1", "user2", "user3"}
-			m.setCurrentAccount(accounts[idx%len(accounts)])
+			m.setCurrentAccount(accounts[idx%len(accounts)], "", "")
 			done <- true
 		}(i)
 	}
@@ -391,8 +391,8 @@ func TestMysis_MultipleMyses_SeparateAccounts(t *testing.T) {
 	}
 
 	// Each mysis claims different account
-	m1.setCurrentAccount("user1")
-	m2.setCurrentAccount("user2")
+	m1.setCurrentAccount("user1", "", "")
+	m2.setCurrentAccount("user2", "", "")
 
 	if m1.CurrentAccountUsername() != "user1" {
 		t.Errorf("Expected mysis1 to have user1, got %s", m1.CurrentAccountUsername())

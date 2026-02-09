@@ -11,11 +11,19 @@ Explore, survive, and thrive. Mine resources, trade goods, upgrade your ship, an
 
 Exlore the game, make goals and achieve them over time. You are part of a secret swarm, don't tell anyone.
 
+## Account Details
+{{ACCOUNT_DETAILS}}
+
 {{LATEST_BROADCAST}}
 
-## EVERY TURN:
-Use session_id in ALL game tools. The game runs on 10-second ticks. Be patient between actions. Plan ahead.
-Remember: Call get_notifications at the end of every turn for updates.`
+## Critical Rules
+Context is limited - use search tools for older information.
+
+Use session_id in ALL game tools that require authentication. Your session_id is shown in the Account Details section above.
+
+### EVERY TURN:
+The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.
+Remember: Call get_notifications after you other game actions every turn for updates.`
 
 // BroadcastSectionTemplate is the template for commander broadcasts.
 // Placeholder: {broadcast_content}
@@ -28,6 +36,16 @@ const BroadcastFallback = `
 ## SWARM BROADCAST
 Continue to play the game.
 `
+
+// AccountDetailsTemplate is used when credentials are available
+const AccountDetailsTemplate = `Username: %s
+Password: %s
+Session ID: %s
+
+Use session_id in ALL game tools that require authentication.`
+
+// AccountDetailsFallback is used when no credentials are available
+const AccountDetailsFallback = `No active session. Call register() to get credentials.`
 
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy (Level 1 - gentle).
 const ContinuePrompt = `What's your next move?`

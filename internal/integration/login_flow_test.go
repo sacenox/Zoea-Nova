@@ -235,3 +235,11 @@ func (a *accountStoreAdapter) ReleaseAccount(username string) error {
 func (a *accountStoreAdapter) ReleaseAllAccounts() error {
 	return a.store.ReleaseAllAccounts()
 }
+
+func (a *accountStoreAdapter) ClaimAccount() (*mcp.Account, error) {
+	acc, err := a.store.ClaimAccount()
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
+}

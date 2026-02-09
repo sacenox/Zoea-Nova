@@ -41,6 +41,8 @@ type Mysis struct {
 	// For runtime tracking
 	lastError              error
 	currentAccountUsername string
+	currentPassword        string // Password for current account
+	currentSessionID       string // Active session_id from login/register
 	activityState          ActivityState
 	activityUntil          time.Time
 	lastServerTick         int64
@@ -192,6 +194,20 @@ func (m *Mysis) CurrentAccountUsername() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.currentAccountUsername
+}
+
+// CurrentPassword returns the password for the current account.
+func (m *Mysis) CurrentPassword() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.currentPassword
+}
+
+// CurrentSessionID returns the active session_id.
+func (m *Mysis) CurrentSessionID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.currentSessionID
 }
 
 // ActivityState returns the mysis current activity.
@@ -871,46 +887,139 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 	if err == nil && result != nil && !result.IsError {
 		switch tc.Name {
 		case "login", "register":
+			// Extract username from arguments
 			var args struct {
 				Username string `json:"username"`
+				Password string `json:"password"`
 			}
-			if err := json.Unmarshal(tc.Arguments, &args); err == nil {
-				a.setCurrentAccount(args.Username)
+			json.Unmarshal(tc.Arguments, &args)
+
+			// Extract session_id and password from tool result
+			sessionID := extractSessionID(result)
+			password := args.Password
+
+			// For register, password might be in result instead of args
+			if password == "" && tc.Name == "register" {
+				password = extractPassword(result)
+			}
+
+			// Extract actual username from result (may differ from args due to pool account substitution)
+			actualUsername := extractUsername(result)
+			if actualUsername == "" {
+				actualUsername = args.Username // Fallback to requested username
+			}
+
+			if actualUsername != "" && sessionID != "" {
+				a.setCurrentAccount(actualUsername, password, sessionID)
+
+				// Rebuild system prompt with new credentials
+				if err := a.rebuildSystemMemory(); err != nil {
+					log.Error().Err(err).Msg("failed to rebuild system memory after login")
+				}
 			}
 		case "logout":
 			a.releaseCurrentAccount()
+
+			// Rebuild system prompt to clear credentials
+			if err := a.rebuildSystemMemory(); err != nil {
+				log.Error().Err(err).Msg("failed to rebuild system memory after logout")
+			}
 		}
 	}
 
 	return result, err
 }
 
-func (m *Mysis) setCurrentAccount(username string) {
-	a := m
+func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Ignore empty username (no-op)
 	if username == "" {
 		return
 	}
 
-	a.mu.Lock()
-	previous := a.currentAccountUsername
-	a.currentAccountUsername = username
-	a.mu.Unlock()
-
-	if previous != "" && previous != username {
-		_ = a.store.ReleaseAccount(previous)
+	if m.currentAccountUsername != "" && m.currentAccountUsername != username {
+		if err := m.store.ReleaseAccount(m.currentAccountUsername); err != nil {
+			log.Error().Err(err).Str("username", m.currentAccountUsername).Msg("failed to release previous account")
+		}
 	}
+
+	m.currentAccountUsername = username
+	m.currentPassword = password
+	m.currentSessionID = sessionID
 }
 
 func (m *Mysis) releaseCurrentAccount() {
-	a := m
-	a.mu.Lock()
-	username := a.currentAccountUsername
-	a.currentAccountUsername = ""
-	a.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	if username != "" {
-		_ = a.store.ReleaseAccount(username)
+	if m.currentAccountUsername != "" {
+		if err := m.store.ReleaseAccount(m.currentAccountUsername); err != nil {
+			log.Error().Err(err).Str("username", m.currentAccountUsername).Msg("failed to release account")
+		}
+		m.currentAccountUsername = ""
+		m.currentPassword = ""
+		m.currentSessionID = ""
 	}
+}
+
+// extractSessionID extracts session_id from tool result content
+func extractSessionID(result *mcp.ToolResult) string {
+	if result == nil || result.IsError {
+		return ""
+	}
+
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			// Parse JSON from text block
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(block.Text), &data); err == nil {
+				if sessionID, ok := data["session_id"].(string); ok {
+					return sessionID
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// extractPassword extracts password from tool result (for register responses)
+func extractPassword(result *mcp.ToolResult) string {
+	if result == nil || result.IsError {
+		return ""
+	}
+
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(block.Text), &data); err == nil {
+				if password, ok := data["password"].(string); ok {
+					return password
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// extractUsername extracts username from tool result (actual username after pool substitution)
+func extractUsername(result *mcp.ToolResult) string {
+	if result == nil || result.IsError {
+		return ""
+	}
+
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(block.Text), &data); err == nil {
+				if username, ok := data["username"].(string); ok {
+					return username
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // formatToolCallsForStorage formats tool calls for storage in memory.
@@ -1568,27 +1677,60 @@ func (m *Mysis) buildSystemPrompt() string {
 	// Get most recent commander broadcast (sender_id is empty for commander broadcasts)
 	broadcasts, err := a.store.GetRecentBroadcasts(10) // Get more to filter for commander broadcasts
 	if err != nil {
-		return strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
-	}
+		base = strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
+	} else {
+		// Find the most recent commander broadcast (empty sender_id)
+		var commanderBroadcast *store.BroadcastMessage
+		for _, b := range broadcasts {
+			if b.SenderID == "" {
+				commanderBroadcast = b
+				break
+			}
+		}
 
-	// Find the most recent commander broadcast (empty sender_id)
-	var commanderBroadcast *store.BroadcastMessage
-	for _, b := range broadcasts {
-		if b.SenderID == "" {
-			commanderBroadcast = b
-			break
+		if commanderBroadcast == nil {
+			// No commander broadcasts yet - show fallback
+			base = strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
+		} else {
+			// Format broadcast section (only content, no sender name)
+			broadcastSection := fmt.Sprintf(constants.BroadcastSectionTemplate, commanderBroadcast.Content)
+			base = strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
 		}
 	}
 
-	if commanderBroadcast == nil {
-		// No commander broadcasts yet - show fallback
-		return strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
+	prompt := base
+
+	// Replace {{ACCOUNT_DETAILS}} with current credentials
+	accountDetails := constants.AccountDetailsFallback
+	username := m.CurrentAccountUsername()
+	password := m.CurrentPassword()
+	sessionID := m.CurrentSessionID()
+
+	if username != "" && sessionID != "" {
+		accountDetails = fmt.Sprintf(constants.AccountDetailsTemplate, username, password, sessionID)
 	}
 
-	// Format broadcast section (only content, no sender name)
-	broadcastSection := fmt.Sprintf(constants.BroadcastSectionTemplate, commanderBroadcast.Content)
+	prompt = strings.Replace(prompt, "{{ACCOUNT_DETAILS}}", accountDetails, 1)
 
-	return strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
+	return prompt
+}
+
+// rebuildSystemMemory rebuilds the system memory with current state
+func (m *Mysis) rebuildSystemMemory() error {
+	// Build new system prompt with current credentials and broadcasts
+	newPrompt := m.buildSystemPrompt()
+
+	// Delete old system memory
+	if err := m.store.DeleteSystemMemory(m.id); err != nil {
+		return fmt.Errorf("delete old system memory: %w", err)
+	}
+
+	// Store new system memory
+	if err := m.store.AddMemory(m.id, store.MemoryRoleSystem, store.MemorySourceSystem, newPrompt, "", ""); err != nil {
+		return fmt.Errorf("add new system memory: %w", err)
+	}
+
+	return nil
 }
 
 func (m *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) {
