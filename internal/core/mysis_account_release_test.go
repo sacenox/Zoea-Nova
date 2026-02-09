@@ -28,7 +28,7 @@ func TestAccountReleaseOnError(t *testing.T) {
 	}
 
 	// Create mysis
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, s, bus, "")
 
 	// Start mysis
 	if err := mysis.Start(); err != nil {

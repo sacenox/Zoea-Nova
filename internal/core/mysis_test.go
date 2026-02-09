@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/constants"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -47,7 +46,7 @@ func TestMysisLifecycle(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "Hello from mysis!")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Initial state
 	if mysis.State() != MysisStateIdle {
@@ -97,7 +96,7 @@ func TestMysisConcurrentStopDuringTurn(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "ok").SetDelay(50 * time.Millisecond)
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
@@ -130,7 +129,7 @@ func TestMysisSendMessage(t *testing.T) {
 
 	stored, _ := s.CreateMysis("msg-mysis", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "I received your message!")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Can send to idle mysis (will be stored and processed when started)
 	if err := mysis.SendMessage("Hello", store.MemorySourceDirect); err != nil {
@@ -218,7 +217,7 @@ func TestMysisReceivesBroadcastWithSender(t *testing.T) {
 
 	receiverStored, _ := s.CreateMysis("receiver", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	receiver := NewMysis(receiverStored.ID, receiverStored.Name, receiverStored.CreatedAt, mock, s, bus)
+	receiver := NewMysis(receiverStored.ID, receiverStored.Name, receiverStored.CreatedAt, mock, s, bus, "")
 
 	if err := receiver.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
@@ -259,7 +258,7 @@ func TestMysisSetErrorState(t *testing.T) {
 
 	stored, _ := s.CreateMysis("error-state-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	events := bus.Subscribe()
 
@@ -300,7 +299,7 @@ func TestMysisProviderName(t *testing.T) {
 
 	stored, _ := s.CreateMysis("provider-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("test-provider", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	if mysis.ProviderName() != "test-provider" {
 		t.Errorf("expected provider name=test-provider, got %s", mysis.ProviderName())
@@ -319,7 +318,7 @@ func TestMysisStateEvents(t *testing.T) {
 
 	stored, _ := s.CreateMysis("event-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	events := bus.Subscribe()
 
@@ -442,7 +441,7 @@ func TestSnapshotCompaction(t *testing.T) {
 
 	stored, _ := s.CreateMysis("compaction-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Add system prompt
 	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -495,7 +494,7 @@ func TestGetContextMemories_CurrentTurnBoundary(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Commander ID for testing
 	commanderID := "commander-mysis-id"
@@ -631,7 +630,7 @@ func TestExtractLatestToolLoopHelper(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	tests := []struct {
 		name          string
@@ -967,7 +966,7 @@ func TestMysisStopDoesNotOverrideWithError(t *testing.T) {
 	stored, _ := s.CreateMysis("stop-test", "mock", "test-model", 0.7)
 
 	mock := provider.NewMock("mock", "test response")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis
 	if err := m.Start(); err != nil {
@@ -1012,7 +1011,7 @@ func TestStopDuringInitialMessage(t *testing.T) {
 	// Use a mock provider with NO delay - we want to test the race
 	// between Start() spawning SendMessage and Stop() being called
 	mock := provider.NewMock("mock", "response")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis (spawns initial SendMessage goroutine)
 	if err := m.Start(); err != nil {
@@ -1068,7 +1067,7 @@ func TestStopDuringInitialMessageWithSlowProvider(t *testing.T) {
 
 	// Use a provider with delay to simulate the mysis being mid-turn when Stop is called
 	mock := provider.NewMock("mock", "response").SetDelay(50 * time.Millisecond)
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis
 	if err := m.Start(); err != nil {
@@ -1148,7 +1147,7 @@ func TestStopAtVariousTimings(t *testing.T) {
 
 			// Use a mock with a delay to simulate real LLM processing
 			mock := provider.NewMock("mock", "test response").SetDelay(25 * time.Millisecond)
-			mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+			mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 			// Start mysis
 			if err := mysis.Start(); err != nil {
@@ -1193,7 +1192,7 @@ func TestEncouragementLimit(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Add system prompt only (no user messages)
 	err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -1237,7 +1236,7 @@ func TestEncouragementReset(t *testing.T) {
 		}
 
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Set encouragementCount to 2 (simulate 2 synthetic messages)
 		mysis.mu.Lock()
@@ -1274,7 +1273,7 @@ func TestEncouragementReset(t *testing.T) {
 		}
 
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Set encouragementCount to 2
 		mysis.mu.Lock()
@@ -1303,7 +1302,7 @@ func TestEncouragementReset(t *testing.T) {
 		}
 
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Add system prompt
 		err = s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -1356,7 +1355,7 @@ func TestMysisWithBroadcastsKeepsRunning(t *testing.T) {
 
 	// Use mock provider with no delay for fast test
 	mock := provider.NewMock("mock", "I will continue exploring")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Step 1-2: Send broadcast "Explore the universe!" via QueueBroadcast
 	// This will be stored as a user message with source=broadcast
@@ -1464,7 +1463,7 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	t.Run("nil_mcp_proxy", func(t *testing.T) {
 		stored, _ := s.CreateMysis("nil-proxy-test", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Call executeToolCall with nil proxy
 		tc := provider.ToolCall{
@@ -1493,14 +1492,13 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	t.Run("tool_call_timeout", func(t *testing.T) {
 		stored, _ := s.CreateMysis("timeout-test", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Create a context with very short timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 		defer cancel()
 		time.Sleep(10 * time.Millisecond) // Ensure timeout fires
 
-		proxy := mcp.NewProxy(nil)
 		tc := provider.ToolCall{
 			ID:        "call_1",
 			Name:      "get_status",
@@ -1525,9 +1523,8 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	t.Run("invalid_tool_arguments", func(t *testing.T) {
 		stored, _ := s.CreateMysis("invalid-args-test", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
-		proxy := mcp.NewProxy(nil)
 		// Register a tool that validates arguments
 		proxy.RegisterTool(
 			mcp.Tool{
@@ -1579,9 +1576,8 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	t.Run("mcp_call_tool_error", func(t *testing.T) {
 		stored, _ := s.CreateMysis("mcp-error-test", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
-		proxy := mcp.NewProxy(nil)
 		// Register a tool that returns an error
 		proxy.RegisterTool(
 			mcp.Tool{
@@ -1618,9 +1614,8 @@ func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	t.Run("tool_result_parsing_with_empty_content", func(t *testing.T) {
 		stored, _ := s.CreateMysis("parse-test", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
-		proxy := mcp.NewProxy(nil)
 		// Register a tool that returns empty content
 		proxy.RegisterTool(
 			mcp.Tool{
@@ -1674,7 +1669,7 @@ func setupTestMysis(t *testing.T) (*Mysis, func()) {
 	}
 
 	mock := provider.NewMock("mock", "test response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	return mysis, cleanup
 }
@@ -1692,7 +1687,7 @@ func setupTestMysisWithErrorProvider(t *testing.T) (*Mysis, func()) {
 
 	// Create a mock provider that returns errors
 	mock := provider.NewMock("mock", "").WithChatError(errors.New("provider error"))
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	return mysis, cleanup
 }
@@ -1790,7 +1785,7 @@ func TestQueueBroadcast_IdleState(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "Hello!")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Mysis starts in idle state
 	if mysis.State() != MysisStateIdle {
@@ -1824,7 +1819,7 @@ func TestQueueBroadcast_StoppedState(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "Hello!")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start then stop
 	if err := mysis.Start(); err != nil {
@@ -2003,7 +1998,7 @@ func TestGetContextMemories_NoUserPrompt(t *testing.T) {
 
 	stored, _ := s.CreateMysis("no-prompt-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Add only system and assistant messages (no user prompt)
 	err := s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -2040,7 +2035,7 @@ func TestGetContextMemories_OnlyHistoricalTurns(t *testing.T) {
 
 	stored, _ := s.CreateMysis("historical-test", "mock", "test-model", 0.7)
 	mock := provider.NewMock("mock", "response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Add system prompt
 	err := s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
@@ -2098,7 +2093,7 @@ func TestMysisName(t *testing.T) {
 		t.Fatalf("CreateMysis() error: %v", err)
 	}
 
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	if got := mysis.Name(); got != expectedName {
 		t.Errorf("Name() = %q, want %q", got, expectedName)
@@ -2119,7 +2114,7 @@ func TestMysisCreatedAt(t *testing.T) {
 	}
 	afterCreate := time.Now().Add(time.Second)
 
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	got := mysis.CreatedAt()
 	if got.Before(beforeCreate) || got.After(afterCreate) {
@@ -2135,7 +2130,7 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 
 		stored, _ := s.CreateMysis("no-broadcasts", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Build system prompt with no broadcasts
 		prompt := mysis.buildSystemPrompt()
@@ -2159,7 +2154,7 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 
 		stored, _ := s.CreateMysis("receiver-mysis", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Add a commander broadcast (empty sender_id)
 		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Attack coordinates: X=100, Y=200", "", "")
@@ -2188,7 +2183,7 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 		receiver, _ := s.CreateMysis("receiver-mysis-2", "mock", "test-model", 0.7)
 
 		mock := provider.NewMock("mock", "response")
-		receiverMysis := NewMysis(receiver.ID, receiver.Name, receiver.CreatedAt, mock, s, bus)
+		receiverMysis := NewMysis(receiver.ID, receiver.Name, receiver.CreatedAt, mock, s, bus, "")
 
 		// Add a commander broadcast first
 		s.AddMemory(receiver.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander orders", "", "")
@@ -2239,7 +2234,7 @@ func TestIdleRecoveryOnBroadcast(t *testing.T) {
 
 	// Use mock provider with no delay for fast test
 	mock := provider.NewMock("mock", "Working on mining iron ore")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Step 2: Simulate idle state (mysis has already gone idle after 3 encouragements)
 	// Set encouragementCount to 3 and transition to idle state
@@ -2441,7 +2436,7 @@ func TestBroadcastSlidingWindowBug(t *testing.T) {
 
 	// Create mysis instance
 	mock := provider.NewMock("mock", "Continuing mission...")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Call getContextMemories - this should find the broadcast even though
 	// it's outside the 20-message sliding window
@@ -2546,7 +2541,7 @@ func TestNewMysisInheritsGlobalBroadcast(t *testing.T) {
 
 	// Step 3: Create mysis instance and call getContextMemories
 	mock := provider.NewMock("mock", "Continuing mission...")
-	mysisInstance := NewMysis(mysis2.ID, mysis2.Name, mysis2.CreatedAt, mock, s, bus)
+	mysisInstance := NewMysis(mysis2.ID, mysis2.Name, mysis2.CreatedAt, mock, s, bus, "")
 
 	memories, _, err := mysisInstance.getContextMemories()
 	if err != nil {

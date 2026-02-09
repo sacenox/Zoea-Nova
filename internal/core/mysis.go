@@ -22,14 +22,16 @@ import (
 type Mysis struct {
 	mu sync.RWMutex
 
-	id        string
-	name      string
-	createdAt time.Time
-	provider  provider.Provider
-	store     *store.Store
-	bus       *EventBus
-	mcp       *mcp.Proxy
-	commander *Commander // Reference to parent commander for WaitGroup
+	id          string
+	name        string
+	createdAt   time.Time
+	provider    provider.Provider
+	store       *store.Store
+	bus         *EventBus
+	mcpEndpoint string      // MCP upstream endpoint for creating own client
+	mcpClient   *mcp.Client // Per-mysis MCP client for session isolation
+	mcpProxy    *mcp.Proxy  // Per-mysis MCP proxy wrapping the client
+	commander   *Commander  // Reference to parent commander for WaitGroup
 
 	state  MysisState
 	ctx    context.Context
@@ -62,7 +64,7 @@ type contextStats struct {
 }
 
 // NewMysis creates a new mysis from stored data.
-func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus, cmd ...*Commander) *Mysis {
+func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *store.Store, bus *EventBus, mcpEndpoint string, cmd ...*Commander) *Mysis {
 	var commander *Commander
 	if len(cmd) > 0 {
 		commander = cmd[0]
@@ -74,6 +76,7 @@ func NewMysis(id, name string, createdAt time.Time, p provider.Provider, s *stor
 		provider:      p,
 		store:         s,
 		bus:           bus,
+		mcpEndpoint:   mcpEndpoint,
 		commander:     commander,
 		state:         MysisStateIdle,
 		activityState: ActivityStateIdle,
@@ -108,14 +111,6 @@ func (m *Mysis) computeMessageStats(messages []provider.Message) contextStats {
 	}
 
 	return stats
-}
-
-// SetMCP sets the MCP proxy for tool calling.
-func (m *Mysis) SetMCP(proxy *mcp.Proxy) {
-	a := m
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.mcp = proxy
 }
 
 // ID returns the mysis unique identifier.
@@ -305,7 +300,167 @@ func (m *Mysis) Start() error {
 	// Initial encouragement message (if needed) is added by getContextMemories() in run() loop
 	go a.run(ctx)
 
+	// Initialize MCP client in background (non-blocking)
+	go a.initializeMCP(ctx)
+
 	return nil
+}
+
+// initializeMCP creates and initializes a per-mysis MCP client for session isolation.
+// This runs in a goroutine to avoid blocking Start().
+func (m *Mysis) initializeMCP(ctx context.Context) {
+	a := m
+
+	// Skip if no MCP endpoint configured
+	if a.mcpEndpoint == "" {
+		log.Debug().Str("mysis", a.name).Msg("No MCP endpoint configured, skipping MCP initialization")
+		return
+	}
+
+	// Create MCP client
+	client := mcp.NewClient(a.mcpEndpoint)
+	proxy := mcp.NewProxy(client)
+
+	// Set account store and game state store
+	proxy.SetAccountStore(&accountStoreAdapter{a.store})
+	proxy.SetGameStateStore(a.store)
+
+	// Register orchestrator tools if commander is available
+	if a.commander != nil {
+		mcp.RegisterOrchestratorTools(proxy, &commanderAdapter{a.commander})
+	}
+
+	// Initialize with timeout
+	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := proxy.Initialize(initCtx); err != nil {
+		log.Error().
+			Err(err).
+			Str("mysis", a.name).
+			Str("endpoint", a.mcpEndpoint).
+			Msg("Failed to initialize MCP client - tools will be unavailable")
+		return
+	}
+
+	// List tools to verify connection
+	tools, err := proxy.ListTools(initCtx)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("mysis", a.name).
+			Msg("Failed to list MCP tools")
+	} else {
+		log.Info().
+			Str("mysis", a.name).
+			Int("tool_count", len(tools)).
+			Msg("MCP client initialized successfully")
+	}
+
+	// Store client and proxy
+	a.mu.Lock()
+	a.mcpClient = client
+	a.mcpProxy = proxy
+	a.mu.Unlock()
+}
+
+// commanderAdapter adapts Commander to the mcp.Orchestrator interface.
+type commanderAdapter struct {
+	commander *Commander
+}
+
+func (a *commanderAdapter) MysisCount() int {
+	return a.commander.MysisCount()
+}
+
+func (a *commanderAdapter) MaxMyses() int {
+	return a.commander.MaxMyses()
+}
+
+func (a *commanderAdapter) GetStateCounts() map[string]int {
+	return a.commander.GetStateCounts()
+}
+
+func (a *commanderAdapter) SendMessageAsync(mysisID, message string) error {
+	return a.commander.SendMessageAsync(mysisID, message)
+}
+
+func (a *commanderAdapter) BroadcastAsync(message string) error {
+	return a.commander.BroadcastAsync(message)
+}
+
+func (a *commanderAdapter) BroadcastFrom(senderID, message string) error {
+	return a.commander.BroadcastFrom(senderID, message)
+}
+
+func (a *commanderAdapter) SearchMessages(mysisID, query string, limit int) ([]mcp.SearchResult, error) {
+	memories, err := a.commander.Store().SearchMemories(mysisID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]mcp.SearchResult, len(memories))
+	for i, m := range memories {
+		results[i] = mcp.SearchResult{
+			Role:      string(m.Role),
+			Source:    string(m.Source),
+			Content:   m.Content,
+			CreatedAt: m.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+	return results, nil
+}
+
+func (a *commanderAdapter) SearchReasoning(mysisID, query string, limit int) ([]mcp.ReasoningResult, error) {
+	memories, err := a.commander.Store().SearchReasoning(mysisID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]mcp.ReasoningResult, len(memories))
+	for i, m := range memories {
+		results[i] = mcp.ReasoningResult{
+			Role:      string(m.Role),
+			Source:    string(m.Source),
+			Content:   m.Content,
+			Reasoning: m.Reasoning,
+			CreatedAt: m.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+	}
+	return results, nil
+}
+
+// accountStoreAdapter adapts store.Store to mcp.AccountStore interface.
+type accountStoreAdapter struct {
+	store *store.Store
+}
+
+func (a *accountStoreAdapter) CreateAccount(username, password string) (*mcp.Account, error) {
+	acc, err := a.store.CreateAccount(username, password)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
+}
+
+func (a *accountStoreAdapter) MarkAccountInUse(username string) error {
+	return a.store.MarkAccountInUse(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAccount(username string) error {
+	return a.store.ReleaseAccount(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAllAccounts() error {
+	return a.store.ReleaseAllAccounts()
+}
+
+func (a *accountStoreAdapter) ClaimAccount() (*mcp.Account, error) {
+	acc, err := a.store.ClaimAccount()
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
 // Stop halts the mysis processing loop.
@@ -371,6 +526,19 @@ func (m *Mysis) Stop() error {
 		}
 	}
 
+	// Close MCP client
+	a.mu.Lock()
+	mcpClient := a.mcpClient
+	a.mcpClient = nil
+	a.mcpProxy = nil
+	a.mu.Unlock()
+
+	if mcpClient != nil {
+		if err := mcpClient.Close(); err != nil {
+			log.Warn().Err(err).Str("mysis", a.name).Msg("Failed to close MCP client")
+		}
+	}
+
 	return nil
 }
 
@@ -384,7 +552,7 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 	a.mu.RLock()
 	state := a.state
 	p := a.provider
-	mcpProxy := a.mcp
+	mcpProxy := a.mcpProxy
 	a.mu.RUnlock()
 
 	if err := validateCanAcceptMessage(state); err != nil {

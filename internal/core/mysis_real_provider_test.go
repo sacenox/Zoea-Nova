@@ -38,7 +38,7 @@ func TestStopWithRealOllamaProvider(t *testing.T) {
 
 	// Use smallest/fastest model available (qwen3:4b)
 	ollamaProvider := provider.NewOllama("http://localhost:11434", "qwen3:4b")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, ollamaProvider, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, ollamaProvider, s, bus, "")
 
 	// Start the mysis (spawns initial SendMessage with REAL HTTP call)
 	if err := m.Start(); err != nil {
@@ -96,7 +96,7 @@ func TestStopDuringRealLLMCall(t *testing.T) {
 	}
 
 	ollamaProvider := provider.NewOllama("http://localhost:11434", "qwen3:4b")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, ollamaProvider, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, ollamaProvider, s, bus, "")
 
 	if err := m.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)

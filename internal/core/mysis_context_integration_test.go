@@ -22,7 +22,7 @@ func TestMysisContextCancellationIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateMysis error: %v", err)
 		}
-		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Start mysis (will add system prompt automatically)
 		// Note: Myses don't have autonomous loops - they only respond to messages
@@ -94,7 +94,7 @@ func TestMysisContextCancellationIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateMysis error: %v", err)
 		}
-		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+		m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 		// Start mysis
 		// Note: Myses don't have autonomous loops - they only respond to messages

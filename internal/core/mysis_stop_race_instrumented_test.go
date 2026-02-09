@@ -163,7 +163,7 @@ func TestStopRaceInstrumented(t *testing.T) {
 			}
 
 			mock := provider.NewMock("mock", "Hello!")
-			m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+			m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 			// Start mysis
 			if err := m.Start(); err != nil {
@@ -293,7 +293,7 @@ func TestStopRaceInstrumentedSingle(t *testing.T) {
 	}
 
 	mock := provider.NewMock("mock", "Hello!")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start mysis
 	if err := m.Start(); err != nil {

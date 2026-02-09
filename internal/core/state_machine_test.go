@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -40,9 +39,8 @@ func setupStateMachineTest(t *testing.T) (*Commander, func()) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
-	proxy := mcp.NewProxy(nil)
-	cmd.SetMCP(proxy)
+	cmd := NewCommander(s, reg, bus, cfg, "")
+	cmd// SetMCP removed - each mysis creates own client
 
 	cleanup := func() {
 		cmd.StopAll()

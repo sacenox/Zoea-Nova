@@ -96,8 +96,18 @@ func main() {
 	registry := initProviders(cfg, creds)
 	log.Debug().Int("providers", len(registry.List())).Msg("Providers initialized")
 
-	// Initialize commander
-	commander := core.NewCommander(s, registry, bus, cfg)
+	// Determine MCP endpoint for myses
+	var mcpEndpoint string
+	if *offline {
+		log.Info().Msg("Running in offline mode - myses will use stub MCP client")
+		// Empty endpoint signals offline mode
+	} else if cfg.MCP.Upstream != "" {
+		mcpEndpoint = cfg.MCP.Upstream
+		log.Info().Str("endpoint", mcpEndpoint).Msg("MCP endpoint configured - each mysis will create its own client")
+	}
+
+	// Initialize commander with MCP endpoint
+	commander := core.NewCommander(s, registry, bus, cfg, mcpEndpoint)
 
 	// Load existing myses from database
 	if err := commander.LoadMyses(); err != nil {
@@ -106,50 +116,12 @@ func main() {
 	log.Debug().Int("myses", commander.MysisCount()).Msg("Myses loaded")
 
 	// Auto-start all existing myses on launch
+	// Each mysis will create its own MCP client during Start()
 	for _, a := range commander.ListMyses() {
 		if err := a.Start(); err != nil {
 			log.Warn().Err(err).Str("mysis", a.Name()).Msg("Failed to start mysis")
 		}
 	}
-
-	// Initialize MCP proxy
-	var upstreamClient mcp.UpstreamClient
-	if *offline {
-		log.Info().Msg("Running in offline mode using stub MCP client")
-		upstreamClient = mcp.NewStubClient()
-	} else if cfg.MCP.Upstream != "" {
-		upstreamClient = mcp.NewClient(cfg.MCP.Upstream)
-	}
-
-	mcpProxy := mcp.NewProxy(upstreamClient)
-	mcpProxy.SetAccountStore(&accountStoreAdapter{s})
-	mcpProxy.SetGameStateStore(s)
-	mcp.RegisterOrchestratorTools(mcpProxy, &commanderAdapter{commander})
-
-	// Initialize upstream MCP connection if configured
-	if mcpProxy.HasUpstream() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := mcpProxy.Initialize(ctx); err != nil {
-			log.Error().Err(err).Str("upstream", cfg.MCP.Upstream).Msg("Failed to initialize MCP upstream - game tools will be unavailable")
-		} else {
-			// List available tools to verify connection
-			tools, err := mcpProxy.ListTools(ctx)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to list MCP tools")
-			} else {
-				log.Info().Int("total_tools", len(tools)).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP tools available")
-				for _, t := range tools {
-					log.Debug().Str("tool", t.Name).Str("description", t.Description).Msg("Available tool")
-				}
-			}
-		}
-		cancel()
-	}
-
-	// Connect MCP proxy to commander so myses can use tools
-	commander.SetMCP(mcpProxy)
-
-	log.Debug().Bool("upstream", mcpProxy.HasUpstream()).Int("local_tools", mcpProxy.LocalToolCount()).Msg("MCP proxy initialized")
 
 	// Log goroutine count at startup for leak detection
 	log.Info().Int("goroutines", runtime.NumGoroutine()).Msg("Application started")

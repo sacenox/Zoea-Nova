@@ -295,7 +295,7 @@ func TestMysis_Stop_ReleasesAccount(t *testing.T) {
 
 	// Use mock provider
 	mock := provider.NewMock("mock", "test response")
-	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	m := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis so it enters Running state
 	if err := m.Start(); err != nil {

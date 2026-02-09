@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -36,7 +35,7 @@ func setupTickTest(t *testing.T) (*Commander, *store.Store, *EventBus, func()) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	cleanup := func() {
 		cmd.StopAll()
@@ -125,7 +124,7 @@ func TestTickExtractionFromToolResults(t *testing.T) {
 			_, testStore, testBus, cleanup := setupTickTest(t)
 			defer cleanup()
 
-			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus)
+			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus, "")
 
 			// Get initial tick
 			mysis.mu.RLock()

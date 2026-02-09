@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -34,11 +33,9 @@ func setupCommanderAsyncTest(t *testing.T) (*Commander, *store.Store, *EventBus,
 		},
 	}
 
-	c := NewCommander(s, reg, bus, cfg)
+	c := NewCommander(s, reg, bus, cfg, "")
 
-	// Set a dummy MCP proxy to avoid "no tools" error events
-	proxy := mcp.NewProxy(nil)
-	c.SetMCP(proxy)
+	// Note: Each mysis creates its own MCP client during Start()
 
 	cleanup := func() {
 		bus.Close()

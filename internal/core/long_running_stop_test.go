@@ -50,7 +50,7 @@ func TestLongRunningStopScenario(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	// Create two myses: "long" and "sleepy"
 	longMock := provider.NewMock("mock-long", "response from long")
@@ -59,8 +59,8 @@ func TestLongRunningStopScenario(t *testing.T) {
 	storedLong, _ := s.CreateMysis("long", "mock", "test-model", 0.7)
 	storedSleepy, _ := s.CreateMysis("sleepy", "mock", "test-model", 0.7)
 
-	long := NewMysis(storedLong.ID, storedLong.Name, storedLong.CreatedAt, longMock, s, bus, cmd)
-	sleepy := NewMysis(storedSleepy.ID, storedSleepy.Name, storedSleepy.CreatedAt, sleepyMock, s, bus, cmd)
+	long := NewMysis(storedLong.ID, storedLong.Name, storedLong.CreatedAt, longMock, s, bus, "", cmd)
+	sleepy := NewMysis(storedSleepy.ID, storedSleepy.Name, storedSleepy.CreatedAt, sleepyMock, s, bus, "", cmd)
 
 	// Add them to commander
 	cmd.mu.Lock()
@@ -164,14 +164,14 @@ func TestMultipleMysesStoppingSimultaneously(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	// Create 5 myses
 	myses := make([]*Mysis, 5)
 	for i := 0; i < 5; i++ {
 		mock := provider.NewMock(fmt.Sprintf("mock-%d", i), "response")
 		stored, _ := s.CreateMysis(fmt.Sprintf("mysis-%d", i), "mock", "test-model", 0.7)
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, cmd)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "", cmd)
 		myses[i] = mysis
 
 		cmd.mu.Lock()
@@ -246,7 +246,7 @@ func TestStopDuringActiveLLMCalls(t *testing.T) {
 
 	// Mock with delay to simulate active LLM call
 	mock := provider.NewMock("mock", "response").SetDelay(200 * time.Millisecond)
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
@@ -306,7 +306,7 @@ func TestStopWithQueuedMessages(t *testing.T) {
 
 	// Mock with delay to create queue pressure
 	mock := provider.NewMock("mock", "response").SetDelay(100 * time.Millisecond)
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	if err := mysis.Start(); err != nil {
 		t.Fatalf("Start() error: %v", err)
@@ -376,13 +376,13 @@ func TestCleanExitAfterStop(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	// Create and start multiple myses
 	for i := 0; i < 3; i++ {
 		mock := provider.NewMock(fmt.Sprintf("mock-%d", i), "response")
 		stored, _ := s.CreateMysis(fmt.Sprintf("exit-test-%d", i), "mock", "test-model", 0.7)
-		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, cmd)
+		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "", cmd)
 
 		cmd.mu.Lock()
 		cmd.myses[stored.ID] = mysis
@@ -439,13 +439,13 @@ func TestStopAllWithMixedStates(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	// Create myses in different states
 	// 1. Running
 	runningStored, _ := s.CreateMysis("running", "mock", "test-model", 0.7)
 	runningMock := provider.NewMock("mock-running", "response")
-	running := NewMysis(runningStored.ID, runningStored.Name, runningStored.CreatedAt, runningMock, s, bus, cmd)
+	running := NewMysis(runningStored.ID, runningStored.Name, runningStored.CreatedAt, runningMock, s, bus, "", cmd)
 	cmd.mu.Lock()
 	cmd.myses[runningStored.ID] = running
 	cmd.mu.Unlock()
@@ -454,7 +454,7 @@ func TestStopAllWithMixedStates(t *testing.T) {
 	// 2. Idle (never started)
 	idleStored, _ := s.CreateMysis("idle", "mock", "test-model", 0.7)
 	idleMock := provider.NewMock("mock-idle", "response")
-	idle := NewMysis(idleStored.ID, idleStored.Name, idleStored.CreatedAt, idleMock, s, bus, cmd)
+	idle := NewMysis(idleStored.ID, idleStored.Name, idleStored.CreatedAt, idleMock, s, bus, "", cmd)
 	cmd.mu.Lock()
 	cmd.myses[idleStored.ID] = idle
 	cmd.mu.Unlock()
@@ -462,7 +462,7 @@ func TestStopAllWithMixedStates(t *testing.T) {
 	// 3. Already stopped
 	stoppedStored, _ := s.CreateMysis("stopped", "mock", "test-model", 0.7)
 	stoppedMock := provider.NewMock("mock-stopped", "response")
-	stopped := NewMysis(stoppedStored.ID, stoppedStored.Name, stoppedStored.CreatedAt, stoppedMock, s, bus, cmd)
+	stopped := NewMysis(stoppedStored.ID, stoppedStored.Name, stoppedStored.CreatedAt, stoppedMock, s, bus, "", cmd)
 	cmd.mu.Lock()
 	cmd.myses[stoppedStored.ID] = stopped
 	cmd.mu.Unlock()
@@ -532,13 +532,13 @@ func TestStopAllStressTest(t *testing.T) {
 				},
 			}
 
-			cmd := NewCommander(s, reg, bus, cfg)
+			cmd := NewCommander(s, reg, bus, cfg, "")
 
 			// Create multiple myses
 			for i := 0; i < 3; i++ {
 				mock := provider.NewMock(fmt.Sprintf("mock-%d", i), "response")
 				stored, _ := s.CreateMysis(fmt.Sprintf("stress-%d", i), "mock", "test-model", 0.7)
-				mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, cmd)
+				mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "", cmd)
 
 				cmd.mu.Lock()
 				cmd.myses[stored.ID] = mysis

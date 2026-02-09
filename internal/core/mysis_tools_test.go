@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -39,7 +38,7 @@ func TestMysisToolExecution(t *testing.T) {
 	// Mock provider that returns a tool call first, then a text response
 	mock := provider.NewMock("mock", "Initial response")
 
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Setup MCP proxy with a local tool
 	proxy := mcp.NewProxy(nil)
@@ -52,7 +51,8 @@ func TestMysisToolExecution(t *testing.T) {
 			Content: []mcp.ContentBlock{{Type: "text", Text: "tool result content"}},
 		}, nil
 	})
-	mysis.SetMCP(proxy)
+	// Manually set MCP proxy for test (normally done in initializeMCP)
+	mysis.mcpProxy = proxy
 
 	events := bus.Subscribe()
 	mysis.Start()
@@ -146,16 +146,16 @@ func TestMysisToolError(t *testing.T) {
 
 	mock := provider.NewMock("mock", "Initial response")
 
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	proxy := mcp.NewProxy(nil)
 	proxy.RegisterTool(mcp.Tool{
-
 		Name: "error_tool",
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
 		return nil, errors.New("tool failed")
 	})
-	mysis.SetMCP(proxy)
+	// Manually set MCP proxy for test (normally done in initializeMCP)
+	mysis.mcpProxy = proxy
 
 	events := bus.Subscribe()
 	mysis.Start()
@@ -220,7 +220,7 @@ func TestMysisToolTimeoutSetsErrored(t *testing.T) {
 	stored, _ := s.CreateMysis("tool-timeout-mysis", "mock", "test-model", 0.7)
 
 	mock := provider.NewMock("mock", "Initial response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	proxy := mcp.NewProxy(nil)
 	proxy.RegisterTool(mcp.Tool{
@@ -228,7 +228,8 @@ func TestMysisToolTimeoutSetsErrored(t *testing.T) {
 	}, func(ctx context.Context, args json.RawMessage) (*mcp.ToolResult, error) {
 		return nil, context.DeadlineExceeded
 	})
-	mysis.SetMCP(proxy)
+	// Manually set MCP proxy for test (normally done in initializeMCP)
+	mysis.mcpProxy = proxy
 
 	// Start and wait for initial turn
 	events := bus.Subscribe()
@@ -292,13 +293,14 @@ func TestMysisToolRetryExhaustionSetsErrored(t *testing.T) {
 	stored, _ := s.CreateMysis("tool-retry-mysis", "mock", "test-model", 0.7)
 
 	mock := provider.NewMock("mock", "Initial response")
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	upstream := &failingUpstream{
 		tools:   []mcp.Tool{{Name: "upstream_tool"}},
 		callErr: errors.New("upstream unavailable"),
 	}
-	mysis.SetMCP(mcp.NewProxy(upstream))
+	// Manually set MCP proxy for test (normally done in initializeMCP)
+	mysis.mcpProxy = mcp.NewProxy(upstream)
 
 	// Start and wait for initial turn
 	events := bus.Subscribe()

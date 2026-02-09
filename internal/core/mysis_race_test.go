@@ -32,7 +32,7 @@ func TestStopWithMultipleInFlightMessages(t *testing.T) {
 
 	// Mock provider with 2s delay and respects context cancellation
 	mock := provider.NewMock("mock", "ok").SetDelay(2 * time.Second)
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis (will add system prompt automatically)
 	// Note: Myses don't have autonomous loops - they only respond to messages
@@ -124,7 +124,7 @@ func TestStopWithMultipleInFlightMessages_Shorter(t *testing.T) {
 
 	// Shorter delay for faster test iteration
 	mock := provider.NewMock("mock", "ok").SetDelay(200 * time.Millisecond)
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus, "")
 
 	// Start the mysis
 	// Note: Myses don't have autonomous loops - they only respond to messages

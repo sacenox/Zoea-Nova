@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -38,11 +37,10 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	// Set a dummy MCP proxy to avoid "no tools" error events
-	proxy := mcp.NewProxy(nil)
-	cmd.SetMCP(proxy)
+	// Note: Each mysis creates its own MCP client during Start()
 
 	cleanup := func() {
 		cmd.StopAll()
@@ -520,7 +518,7 @@ func TestCommanderLoadMyses(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	if err := cmd.LoadMyses(); err != nil {
 		t.Fatalf("LoadMyses() error: %v", err)
@@ -573,9 +571,8 @@ func TestBroadcastDoesNotBlockOnBusyMysis(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
-	proxy := mcp.NewProxy(nil)
-	cmd.SetMCP(proxy)
+	cmd := NewCommander(s, reg, bus, cfg, "")
+	// Note: Each mysis creates its own MCP client during Start()
 
 	// Create two myses: one slow, one fast
 	slowMysis, err := cmd.CreateMysis("slow-mysis", "slow")

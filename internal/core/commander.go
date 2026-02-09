@@ -9,7 +9,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -19,36 +18,26 @@ type Commander struct {
 	mu sync.RWMutex
 	wg sync.WaitGroup // Tracks running mysis goroutines
 
-	myses    map[string]*Mysis
-	store    *store.Store
-	registry *provider.Registry
-	bus      *EventBus
-	config   *config.Config
-	mcp      *mcp.Proxy
-	maxMyses int
+	myses       map[string]*Mysis
+	store       *store.Store
+	registry    *provider.Registry
+	bus         *EventBus
+	config      *config.Config
+	mcpEndpoint string // MCP upstream endpoint for myses to create their own clients
+	maxMyses    int
 }
 
 // NewCommander creates a new commander.
-func NewCommander(s *store.Store, reg *provider.Registry, bus *EventBus, cfg *config.Config) *Commander {
+func NewCommander(s *store.Store, reg *provider.Registry, bus *EventBus, cfg *config.Config, mcpEndpoint string) *Commander {
 	return &Commander{
-		myses:    make(map[string]*Mysis),
-		store:    s,
-		registry: reg,
-		bus:      bus,
-		config:   cfg,
-		maxMyses: cfg.Swarm.MaxMyses,
+		myses:       make(map[string]*Mysis),
+		store:       s,
+		registry:    reg,
+		bus:         bus,
+		config:      cfg,
+		mcpEndpoint: mcpEndpoint,
+		maxMyses:    cfg.Swarm.MaxMyses,
 	}
-}
-
-// SetMCP sets the MCP proxy for all myses.
-func (c *Commander) SetMCP(proxy *mcp.Proxy) {
-	c.mu.Lock()
-	c.mcp = proxy
-	// Set MCP on all existing myses
-	for _, mysis := range c.myses {
-		mysis.SetMCP(proxy)
-	}
-	c.mu.Unlock()
 }
 
 // LoadMyses loads existing myses from the store.
@@ -69,10 +58,7 @@ func (c *Commander) LoadMyses() error {
 			continue
 		}
 
-		mysis := NewMysis(sm.ID, sm.Name, sm.CreatedAt, p, c.store, c.bus, c)
-		if c.mcp != nil {
-			mysis.SetMCP(c.mcp)
-		}
+		mysis := NewMysis(sm.ID, sm.Name, sm.CreatedAt, p, c.store, c.bus, c.mcpEndpoint, c)
 		c.myses[sm.ID] = mysis
 	}
 
@@ -107,10 +93,7 @@ func (c *Commander) CreateMysis(name, providerName string) (*Mysis, error) {
 	}
 
 	// Create runtime mysis
-	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus, c)
-	if c.mcp != nil {
-		mysis.SetMCP(c.mcp)
-	}
+	mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, p, c.store, c.bus, c.mcpEndpoint, c)
 	c.myses[stored.ID] = mysis
 
 	// Emit event

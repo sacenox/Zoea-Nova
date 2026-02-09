@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
-	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -37,7 +36,7 @@ func setupNotificationTest(t *testing.T) (*Commander, *store.Store, *EventBus, f
 		},
 	}
 
-	cmd := NewCommander(s, reg, bus, cfg)
+	cmd := NewCommander(s, reg, bus, cfg, "")
 
 	cleanup := func() {
 		cmd.StopAll()
@@ -151,7 +150,7 @@ func TestGetNotificationsTickExtraction(t *testing.T) {
 			_, testStore, testBus, cleanup := setupNotificationTest(t)
 			defer cleanup()
 
-			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus)
+			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus, "")
 
 			// Get initial tick
 			mysis.mu.RLock()
@@ -444,7 +443,7 @@ func TestNotificationResponseFormats(t *testing.T) {
 			_, testStore, testBus, cleanup := setupNotificationTest(t)
 			defer cleanup()
 
-			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus)
+			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus, "")
 
 			// Create tool result from JSON
 			toolResult := &mcp.ToolResult{
@@ -533,7 +532,7 @@ func TestNotificationPollingFrequency(t *testing.T) {
 	_, testStore, testBus, cleanup := setupNotificationTest(t)
 	defer cleanup()
 
-	mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus)
+	mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus, "")
 
 	// Simulate first notification poll
 	notif1 := &mcp.ToolResult{
@@ -731,7 +730,7 @@ func TestTickExtractionFromRealServerData(t *testing.T) {
 			_, testStore, testBus, cleanup := setupNotificationTest(t)
 			defer cleanup()
 
-			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus)
+			mysis := NewMysis("test-id", "test-mysis", time.Now(), nil, testStore, testBus, "")
 
 			// Create tool result
 			toolResult := &mcp.ToolResult{
