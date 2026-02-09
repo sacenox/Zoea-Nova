@@ -40,7 +40,7 @@ func setupStateMachineTest(t *testing.T) (*Commander, func()) {
 	}
 
 	cmd := NewCommander(s, reg, bus, cfg, "")
-	cmd// SetMCP removed - each mysis creates own client
+	// SetMCP removed - each mysis creates own client
 
 	cleanup := func() {
 		cmd.StopAll()

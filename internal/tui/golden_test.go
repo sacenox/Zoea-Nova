@@ -488,54 +488,6 @@ func TestFocusViewWithViewport(t *testing.T) {
 }
 
 // TestJSONTree tests JSON tree rendering
-func TestJSONTree(t *testing.T) {
-	defer setupGoldenTest(t)()
-
-	tests := []struct {
-		name     string
-		jsonStr  string
-		verbose  bool
-		maxWidth int
-	}{
-		{
-			name:     "simple_object",
-			jsonStr:  `{"name": "mysis-1", "state": "running", "id": "abc123"}`,
-			verbose:  false,
-			maxWidth: 80,
-		},
-		{
-			name:     "array_truncation",
-			jsonStr:  `[{"id":0},{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6},{"id":7},{"id":8},{"id":9}]`,
-			verbose:  false,
-			maxWidth: 80,
-		},
-		{
-			name:     "verbose_mode",
-			jsonStr:  `[{"id":0},{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6},{"id":7},{"id":8},{"id":9}]`,
-			verbose:  true,
-			maxWidth: 80,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output, err := renderJSONTree(tt.jsonStr, tt.verbose, tt.maxWidth)
-			if err != nil {
-				t.Fatalf("Failed to render JSON tree: %v", err)
-			}
-
-			t.Run("ANSI", func(t *testing.T) {
-				golden.RequireEqual(t, []byte(output))
-			})
-
-			t.Run("Stripped", func(t *testing.T) {
-				stripped := stripANSIForGolden(output)
-				golden.RequireEqual(t, []byte(stripped))
-			})
-		})
-	}
-}
-
 // TestScrollbar tests scrollbar rendering
 func TestScrollbar(t *testing.T) {
 	defer setupGoldenTest(t)()

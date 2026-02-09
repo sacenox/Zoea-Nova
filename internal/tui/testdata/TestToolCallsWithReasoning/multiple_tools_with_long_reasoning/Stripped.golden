@@ -1,12 +1,11 @@
                                                                                                                   
  T42000 ⬡ [14:30] AI: ─────────────────────────────────────────────────────────────────────────────────────────── 
- ⚡ Calling tools:                                                                                                
-   • get_system()                                                                                                 
-   • get_poi()                                                                                                    
-   • mine()                                                                                                       
+     ⚙ get_system()                                                                                               
+     ⚙ get_poi()                                                                                                  
+     ⚙ mine()                                                                                                     
                                                                                                                   
  T42000 ⬡ [14:30] REASONING: ──────────────────────────────────────────────────────────────────────────────────── 
- First, I'll check the current system to understand what resources are available.      
- [1 more]                                                                             
- I'll execute the mining operation to gather resources. This is a strategic            
- three-step approach that maximizes efficiency.                                        
+     First, I'll check the current system to understand what resources are available.      
+     [1 more]                                                                             
+     I'll execute the mining operation to gather resources. This is a strategic            
+     three-step approach that maximizes efficiency.                                        

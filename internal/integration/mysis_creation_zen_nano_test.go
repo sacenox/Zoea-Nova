@@ -76,7 +76,7 @@ func TestCreateMysisWithZenNano(t *testing.T) {
 
 	// Step 5: Create commander (EXACT production code)
 	bus := core.NewEventBus(100)
-	commander := core.NewCommander(s, registry, bus, cfg)
+	commander := core.NewCommander(s, registry, bus, cfg, "")
 
 	// Step 6: Attempt to create mysis with zen-nano (EXACT user action)
 	mysis, err := commander.CreateMysis("test-nano", "zen-nano")

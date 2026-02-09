@@ -51,7 +51,7 @@ func setupTestModel(t *testing.T) (Model, func()) {
 		},
 	}
 
-	commander := core.NewCommander(s, reg, bus, cfg)
+	commander := core.NewCommander(s, reg, bus, cfg, "")
 
 	model := New(commander, s, eventCh, false, cfg)
 	model.width = 80

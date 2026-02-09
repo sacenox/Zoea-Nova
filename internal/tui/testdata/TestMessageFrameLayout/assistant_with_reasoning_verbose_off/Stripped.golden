@@ -1,9 +1,9 @@
                                                                                                     
  T42337 ⬡ [14:30] AI: ───────────────────────────────────────────────────────────────────────────── 
- I'll check my cargo status first.                                                                  
+     I'll check my cargo status first.                                                              
                                                                                                     
  T42337 ⬡ [14:30] REASONING: ────────────────────────────────────────────────────────────────────── 
- The user asked me to check cargo. I need to verify what items I'm       
- [2 more]                                                               
- information. The tool requires no parameters and will return a list of  
- items in my cargo hold along with capacity information.                 
+     The user asked me to check cargo. I need to verify what items I'm       
+     [2 more]                                                               
+     information. The tool requires no parameters and will return a list of  
+     items in my cargo hold along with capacity information.                 

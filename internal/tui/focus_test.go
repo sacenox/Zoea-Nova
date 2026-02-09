@@ -201,14 +201,9 @@ func TestRenderLogEntryToolWithJSON(t *testing.T) {
 
 	output := strings.Join(lines, "\n")
 
-	// Should have tree structure
-	if !strings.Contains(output, "├─") && !strings.Contains(output, "└─") {
-		t.Error("Expected tree box characters in tool JSON output")
-	}
-
-	// Should contain field names
-	if !strings.Contains(output, "ship_id") || !strings.Contains(output, "cargo") {
-		t.Error("Expected JSON field names in tree output")
+	// Tool results now show "✓ Success" for non-error JSON
+	if !strings.Contains(output, "Success") {
+		t.Error("Expected 'Success' in tool result output")
 	}
 }
 
@@ -231,19 +226,14 @@ func TestRenderLogEntryToolWithPrefixedJSON(t *testing.T) {
 
 	output := strings.Join(lines, "\n")
 
-	// Should have tree structure (JSON should be detected despite prefix)
-	if !strings.Contains(output, "├─") && !strings.Contains(output, "└─") {
-		t.Error("Expected tree box characters in prefixed tool JSON output")
+	// Tool results now show "✓ Success" for non-error JSON
+	if !strings.Contains(output, "Success") {
+		t.Error("Expected 'Success' in tool result output")
 	}
 
-	// Should contain field names from JSON
-	if !strings.Contains(output, "max_myses") || !strings.Contains(output, "states") {
-		t.Error("Expected JSON field names in tree output")
-	}
-
-	// Should NOT contain the call ID prefix in the tree
+	// Should NOT contain the call ID prefix
 	if strings.Contains(output, "call_59orhh05:") {
-		t.Error("Tool call ID prefix should be stripped from JSON tree")
+		t.Error("Tool call ID prefix should be stripped")
 	}
 }
 func TestRenderFocusViewWithScrollbar(t *testing.T) {

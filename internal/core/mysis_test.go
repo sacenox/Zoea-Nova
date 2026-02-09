@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/constants"
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -1459,6 +1460,9 @@ func TestCanAcceptMessages(t *testing.T) {
 func TestExecuteToolCall_ErrorPaths(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
+
+	// Create a shared MCP proxy for tests that need it
+	proxy := mcp.NewProxy(nil)
 
 	t.Run("nil_mcp_proxy", func(t *testing.T) {
 		stored, _ := s.CreateMysis("nil-proxy-test", "mock", "test-model", 0.7)

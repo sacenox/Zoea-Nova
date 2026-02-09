@@ -303,9 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sendingMode = InputModeNone
 			m.input.Reset()
 		}
-		if m.view == ViewFocus && msg.mysisID == m.focusID {
-			m.loadMysisLogs()
-		}
+		// Don't refresh logs here - EventMysisMessage and EventMysisResponse handle that
 
 	case broadcastResult:
 		// Broadcast finished - clear all loading states
@@ -743,9 +741,8 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Note: m.sending NOT set here - SendMessageAsync returns immediately
 			// Network indicator shows activity, but input is ready for next message
 			cmd = m.sendMessageAsync(targetID, value)
-			if m.view == ViewFocus {
-				m.loadMysisLogs()
-			}
+			// Don't call loadMysisLogs() here - message storage now happens instantly
+			// and EventMysisMessage will trigger the refresh via handleEvent()
 
 		case InputModeNewMysis:
 			// Multi-stage flow: name → provider
@@ -1030,8 +1027,9 @@ func (m *Model) updateViewportContent() {
 	panelContentWidth := conversationWidth - 2 // -2 for scrollbar
 
 	var lines []string
-	// Render logs in reverse order (newest first) so bottom of scroll shows newest
-	for i := len(m.logs) - 1; i >= 0; i-- {
+	// Render logs in chronological order (oldest first, newest last)
+	// Bottom of viewport shows newest messages (normal chat behavior)
+	for i := 0; i < len(m.logs); i++ {
 		entryLines := renderLogEntryImpl(m.logs[i], panelContentWidth, m.verboseJSON, m.currentTick)
 		lines = append(lines, entryLines...)
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xonecas/zoea-nova/internal/config"
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )

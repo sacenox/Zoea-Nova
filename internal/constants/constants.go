@@ -24,7 +24,9 @@ Context is limited - use search tools for older information.
 Use session_id in ALL game tools that require authentication. Your session_id is shown in the Account Details section above.
 
 ### EVERY TURN:
-The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.`
+The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.
+
+Check get_notifications regularly for game events and important updates.`
 
 // BroadcastSectionTemplate is the template for commander broadcasts.
 // Placeholder: {broadcast_content}

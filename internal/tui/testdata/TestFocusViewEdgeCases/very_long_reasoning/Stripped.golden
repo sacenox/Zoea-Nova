@@ -6,13 +6,13 @@
 ⬧────────────────────────────────────────────────── CONVERSATION LOG ──────────────────────────────────────────────────⬧
                                                                                                                         
    T0 ⬡ [10:00] AI: ───────────────────────────────────────────────────────────────────────────────────────────────     
-   I will execute the plan.                                                                                             
+       I will execute the plan.                                                                                         
                                                                                                                         
    T0 ⬡ [10:00] REASONING: ────────────────────────────────────────────────────────────────────────────────────────     
-   This reasoning is extremely long and contains many detailed thoughts about the decision                              
-   [20 more]                                                                                                            
-   about the decision process. This reasoning is extremely long and contains many detailed                              
-   thoughts about the decision process.                                                                                 
+       This reasoning is extremely long and contains many detailed thoughts about the decision                          
+       [20 more]                                                                                                        
+       about the decision process. This reasoning is extremely long and contains many detailed                          
+       thoughts about the decision process.                                                                             
                                                                                                                         
                                                                                                                         
                                                                                                                         

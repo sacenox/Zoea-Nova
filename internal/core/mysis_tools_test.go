@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
@@ -330,7 +331,8 @@ func TestMysisToolRetryExhaustionSetsErrored(t *testing.T) {
 
 	go mysis.SendMessage("Trigger upstream retry", store.MemorySourceDirect)
 
-	deadline := time.Now().Add(4 * time.Second)
+	// Wait for retry exhaustion: 3 retries with delays 2s, 5s, 10s = 17s minimum
+	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		if mysis.State() == MysisStateErrored {
 			break

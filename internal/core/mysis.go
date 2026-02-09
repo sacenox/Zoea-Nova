@@ -547,13 +547,10 @@ func (m *Mysis) Stop() error {
 // The source parameter indicates whether this is a direct or broadcast message.
 func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, senderID string) error {
 	a := m
-	a.turnMu.Lock()
-	defer a.turnMu.Unlock()
 
+	// Check state BEFORE storing message to fail fast if mysis can't accept messages
 	a.mu.RLock()
 	state := a.state
-	p := a.provider
-	mcpProxy := a.mcpProxy
 	a.mu.RUnlock()
 
 	if err := validateCanAcceptMessage(state); err != nil {
@@ -566,7 +563,8 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		role = store.MemoryRoleSystem
 	}
 
-	// Store the message (skip empty internal trigger messages from run loop)
+	// Store the message BEFORE acquiring turnMu (skip empty internal trigger messages from run loop)
+	// This ensures instant storage and immediate UI feedback, while turn processing happens later
 	if content != "" {
 		if err := a.store.AddMemory(a.id, role, source, content, "", senderID); err != nil {
 			return fmt.Errorf("store message: %w", err)
@@ -577,7 +575,7 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 		a.encouragementCount = 0
 		a.mu.Unlock()
 
-		// Emit message event
+		// Emit message event - UI will refresh and show the message immediately
 		a.bus.Publish(Event{
 			Type:      EventMysisMessage,
 			MysisID:   a.id,
@@ -585,6 +583,24 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 			Message:   &MessageData{Role: string(role), Content: content},
 			Timestamp: time.Now(),
 		})
+	}
+
+	// Now acquire turnMu for LLM processing - this may wait if another turn is in progress
+	a.turnMu.Lock()
+	defer a.turnMu.Unlock()
+
+	// Re-read state after acquiring lock (may have changed while waiting)
+	a.mu.RLock()
+	state = a.state
+	p := a.provider
+	mcpProxy := a.mcpProxy
+	a.mu.RUnlock()
+
+	// Validate again after acquiring lock - state may have changed while waiting
+	if err := validateCanAcceptMessage(state); err != nil {
+		// Message is already stored, but we can't process it
+		// This is okay - the message will remain in history but won't trigger LLM response
+		return err
 	}
 
 	// If mysis is idle, auto-start it (direct messages should wake idle myses)

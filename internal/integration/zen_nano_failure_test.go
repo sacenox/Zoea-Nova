@@ -91,7 +91,7 @@ func TestZenNanoWithProductionConfig(t *testing.T) {
 	defer s.Close()
 
 	bus := core.NewEventBus(100)
-	commander := core.NewCommander(s, registry, bus, cfg)
+	commander := core.NewCommander(s, registry, bus, cfg, "")
 
 	// Step 8: Create mysis (what happens when user completes TUI flow)
 	mysis, err := commander.CreateMysis("test-zen", "zen-nano")

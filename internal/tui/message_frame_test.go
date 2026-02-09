@@ -328,7 +328,12 @@ func TestMessageFrameStructure(t *testing.T) {
 			// Line 2 should contain the content
 			if len(stripped) > 2 {
 				contentLine := stripped[2]
-				if !containsAny(contentLine, []string{"Test content"}) {
+				// Tool messages show "✓ Success" for non-error results
+				expectedContent := []string{"Test content"}
+				if tt.entry.Role == "tool" {
+					expectedContent = []string{"Success", "✓"}
+				}
+				if !containsAny(contentLine, expectedContent) {
 					t.Errorf("Line 2 should contain message content, got: %q", contentLine)
 				}
 			}

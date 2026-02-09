@@ -403,14 +403,24 @@ func TestMysis_MultipleMyses_SeparateAccounts(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	// Create actual mysis records in database
+	stored1, err := s.CreateMysis("mysis1", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis(mysis1) error: %v", err)
+	}
+	stored2, err := s.CreateMysis("mysis2", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis(mysis2) error: %v", err)
+	}
+
 	m1 := &Mysis{
-		id:    "mysis-1",
+		id:    stored1.ID,
 		name:  "mysis1",
 		store: s,
 	}
 
 	m2 := &Mysis{
-		id:    "mysis-2",
+		id:    stored2.ID,
 		name:  "mysis2",
 		store: s,
 	}

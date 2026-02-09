@@ -35,7 +35,7 @@ func setupIntegrationCommander(t *testing.T) (*core.Commander, *store.Store, fun
 		},
 	}
 
-	cmd := core.NewCommander(s, reg, bus, cfg)
+	cmd := core.NewCommander(s, reg, bus, cfg, "")
 
 	cleanup := func() {
 		bus.Close()
