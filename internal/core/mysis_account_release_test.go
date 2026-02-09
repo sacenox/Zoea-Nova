@@ -37,7 +37,7 @@ func TestAccountReleaseOnError(t *testing.T) {
 
 	// Simulate mysis acquiring an account (simulating login tool call)
 	// First mark account in use, then set current account
-	if err := s.MarkAccountInUse(acct.Username); err != nil {
+	if err := s.MarkAccountInUse(acct.Username, stored.ID); err != nil {
 		t.Fatalf("Failed to mark account in use: %v", err)
 	}
 	mysis.setCurrentAccount(acct.Username, "", "")
@@ -48,7 +48,7 @@ func TestAccountReleaseOnError(t *testing.T) {
 	}
 
 	// Verify account is locked in store (ClaimAccount should not return this account)
-	claimed, err := s.ClaimAccount()
+	claimed, err := s.ClaimAccount(stored.ID)
 	if err == nil && claimed.Username == acct.Username {
 		t.Fatalf("Expected account to be locked, but ClaimAccount returned it")
 	}
@@ -67,7 +67,7 @@ func TestAccountReleaseOnError(t *testing.T) {
 	}
 
 	// Verify account is unlocked in store (ClaimAccount should return it)
-	claimed2, err := s.ClaimAccount()
+	claimed2, err := s.ClaimAccount(stored.ID)
 	if err != nil || claimed2 == nil || claimed2.Username != acct.Username {
 		t.Errorf("BUG CONFIRMED: Account still locked in store, ClaimAccount failed: %v", err)
 	} else {

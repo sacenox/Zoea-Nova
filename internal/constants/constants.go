@@ -46,7 +46,7 @@ Session ID: %s
 Use session_id in ALL game tools that require authentication.`
 
 // AccountDetailsFallback is used when no credentials are available
-const AccountDetailsFallback = `No active session. Call register() to get credentials.`
+const AccountDetailsFallback = `No active account. Call register()`
 
 // GameStateSummaryFallback is shown when no game state is cached
 const GameStateSummaryFallback = ``

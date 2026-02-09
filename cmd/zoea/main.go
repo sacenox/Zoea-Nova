@@ -87,6 +87,13 @@ func main() {
 	defer s.Close()
 	log.Debug().Msg("Store initialized")
 
+	// Release all accounts on startup to clear stale in_use flags from crashes
+	if err := s.ReleaseAllAccounts(); err != nil {
+		log.Warn().Err(err).Msg("Failed to release accounts on startup")
+	} else {
+		log.Info().Msg("Released all accounts on startup")
+	}
+
 	// Initialize event bus
 	bus := core.NewEventBus(1000)
 	// Note: bus.Close() is called explicitly in onQuit callback and signal handler
@@ -234,16 +241,16 @@ type accountStoreAdapter struct {
 	store *store.Store
 }
 
-func (a *accountStoreAdapter) CreateAccount(username, password string) (*mcp.Account, error) {
-	acc, err := a.store.CreateAccount(username, password)
+func (a *accountStoreAdapter) CreateAccount(username, password string, mysisID ...string) (*mcp.Account, error) {
+	acc, err := a.store.CreateAccount(username, password, mysisID...)
 	if err != nil {
 		return nil, err
 	}
 	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
-func (a *accountStoreAdapter) MarkAccountInUse(username string) error {
-	return a.store.MarkAccountInUse(username)
+func (a *accountStoreAdapter) MarkAccountInUse(username, mysisID string) error {
+	return a.store.MarkAccountInUse(username, mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAccount(username string) error {
@@ -254,8 +261,8 @@ func (a *accountStoreAdapter) ReleaseAllAccounts() error {
 	return a.store.ReleaseAllAccounts()
 }
 
-func (a *accountStoreAdapter) ClaimAccount() (*mcp.Account, error) {
-	acc, err := a.store.ClaimAccount()
+func (a *accountStoreAdapter) ClaimAccount(mysisID string) (*mcp.Account, error) {
+	acc, err := a.store.ClaimAccount(mysisID)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/xonecas/zoea-nova/internal/constants"
+	"github.com/xonecas/zoea-nova/internal/gamestate"
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
@@ -417,10 +418,29 @@ func renderToolResultCompact(content string, contentWidth int, verbose bool) []s
 		jsonContent = jsonContent[idx+1:]
 	}
 
+	trimmed := strings.TrimSpace(jsonContent)
+
 	successStyle := lipgloss.NewStyle().Foreground(colorSuccess)
 	errorStyle := lipgloss.NewStyle().Foreground(colorError)
 
-	// Check if it's an error
+	// Check for plain-text error formats
+	if strings.HasPrefix(trimmed, "Error calling ") || strings.HasPrefix(trimmed, "Error: ") {
+		errorLine := errorStyle.Render("✗") + " " + errorStyle.Render(trimmed)
+		if verbose {
+			return wrapText(errorLine, contentWidth)
+		}
+		if lipgloss.Width(errorLine) > contentWidth {
+			maxErrWidth := contentWidth - 10
+			if maxErrWidth < 10 {
+				maxErrWidth = 10
+			}
+			errMsg := truncateWithEllipsis(trimmed, maxErrWidth)
+			errorLine = errorStyle.Render("✗") + " " + errorStyle.Render(errMsg)
+		}
+		return []string{errorLine}
+	}
+
+	// Check if it's an error (JSON)
 	if strings.Contains(jsonContent, "\"error\"") || strings.Contains(jsonContent, "\"isError\"") {
 		// Parse error message
 		var data map[string]interface{}
@@ -758,6 +778,7 @@ func renderGameStateSidebar(snapshots []*store.GameStateSnapshot, currentTick in
 	statusTools := []string{"get_status", "get_player"}
 	shipTools := []string{"get_ship", "get_cargo"}
 	locationTools := []string{"get_system", "get_location", "get_poi"}
+	mapTools := []string{"get_map", "get_galaxy"}
 
 	// Helper to render a snapshot group
 	renderGroup := func(toolNames []string) {
@@ -771,8 +792,17 @@ func renderGameStateSidebar(snapshots []*store.GameStateSnapshot, currentTick in
 					lines = append(lines, toolHeader+recencyText)
 
 					// Extract and show compact info
-					compactInfo := extractCompactInfoForTUI(snapshot.Content, toolName, width-4)
-					lines = append(lines, compactInfo...)
+					linesRaw := gamestate.SnapshotLines(snapshot.Content)
+					for _, line := range linesRaw {
+						if line == "" {
+							continue
+						}
+						lineText := "  " + line
+						wrapped := wrapText(lineText, width-2)
+						for _, wrappedLine := range wrapped {
+							lines = append(lines, dimmedStyle.Render(wrappedLine))
+						}
+					}
 					lines = append(lines, "") // Empty line between groups
 				}
 			}
@@ -782,98 +812,11 @@ func renderGameStateSidebar(snapshots []*store.GameStateSnapshot, currentTick in
 	renderGroup(statusTools)
 	renderGroup(shipTools)
 	renderGroup(locationTools)
+	renderGroup(mapTools)
 
 	// Remove trailing empty line if present
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
-	}
-
-	return lines
-}
-
-// extractCompactInfoForTUI extracts key info from snapshot for TUI display.
-func extractCompactInfoForTUI(content, toolName string, maxWidth int) []string {
-	var lines []string
-
-	// Parse JSON content
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(content), &data); err != nil {
-		return lines
-	}
-
-	switch toolName {
-	case "get_status", "get_player":
-		// Extract player data
-		if player, ok := data["player"].(map[string]interface{}); ok {
-			if credits, ok := player["credits"].(float64); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Credits: %d", int(credits))))
-			}
-			if location, ok := player["current_system"].(string); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  System: %s", truncateWithEllipsis(location, maxWidth-10))))
-			}
-		}
-		// Extract ship data from get_status
-		if ship, ok := data["ship"].(map[string]interface{}); ok {
-			if name, ok := ship["name"].(string); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Ship: %s", truncateWithEllipsis(name, maxWidth-8))))
-			}
-			if fuel, ok := ship["fuel"].(float64); ok {
-				if maxFuel, ok := ship["max_fuel"].(float64); ok {
-					lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Fuel: %d/%d", int(fuel), int(maxFuel))))
-				}
-			}
-			if hull, ok := ship["hull"].(float64); ok {
-				if maxHull, ok := ship["max_hull"].(float64); ok {
-					lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Hull: %d/%d", int(hull), int(maxHull))))
-				}
-			}
-		}
-
-	case "get_ship":
-		if cargoUsed, ok := data["cargo_used"].(float64); ok {
-			if cargoMax, ok := data["cargo_max"].(float64); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Cargo: %d/%d", int(cargoUsed), int(cargoMax))))
-			}
-		}
-		if class, ok := data["class"].(map[string]interface{}); ok {
-			if className, ok := class["name"].(string); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Class: %s", truncateWithEllipsis(className, maxWidth-9))))
-			}
-		}
-
-	case "get_cargo":
-		if cargo, ok := data["cargo"].([]interface{}); ok {
-			cargoUsed := 0
-			for _, item := range cargo {
-				if itemMap, ok := item.(map[string]interface{}); ok {
-					name, _ := itemMap["name"].(string)
-					qty, _ := itemMap["quantity"].(float64)
-					if name != "" {
-						cargoUsed += int(qty)
-						lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  • %s x%d", truncateWithEllipsis(name, maxWidth-10), int(qty))))
-					}
-				}
-			}
-			if capacity, ok := data["capacity"].(float64); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Total: %d/%d", cargoUsed, int(capacity))))
-			}
-		}
-
-	case "get_system":
-		if pois, ok := data["pois"].([]interface{}); ok {
-			poiCount := len(pois)
-			lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  POIs: %d", poiCount)))
-		}
-
-	case "get_poi":
-		if poi, ok := data["poi"].(map[string]interface{}); ok {
-			if name, ok := poi["name"].(string); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  %s", truncateWithEllipsis(name, maxWidth-2))))
-			}
-			if poiType, ok := poi["type"].(string); ok {
-				lines = append(lines, dimmedStyle.Render(fmt.Sprintf("  Type: %s", poiType)))
-			}
-		}
 	}
 
 	return lines

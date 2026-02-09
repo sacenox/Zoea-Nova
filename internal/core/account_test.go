@@ -42,13 +42,24 @@ func setupAccountTest(t *testing.T) (*store.Store, func()) {
 	return s, cleanup
 }
 
+func createTestMysis(t *testing.T, s *store.Store, name string) *store.Mysis {
+	t.Helper()
+	mysis, err := s.CreateMysis(name, "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+	return mysis
+}
+
 // TestMysis_AccountLifecycle tests the full account claim/release lifecycle.
 func TestMysis_AccountLifecycle(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -97,8 +108,10 @@ func TestMysis_AccountSwitching(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -150,8 +163,10 @@ func TestMysis_AccountSwitchToSame(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -181,8 +196,10 @@ func TestMysis_SetCurrentAccount_EmptyString(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:                     "test-mysis",
+		id:                     mysis.ID,
 		name:                   "test",
 		store:                  s,
 		currentAccountUsername: "user1",
@@ -202,8 +219,10 @@ func TestMysis_ReleaseCurrentAccount_NoAccount(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -221,8 +240,10 @@ func TestMysis_ReleaseCurrentAccount_Twice(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -252,8 +273,10 @@ func TestMysis_AccountConcurrent(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:    "test-mysis",
+		id:    mysis.ID,
 		name:  "test",
 		store: s,
 	}
@@ -339,8 +362,10 @@ func TestMysis_CurrentAccountUsername_ThreadSafe(t *testing.T) {
 	s, cleanup := setupAccountTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "test-mysis")
+
 	m := &Mysis{
-		id:                     "test-mysis",
+		id:                     mysis.ID,
 		name:                   "test",
 		store:                  s,
 		currentAccountUsername: "user1",

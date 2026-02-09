@@ -2,7 +2,6 @@
 description: Agent with data access for analysis.
 agent: general
 mode: subagent
-model: opencode/gemini-3-flash
 ---
 
 You have access to the production database and log files for Zoea Nova, as well as the underlying LLM provider logs:

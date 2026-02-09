@@ -32,8 +32,9 @@ Myses need game accounts to play SpaceMolt. We maintain a pool of accounts to co
 2. **Register passthrough:** When mysis calls `register()` and pool is empty, proxy lets it go to game server normally
 3. **Login passthrough:** Login calls always go to game server (no interception)
 4. **Account locking:** Successful login (real or substituted) marks account as in_use
-5. **Account release:** Logout releases account back to pool
-6. **Internal claiming:** Account claiming is handled internally by proxy shadowing `login`/`register` - no `zoea_claim_account` tool exists
+5. **Ownership tracking:** When marked in_use, accounts store `in_use_by = mysis.id`
+6. **Account release:** Logout releases account back to pool and clears `in_use_by`
+7. **Internal claiming:** Account claiming is handled internally by proxy shadowing `login`/`register` - no `zoea_claim_account` tool exists
 
 ---
 
@@ -59,6 +60,7 @@ Mysis: login() → Game: session_id → Proxy: mark_in_use → Mysis: PLAYING
 | Pool has 3 accounts, mysis calls register | Mysis gets session_id, pool has 2 available accounts |
 | Pool empty, mysis calls register | Mysis gets session_id, pool has 1 account (the new one) |
 | Mysis calls login with pool credentials | Mysis gets session_id, account marked in_use |
+| Mysis calls login | Account in_use_by set to mysis.id |
 | Mysis calls logout | Account released, pool gains 1 available account |
 | Mysis lists tools | Only game tools visible (no `zoea_claim_account` - tool removed) |
 

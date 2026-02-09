@@ -866,6 +866,12 @@ func (m *Model) refreshMysisList() {
 	for i, mysis := range myses {
 		info := MysisInfoFromCore(mysis)
 
+		if info.AccountUsername == "" {
+			if acc, err := m.store.GetAccountByMysisID(info.ID); err == nil && acc != nil {
+				info.AccountUsername = acc.Username
+			}
+		}
+
 		// Fetch recent memories for message row formatting (5-10 messages to check priority)
 		memories, err := m.store.GetRecentMemories(mysis.ID(), 10)
 		if err == nil && len(memories) > 0 {

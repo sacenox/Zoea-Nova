@@ -27,8 +27,8 @@ type CallerContext struct {
 type ToolHandlerWithContext func(ctx context.Context, caller CallerContext, arguments json.RawMessage) (*ToolResult, error)
 
 type AccountStore interface {
-	CreateAccount(username, password string) (*Account, error)
-	MarkAccountInUse(username string) error
+	CreateAccount(username, password string, mysisID ...string) (*Account, error)
+	MarkAccountInUse(username, mysisID string) error
 	ReleaseAccount(username string) error
 	ReleaseAllAccounts() error
 }
@@ -179,7 +179,7 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 	if p.upstream != nil {
 		// Intercept register - if we have available accounts, login with one instead
 		if name == "register" && accountStore != nil {
-			if poolAccount := p.tryClaimPoolAccount(); poolAccount != nil {
+			if poolAccount := p.tryClaimPoolAccount(caller.MysisID); poolAccount != nil {
 				// Login with pool account instead of registering
 				loginArgs := map[string]interface{}{
 					"username": poolAccount.Username,
@@ -189,7 +189,7 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 				if result != nil && !result.IsError && accountStore != nil {
 					// Mark account as in use
 					loginArgsJSON, _ := json.Marshal(loginArgs)
-					p.interceptAuthTools("login", loginArgsJSON, result)
+					p.interceptAuthTools("login", loginArgsJSON, result, caller.MysisID)
 				}
 				return result, err
 			}
@@ -206,7 +206,7 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 
 		if result != nil {
 			if !result.IsError && accountStore != nil {
-				p.interceptAuthTools(name, arguments, result)
+				p.interceptAuthTools(name, arguments, result, caller.MysisID)
 			}
 			if result.IsError {
 				// Rewrite error messages to guide myses toward correct behavior
@@ -303,18 +303,18 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 	return nil, fmt.Errorf("%w: %v", ErrToolRetryExhausted, lastErr)
 }
 
-func (p *Proxy) interceptAuthTools(toolName string, arguments json.RawMessage, result *ToolResult) {
+func (p *Proxy) interceptAuthTools(toolName string, arguments json.RawMessage, result *ToolResult, mysisID string) {
 	switch toolName {
 	case "register":
-		p.handleRegisterResponse(arguments, result)
+		p.handleRegisterResponse(arguments, result, mysisID)
 	case "login":
-		p.handleLoginResponse(arguments, result)
+		p.handleLoginResponse(arguments, result, mysisID)
 	case "logout":
 		p.handleLogoutResponse(arguments, result)
 	}
 }
 
-func (p *Proxy) handleRegisterResponse(arguments json.RawMessage, result *ToolResult) {
+func (p *Proxy) handleRegisterResponse(arguments json.RawMessage, result *ToolResult, mysisID string) {
 	var args struct {
 		Username string `json:"username"`
 	}
@@ -329,11 +329,11 @@ func (p *Proxy) handleRegisterResponse(arguments json.RawMessage, result *ToolRe
 
 	password, ok := findStringField(payload, "password", "token")
 	if args.Username != "" && ok && password != "" {
-		_, _ = p.accountStore.CreateAccount(args.Username, password)
+		_, _ = p.accountStore.CreateAccount(args.Username, password, mysisID)
 	}
 }
 
-func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResult) {
+func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResult, mysisID string) {
 	var args struct {
 		Username string `json:"username"`
 	}
@@ -342,7 +342,7 @@ func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResul
 	}
 
 	if args.Username != "" {
-		_ = p.accountStore.MarkAccountInUse(args.Username)
+		_ = p.accountStore.MarkAccountInUse(args.Username, mysisID)
 	}
 }
 
@@ -368,7 +368,7 @@ func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResu
 
 // tryClaimPoolAccount attempts to claim an available account from the pool.
 // Returns the account if one is available, nil otherwise.
-func (p *Proxy) tryClaimPoolAccount() *Account {
+func (p *Proxy) tryClaimPoolAccount(mysisID string) *Account {
 	p.mu.RLock()
 	accountStore := p.accountStore
 	p.mu.RUnlock()
@@ -379,11 +379,11 @@ func (p *Proxy) tryClaimPoolAccount() *Account {
 
 	// Try to claim an account from the pool
 	type accountClaimer interface {
-		ClaimAccount() (*Account, error)
+		ClaimAccount(mysisID string) (*Account, error)
 	}
 
 	if claimer, ok := accountStore.(accountClaimer); ok {
-		account, err := claimer.ClaimAccount()
+		account, err := claimer.ClaimAccount(mysisID)
 		if err == nil && account != nil {
 			return account
 		}

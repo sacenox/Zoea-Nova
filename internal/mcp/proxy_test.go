@@ -37,12 +37,12 @@ type mockAccountStore struct {
 	released []string
 }
 
-func (m *mockAccountStore) CreateAccount(username, password string) (*Account, error) {
+func (m *mockAccountStore) CreateAccount(username, password string, mysisID ...string) (*Account, error) {
 	m.created = append(m.created, Account{Username: username, Password: password})
 	return &Account{Username: username, Password: password}, nil
 }
 
-func (m *mockAccountStore) MarkAccountInUse(username string) error {
+func (m *mockAccountStore) MarkAccountInUse(username, mysisID string) error {
 	m.marked = append(m.marked, username)
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/xonecas/zoea-nova/internal/constants"
+	"github.com/xonecas/zoea-nova/internal/gamestate"
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
@@ -435,16 +436,16 @@ type accountStoreAdapter struct {
 	store *store.Store
 }
 
-func (a *accountStoreAdapter) CreateAccount(username, password string) (*mcp.Account, error) {
-	acc, err := a.store.CreateAccount(username, password)
+func (a *accountStoreAdapter) CreateAccount(username, password string, mysisID ...string) (*mcp.Account, error) {
+	acc, err := a.store.CreateAccount(username, password, mysisID...)
 	if err != nil {
 		return nil, err
 	}
 	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
-func (a *accountStoreAdapter) MarkAccountInUse(username string) error {
-	return a.store.MarkAccountInUse(username)
+func (a *accountStoreAdapter) MarkAccountInUse(username, mysisID string) error {
+	return a.store.MarkAccountInUse(username, mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAccount(username string) error {
@@ -455,8 +456,8 @@ func (a *accountStoreAdapter) ReleaseAllAccounts() error {
 	return a.store.ReleaseAllAccounts()
 }
 
-func (a *accountStoreAdapter) ClaimAccount() (*mcp.Account, error) {
-	acc, err := a.store.ClaimAccount()
+func (a *accountStoreAdapter) ClaimAccount(mysisID string) (*mcp.Account, error) {
+	acc, err := a.store.ClaimAccount(mysisID)
 	if err != nil {
 		return nil, err
 	}
@@ -620,6 +621,28 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 	if mcpProxy != nil {
 		mcpTools, err := mcpProxy.ListTools(ctx)
 		if err != nil {
+			if isMCPConnectionLost(err) {
+				log.Warn().
+					Str("mysis", a.name).
+					Err(err).
+					Msg("MCP connection lost - releasing account")
+				a.releaseCurrentAccount()
+				if rebuildErr := a.rebuildSystemMemory(); rebuildErr != nil {
+					log.Error().Err(rebuildErr).Msg("failed to rebuild system memory after MCP session loss")
+				}
+			}
+
+			// Check if this is a session expiration error
+			if strings.Contains(err.Error(), "Session not initialized") || strings.Contains(err.Error(), "-32600") {
+				log.Warn().
+					Str("mysis", a.name).
+					Err(err).
+					Msg("MCP session expired - attempting reinitialization")
+
+				// Trigger MCP reinitialization in background
+				go a.initializeMCP(parentCtx)
+			}
+
 			// Log error but continue - mysis can still chat without tools
 			a.publishCriticalEvent(Event{
 				Type:      EventMysisError,
@@ -1055,6 +1078,17 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 	}
 
 	result, err := mcpProxy.CallTool(ctx, caller, tc.Name, tc.Arguments)
+	if err != nil && isMCPConnectionLost(err) {
+		log.Warn().
+			Str("mysis", a.name).
+			Str("tool", tc.Name).
+			Err(err).
+			Msg("MCP connection lost during tool call - releasing account")
+		a.releaseCurrentAccount()
+		if rebuildErr := a.rebuildSystemMemory(); rebuildErr != nil {
+			log.Error().Err(rebuildErr).Msg("failed to rebuild system memory after MCP session loss")
+		}
+	}
 	if err == nil && result != nil && !result.IsError {
 		switch tc.Name {
 		case "login", "register":
@@ -1103,10 +1137,11 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 
 func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	storeRef := m.store
 
 	// Ignore empty username (no-op)
 	if username == "" {
+		m.mu.Unlock()
 		return
 	}
 
@@ -1119,6 +1154,13 @@ func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
 	m.currentAccountUsername = username
 	m.currentPassword = password
 	m.currentSessionID = sessionID
+	m.mu.Unlock()
+
+	if storeRef != nil {
+		if err := storeRef.MarkAccountInUse(username, m.id); err != nil {
+			log.Error().Err(err).Str("username", username).Msg("failed to mark account in use")
+		}
+	}
 }
 
 func (m *Mysis) releaseCurrentAccount() {
@@ -1269,6 +1311,28 @@ func isToolTimeout(err error) bool {
 
 func isToolRetryExhausted(err error) bool {
 	return errors.Is(err, mcp.ErrToolRetryExhausted)
+}
+
+func isMCPConnectionLost(err error) bool {
+	if err == nil {
+		return false
+	}
+	return isMCPConnectionLostMessage(err.Error())
+}
+
+func isMCPConnectionLostMessage(message string) bool {
+	if message == "" {
+		return false
+	}
+	msg := strings.ToLower(message)
+	return strings.Contains(msg, "session not initialized") ||
+		strings.Contains(msg, "-32600") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "unexpected eof") ||
+		strings.Contains(msg, "eof")
 }
 
 // formatToolResultDisplay formats a tool result for UI display (human-readable).
@@ -1922,10 +1986,11 @@ func (m *Mysis) buildGameStateSummary() string {
 					recency := snapshot.RecencyMessage(currentTick)
 					summary.WriteString(fmt.Sprintf("### %s (%s)\n", toolName, recency))
 
-					// Parse and extract key fields for compact display
-					compactInfo := extractCompactInfo(snapshot.Content, toolName)
-					if compactInfo != "" {
-						summary.WriteString(compactInfo)
+					// Render a safe summary without schema assumptions
+					lines := gamestate.SnapshotLines(snapshot.Content)
+					for _, line := range lines {
+						summary.WriteString("- ")
+						summary.WriteString(line)
 						summary.WriteString("\n")
 					}
 					summary.WriteString("\n")
@@ -1944,58 +2009,6 @@ func (m *Mysis) buildGameStateSummary() string {
 	summary.WriteString("Refresh any stale snapshots (>50 ticks old) before making decisions.\n")
 
 	return summary.String()
-}
-
-// extractCompactInfo extracts key information from a snapshot for compact display.
-func extractCompactInfo(content, toolName string) string {
-	// Parse JSON content
-	var data interface{}
-	decoder := json.NewDecoder(strings.NewReader(content))
-	decoder.UseNumber()
-	if err := decoder.Decode(&data); err != nil {
-		return ""
-	}
-
-	var info strings.Builder
-
-	switch toolName {
-	case "get_status", "get_player":
-		if credits, ok := findIntField(data, "credits", "balance"); ok {
-			info.WriteString(fmt.Sprintf("- Credits: %d\n", credits))
-		}
-		if location, ok := findStringField(data, "location", "current_location"); ok {
-			info.WriteString(fmt.Sprintf("- Location: %s\n", location))
-		}
-		if ship, ok := findStringField(data, "ship", "ship_name"); ok {
-			info.WriteString(fmt.Sprintf("- Ship: %s\n", ship))
-		}
-
-	case "get_ship":
-		if hull, ok := findIntField(data, "hull", "hull_health"); ok {
-			info.WriteString(fmt.Sprintf("- Hull: %d\n", hull))
-		}
-		if fuel, ok := findIntField(data, "fuel", "fuel_level"); ok {
-			info.WriteString(fmt.Sprintf("- Fuel: %d\n", fuel))
-		}
-		if cargo, ok := findIntField(data, "cargo_used", "cargo"); ok {
-			info.WriteString(fmt.Sprintf("- Cargo: %d\n", cargo))
-		}
-
-	case "get_system", "get_location":
-		if system, ok := findStringField(data, "system", "system_name"); ok {
-			info.WriteString(fmt.Sprintf("- System: %s\n", system))
-		}
-		if faction, ok := findStringField(data, "faction", "controlling_faction"); ok {
-			info.WriteString(fmt.Sprintf("- Faction: %s\n", faction))
-		}
-
-	case "get_map", "get_galaxy":
-		if systemCount, ok := findIntField(data, "system_count", "systems"); ok {
-			info.WriteString(fmt.Sprintf("- Systems: %d\n", systemCount))
-		}
-	}
-
-	return info.String()
 }
 
 // rebuildSystemMemory rebuilds the system memory with current state
@@ -2122,7 +2135,11 @@ func (m *Mysis) cacheSnapshotToolResult(toolName string, result *mcp.ToolResult,
 	}
 
 	// Store in cache (ignore errors - caching is best-effort)
-	_ = m.store.StoreGameStateSnapshot(username, toolName, content.String(), gameTick)
+	if err := m.store.StoreGameStateSnapshot(username, toolName, content.String(), gameTick); err == nil {
+		if rebuildErr := m.rebuildSystemMemory(); rebuildErr != nil {
+			log.Error().Err(rebuildErr).Msg("failed to rebuild system memory after snapshot update")
+		}
+	}
 }
 
 func (m *Mysis) setActivity(state ActivityState, until time.Time) {

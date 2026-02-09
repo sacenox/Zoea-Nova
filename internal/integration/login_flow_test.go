@@ -28,6 +28,12 @@ func TestLoginFlowIntegration(t *testing.T) {
 		t.Fatalf("Failed to create account: %v", err)
 	}
 
+	// Create mysis for ownership tracking
+	mysis, err := s.CreateMysis("test-mysis", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("Failed to create mysis: %v", err)
+	}
+
 	// Release account to make it available
 	if err := s.ReleaseAccount("pilot_crab"); err != nil {
 		t.Fatalf("Failed to release account: %v", err)
@@ -52,7 +58,7 @@ func TestLoginFlowIntegration(t *testing.T) {
 
 	// STEP 1: Test setup - get account credentials
 	// (In production, myses would call register() or have pre-known credentials)
-	claimed, err := s.ClaimAccount()
+	claimed, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("ClaimAccount() failed: %v", err)
 	}
@@ -63,23 +69,14 @@ func TestLoginFlowIntegration(t *testing.T) {
 		t.Fatalf("Expected password secret123, got %s", claimed.Password)
 	}
 
-	// CRITICAL: Account should NOT be locked yet (InUse should be false)
-	if claimed.InUse {
-		t.Fatalf("BUG: ClaimAccount() returned account with InUse=true. Account should not be locked until login succeeds.")
-	}
-
-	// Verify in store that account is still available
-	acc, err := s.GetAccount("pilot_crab")
-	if err != nil {
-		t.Fatalf("Failed to get account: %v", err)
-	}
-	if acc.InUse {
-		t.Fatalf("BUG: Account is marked in_use=1 in store after ClaimAccount(). Should be 0 until login succeeds.")
+	// Account should be marked in use after claim
+	if !claimed.InUse {
+		t.Fatalf("ClaimAccount() should mark account in_use")
 	}
 
 	// STEP 2: Mysis uses credentials with game's login tool
 	loginArgs := json.RawMessage(`{"username":"pilot_crab","password":"secret123"}`)
-	result, err := proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: "test", MysisName: "test-mysis"}, "login", loginArgs)
+	result, err := proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: mysis.ID, MysisName: "test-mysis"}, "login", loginArgs)
 	if err != nil {
 		t.Fatalf("CallTool(login) failed: %v", err)
 	}
@@ -88,12 +85,15 @@ func TestLoginFlowIntegration(t *testing.T) {
 	}
 
 	// STEP 3: Verify handleLoginResponse marked account as in_use
-	acc, err = s.GetAccount("pilot_crab")
+	acc, err := s.GetAccount("pilot_crab")
 	if err != nil {
 		t.Fatalf("Failed to get account after login: %v", err)
 	}
 	if !acc.InUse {
 		t.Fatalf("BUG: Account not marked in_use after successful login. handleLoginResponse() failed to intercept.")
+	}
+	if acc.InUseBy != mysis.ID {
+		t.Fatalf("BUG: Account in_use_by not set after login. Expected %q, got %q", mysis.ID, acc.InUseBy)
 	}
 
 	// Verify account is no longer available for claiming
@@ -106,7 +106,7 @@ func TestLoginFlowIntegration(t *testing.T) {
 	}
 
 	// Verify another ClaimAccount() call would fail (no accounts available)
-	_, err = s.ClaimAccount()
+	_, err = s.ClaimAccount(mysis.ID)
 	if err == nil {
 		t.Fatalf("BUG: ClaimAccount() succeeded when all accounts are in use. Should return 'no accounts available' error.")
 	}
@@ -142,26 +142,31 @@ func TestLoginFlowRaceCondition(t *testing.T) {
 	proxy := mcp.NewProxy(upstream)
 	proxy.SetAccountStore(&accountStoreAdapter{s})
 
+	// Create myses for ownership tracking
+	mysis1, err := s.CreateMysis("mysis-1", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("Failed to create mysis1: %v", err)
+	}
+	mysis2, err := s.CreateMysis("mysis-2", "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("Failed to create mysis2: %v", err)
+	}
+
 	// Mysis 1 claims account
-	claimed1, err := s.ClaimAccount()
+	_, err = s.ClaimAccount(mysis1.ID)
 	if err != nil {
 		t.Fatalf("Mysis1 ClaimAccount() failed: %v", err)
 	}
 
-	// Mysis 2 tries to claim - should get the same account (not locked yet)
-	claimed2, err := s.ClaimAccount()
-	if err != nil {
-		t.Fatalf("Mysis2 ClaimAccount() failed: %v", err)
-	}
-
-	// Both should get same credentials (account not locked)
-	if claimed1.Username != claimed2.Username {
-		t.Fatalf("Expected both myses to claim same account, got %s and %s", claimed1.Username, claimed2.Username)
+	// Mysis 2 tries to claim - should fail (account already claimed)
+	_, err = s.ClaimAccount(mysis2.ID)
+	if err == nil {
+		t.Fatalf("Mysis2 ClaimAccount() succeeded unexpectedly")
 	}
 
 	// Mysis 1 logs in first
 	loginArgs := json.RawMessage(`{"username":"shared_crab","password":"pass123"}`)
-	_, err = proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: "mysis1", MysisName: "mysis-1"}, "login", loginArgs)
+	_, err = proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: mysis1.ID, MysisName: "mysis-1"}, "login", loginArgs)
 	if err != nil {
 		t.Fatalf("Mysis1 login failed: %v", err)
 	}
@@ -171,13 +176,21 @@ func TestLoginFlowRaceCondition(t *testing.T) {
 	if !acc.InUse {
 		t.Fatalf("Account should be in_use after mysis1 login")
 	}
+	if acc.InUseBy != mysis1.ID {
+		t.Fatalf("Account in_use_by should be set to mysis1, got %q", acc.InUseBy)
+	}
 
 	// Mysis 2 tries to login with same credentials - this will succeed at the game level
 	// (since credentials are valid), but won't cause issues because handleLoginResponse
 	// is idempotent (just sets in_use=1 again)
-	_, err = proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: "mysis2", MysisName: "mysis-2"}, "login", loginArgs)
+	_, err = proxy.CallTool(context.Background(), mcp.CallerContext{MysisID: mysis2.ID, MysisName: "mysis-2"}, "login", loginArgs)
 	if err != nil {
 		t.Fatalf("Mysis2 login failed: %v", err)
+	}
+
+	acc, _ = s.GetAccount("shared_crab")
+	if acc.InUseBy != mysis2.ID {
+		t.Fatalf("Account in_use_by should be updated to mysis2, got %q", acc.InUseBy)
 	}
 
 	// Both myses are now logged in with the same account
@@ -216,16 +229,16 @@ type accountStoreAdapter struct {
 	store *store.Store
 }
 
-func (a *accountStoreAdapter) CreateAccount(username, password string) (*mcp.Account, error) {
-	acc, err := a.store.CreateAccount(username, password)
+func (a *accountStoreAdapter) CreateAccount(username, password string, mysisID ...string) (*mcp.Account, error) {
+	acc, err := a.store.CreateAccount(username, password, mysisID...)
 	if err != nil {
 		return nil, err
 	}
 	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
-func (a *accountStoreAdapter) MarkAccountInUse(username string) error {
-	return a.store.MarkAccountInUse(username)
+func (a *accountStoreAdapter) MarkAccountInUse(username, mysisID string) error {
+	return a.store.MarkAccountInUse(username, mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAccount(username string) error {
@@ -236,8 +249,8 @@ func (a *accountStoreAdapter) ReleaseAllAccounts() error {
 	return a.store.ReleaseAllAccounts()
 }
 
-func (a *accountStoreAdapter) ClaimAccount() (*mcp.Account, error) {
-	acc, err := a.store.ClaimAccount()
+func (a *accountStoreAdapter) ClaimAccount(mysisID string) (*mcp.Account, error) {
+	acc, err := a.store.ClaimAccount(mysisID)
 	if err != nil {
 		return nil, err
 	}

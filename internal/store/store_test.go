@@ -16,6 +16,15 @@ func setupStoreTest(t *testing.T) (*Store, func()) {
 	return s, func() { s.Close() }
 }
 
+func createTestMysis(t *testing.T, s *Store, name string) *Mysis {
+	t.Helper()
+	mysis, err := s.CreateMysis(name, "mock", "test-model", 0.7)
+	if err != nil {
+		t.Fatalf("CreateMysis() error: %v", err)
+	}
+	return mysis
+}
+
 func TestOpenMemory(t *testing.T) {
 	s, err := OpenMemory()
 	if err != nil {
@@ -264,13 +273,18 @@ func TestAccountCRUD(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	// Create account (automatically marked as in_use)
-	acc, err := s.CreateAccount("crab_01", "pass123")
+	mysis := createTestMysis(t, s, "mysis-account-crud")
+
+	// Create account (marked as in_use for mysis)
+	acc, err := s.CreateAccount("crab_01", "pass123", mysis.ID)
 	if err != nil {
 		t.Fatalf("CreateAccount() error: %v", err)
 	}
 	if !acc.InUse {
 		t.Error("new account should be in use after registration")
+	}
+	if acc.InUseBy != mysis.ID {
+		t.Errorf("expected in_use_by=%s, got %s", mysis.ID, acc.InUseBy)
 	}
 
 	// Release it to make it available
@@ -285,7 +299,7 @@ func TestAccountCRUD(t *testing.T) {
 	}
 
 	// Claim (no arguments - returns first available and atomically marks as in_use)
-	claimed, err := s.ClaimAccount()
+	claimed, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("ClaimAccount() error: %v", err)
 	}
@@ -294,6 +308,9 @@ func TestAccountCRUD(t *testing.T) {
 	}
 	if !claimed.InUse {
 		t.Error("ClaimAccount() should atomically mark account as in_use")
+	}
+	if claimed.InUseBy != mysis.ID {
+		t.Errorf("expected in_use_by=%s, got %s", mysis.ID, claimed.InUseBy)
 	}
 
 	// Verify marked as in_use (ClaimAccount does this atomically now)
@@ -330,6 +347,9 @@ func TestReleaseAllAccounts(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
+	mysis1 := createTestMysis(t, s, "mysis-release-1")
+	mysis2 := createTestMysis(t, s, "mysis-release-2")
+
 	// Create and release two accounts to make them available
 	s.CreateAccount("acc1", "pass1")
 	s.CreateAccount("acc2", "pass2")
@@ -337,8 +357,8 @@ func TestReleaseAllAccounts(t *testing.T) {
 	s.ReleaseAccount("acc2")
 
 	// Mark both in use directly (simulating login handler behavior)
-	s.MarkAccountInUse("acc1")
-	s.MarkAccountInUse("acc2")
+	s.MarkAccountInUse("acc1", mysis1.ID)
+	s.MarkAccountInUse("acc2", mysis2.ID)
 
 	// Verify both in use
 	available, _ := s.ListAvailableAccounts()
@@ -362,6 +382,8 @@ func TestClaimAccount_ReturnsAvailableAccount(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "mysis-claim-returns")
+
 	// Create and release an account
 	s.CreateAccount("crab_01", "pass123")
 	if err := s.ReleaseAccount("crab_01"); err != nil {
@@ -369,7 +391,7 @@ func TestClaimAccount_ReturnsAvailableAccount(t *testing.T) {
 	}
 
 	// ClaimAccount should return the available account
-	claimed, err := s.ClaimAccount()
+	claimed, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("ClaimAccount() error: %v", err)
 	}
@@ -382,11 +404,16 @@ func TestClaimAccount_ReturnsAvailableAccount(t *testing.T) {
 	if !claimed.InUse {
 		t.Error("ClaimAccount() should return account with InUse=true (atomically claimed)")
 	}
+	if claimed.InUseBy != mysis.ID {
+		t.Errorf("expected in_use_by=%s, got %s", mysis.ID, claimed.InUseBy)
+	}
 }
 
 func TestClaimAccount_AtomicallyMarksInUse(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
+
+	mysis := createTestMysis(t, s, "mysis-claim-atomic")
 
 	// Create and release an account
 	s.CreateAccount("crab_01", "pass123")
@@ -395,7 +422,7 @@ func TestClaimAccount_AtomicallyMarksInUse(t *testing.T) {
 	}
 
 	// Claim the account
-	_, err := s.ClaimAccount()
+	_, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("ClaimAccount() error: %v", err)
 	}
@@ -424,6 +451,8 @@ func TestClaimAccount_PreventsRaceCondition(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "mysis-claim-race")
+
 	// Create two accounts
 	s.CreateAccount("crab_01", "pass123")
 	s.CreateAccount("crab_02", "pass456")
@@ -435,7 +464,7 @@ func TestClaimAccount_PreventsRaceCondition(t *testing.T) {
 	}
 
 	// First claim should get crab_01 and lock it
-	claimed1, err := s.ClaimAccount()
+	claimed1, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("First ClaimAccount() error: %v", err)
 	}
@@ -444,7 +473,7 @@ func TestClaimAccount_PreventsRaceCondition(t *testing.T) {
 	}
 
 	// Second claim should get crab_02 (crab_01 is now locked)
-	claimed2, err := s.ClaimAccount()
+	claimed2, err := s.ClaimAccount(mysis.ID)
 	if err != nil {
 		t.Fatalf("Second ClaimAccount() error: %v", err)
 	}
@@ -453,7 +482,7 @@ func TestClaimAccount_PreventsRaceCondition(t *testing.T) {
 	}
 
 	// Third claim should fail (no more available accounts)
-	_, err = s.ClaimAccount()
+	_, err = s.ClaimAccount(mysis.ID)
 	if err == nil {
 		t.Error("Third ClaimAccount() should fail when no accounts available")
 	}
@@ -463,8 +492,10 @@ func TestClaimAccount_FailsWhenNoAccounts(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
+	mysis := createTestMysis(t, s, "mysis-claim-none")
+
 	// Try to claim when no accounts exist
-	_, err := s.ClaimAccount()
+	_, err := s.ClaimAccount(mysis.ID)
 	if err == nil {
 		t.Fatal("expected error when no accounts exist")
 	}
@@ -477,11 +508,15 @@ func TestClaimAccount_FailsWhenOnlyInUseAccounts(t *testing.T) {
 	s, cleanup := setupStoreTest(t)
 	defer cleanup()
 
-	// Create account (in_use=1 by default)
-	s.CreateAccount("crab_01", "pass123")
+	mysis := createTestMysis(t, s, "mysis-claim-inuse")
+
+	// Create account and mark in use
+	if _, err := s.CreateAccount("crab_01", "pass123", mysis.ID); err != nil {
+		t.Fatalf("CreateAccount() error: %v", err)
+	}
 
 	// Try to claim when only in-use accounts exist
-	_, err := s.ClaimAccount()
+	_, err := s.ClaimAccount(mysis.ID)
 	if err == nil {
 		t.Fatal("expected error when only in-use accounts exist")
 	}

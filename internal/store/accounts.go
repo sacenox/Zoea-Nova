@@ -10,17 +10,28 @@ type Account struct {
 	Username   string
 	Password   string
 	InUse      bool
+	InUseBy    string
 	LastUsedAt time.Time
 	CreatedAt  time.Time
 }
 
-func (s *Store) CreateAccount(username, password string) (*Account, error) {
+func (s *Store) CreateAccount(username, password string, mysisID ...string) (*Account, error) {
 	now := time.Now().UTC()
+	inUseBy := ""
+	var inUseByParam interface{}
+	inUse := 0
+	if len(mysisID) > 0 && mysisID[0] != "" {
+		inUseBy = mysisID[0]
+		inUseByParam = mysisID[0]
+		inUse = 1
+	} else {
+		inUseByParam = nil
+	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO accounts (username, password, in_use, created_at, last_used_at)
-		VALUES (?, ?, 1, ?, ?)
-	`, username, password, now, now)
+		INSERT INTO accounts (username, password, in_use, in_use_by, created_at, last_used_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, username, password, inUse, inUseByParam, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert account: %w", err)
 	}
@@ -28,7 +39,8 @@ func (s *Store) CreateAccount(username, password string) (*Account, error) {
 	return &Account{
 		Username:   username,
 		Password:   password,
-		InUse:      true,
+		InUse:      inUse == 1,
+		InUseBy:    inUseBy,
 		CreatedAt:  now,
 		LastUsedAt: now,
 	}, nil
@@ -37,15 +49,42 @@ func (s *Store) CreateAccount(username, password string) (*Account, error) {
 func (s *Store) GetAccount(username string) (*Account, error) {
 	var acc Account
 	var lastUsedAt sql.NullTime
+	var inUseBy sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT username, password, in_use, last_used_at, created_at
+		SELECT username, password, in_use, in_use_by, last_used_at, created_at
 		FROM accounts WHERE username = ?
-	`, username).Scan(&acc.Username, &acc.Password, &acc.InUse, &lastUsedAt, &acc.CreatedAt)
+	`, username).Scan(&acc.Username, &acc.Password, &acc.InUse, &inUseBy, &lastUsedAt, &acc.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 
+	if inUseBy.Valid {
+		acc.InUseBy = inUseBy.String
+	}
+	if lastUsedAt.Valid {
+		acc.LastUsedAt = lastUsedAt.Time
+	}
+
+	return &acc, nil
+}
+
+func (s *Store) GetAccountByMysisID(mysisID string) (*Account, error) {
+	var acc Account
+	var lastUsedAt sql.NullTime
+	var inUseBy sql.NullString
+
+	err := s.db.QueryRow(`
+		SELECT username, password, in_use, in_use_by, last_used_at, created_at
+		FROM accounts WHERE in_use_by = ?
+	`, mysisID).Scan(&acc.Username, &acc.Password, &acc.InUse, &inUseBy, &lastUsedAt, &acc.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if inUseBy.Valid {
+		acc.InUseBy = inUseBy.String
+	}
 	if lastUsedAt.Valid {
 		acc.LastUsedAt = lastUsedAt.Time
 	}
@@ -55,7 +94,7 @@ func (s *Store) GetAccount(username string) (*Account, error) {
 
 func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	rows, err := s.db.Query(`
-		SELECT username, password, in_use, last_used_at, created_at
+		SELECT username, password, in_use, in_use_by, last_used_at, created_at
 		FROM accounts
 		WHERE in_use = 0
 		ORDER BY created_at ASC
@@ -69,11 +108,15 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	for rows.Next() {
 		var acc Account
 		var lastUsedAt sql.NullTime
+		var inUseBy sql.NullString
 
-		if err := rows.Scan(&acc.Username, &acc.Password, &acc.InUse, &lastUsedAt, &acc.CreatedAt); err != nil {
+		if err := rows.Scan(&acc.Username, &acc.Password, &acc.InUse, &inUseBy, &lastUsedAt, &acc.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 
+		if inUseBy.Valid {
+			acc.InUseBy = inUseBy.String
+		}
 		if lastUsedAt.Valid {
 			acc.LastUsedAt = lastUsedAt.Time
 		}
@@ -84,7 +127,11 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 	return accounts, rows.Err()
 }
 
-func (s *Store) ClaimAccount() (*Account, error) {
+func (s *Store) ClaimAccount(mysisID string) (*Account, error) {
+	if mysisID == "" {
+		return nil, fmt.Errorf("mysisID required to claim account")
+	}
+
 	now := time.Now().UTC()
 	var username, password string
 	var createdAt time.Time
@@ -94,7 +141,7 @@ func (s *Store) ClaimAccount() (*Account, error) {
 	// This prevents race conditions where multiple myses claim the same account
 	err := s.db.QueryRow(`
 		UPDATE accounts
-		SET in_use = 1, last_used_at = ?
+		SET in_use = 1, in_use_by = ?, last_used_at = ?
 		WHERE username = (
 			SELECT username
 			FROM accounts
@@ -103,7 +150,7 @@ func (s *Store) ClaimAccount() (*Account, error) {
 			LIMIT 1
 		)
 		RETURNING username, password, created_at, last_used_at
-	`, now).Scan(&username, &password, &createdAt, &lastUsedAt)
+	`, mysisID, now).Scan(&username, &password, &createdAt, &lastUsedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("no accounts available")
 	}
@@ -115,6 +162,7 @@ func (s *Store) ClaimAccount() (*Account, error) {
 		Username:  username,
 		Password:  password,
 		InUse:     true,
+		InUseBy:   mysisID,
 		CreatedAt: createdAt,
 	}
 
@@ -125,14 +173,14 @@ func (s *Store) ClaimAccount() (*Account, error) {
 	return acc, nil
 }
 
-func (s *Store) MarkAccountInUse(username string) error {
+func (s *Store) MarkAccountInUse(username, mysisID string) error {
 	now := time.Now().UTC()
 
 	_, err := s.db.Exec(`
 		UPDATE accounts
-		SET in_use = 1, last_used_at = ?
+		SET in_use = 1, in_use_by = ?, last_used_at = ?
 		WHERE username = ?
-	`, now, username)
+	`, mysisID, now, username)
 	if err != nil {
 		return fmt.Errorf("mark account in use: %w", err)
 	}
@@ -143,7 +191,7 @@ func (s *Store) MarkAccountInUse(username string) error {
 func (s *Store) ReleaseAccount(username string) error {
 	_, err := s.db.Exec(`
 		UPDATE accounts
-		SET in_use = 0
+		SET in_use = 0, in_use_by = NULL
 		WHERE username = ?
 	`, username)
 	if err != nil {
@@ -154,7 +202,7 @@ func (s *Store) ReleaseAccount(username string) error {
 }
 
 func (s *Store) ReleaseAllAccounts() error {
-	_, err := s.db.Exec(`UPDATE accounts SET in_use = 0`)
+	_, err := s.db.Exec(`UPDATE accounts SET in_use = 0, in_use_by = NULL`)
 	if err != nil {
 		return fmt.Errorf("release all accounts: %w", err)
 	}

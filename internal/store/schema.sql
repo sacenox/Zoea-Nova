@@ -4,10 +4,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
--- Schema v8 → v9 Migration:
--- Added game_state_snapshots table for incremental game state caching.
+-- Schema v10 → v11 Migration:
+-- Added accounts in_use/in_use_by consistency check.
 -- BREAKING CHANGE: Requires fresh database (make db-reset-accounts)
-INSERT OR REPLACE INTO schema_version (version) VALUES (9);
+INSERT OR REPLACE INTO schema_version (version) VALUES (11);
 
 CREATE TABLE IF NOT EXISTS myses (
     id TEXT PRIMARY KEY,
@@ -40,8 +40,14 @@ CREATE TABLE IF NOT EXISTS accounts (
 	username TEXT PRIMARY KEY,
 	password TEXT NOT NULL,
 	in_use BOOLEAN NOT NULL DEFAULT 0,
+	in_use_by TEXT,
 	last_used_at DATETIME,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (in_use_by) REFERENCES myses(id) ON DELETE SET NULL,
+	CHECK (
+		(in_use = 0 AND in_use_by IS NULL) OR
+		(in_use = 1 AND in_use_by IS NOT NULL)
+	)
 );
 
 CREATE INDEX IF NOT EXISTS idx_accounts_in_use ON accounts(in_use);

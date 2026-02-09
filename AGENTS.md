@@ -18,7 +18,7 @@ TUI for orchestrating AI agents (Myses) that play SpaceMolt via MCP. Go 1.24.2, 
 
 **Orphaned tool call removal** (`internal/core/mysis.go:1429-1465`): Assistant messages with tool calls removed if no matching tool result exists. Prevents OpenAI API crashes from malformed sequences after context compression.
 
-**Game state cache** (`internal/store/game_state.go`, `internal/core/mysis.go:1899-1938`): Snapshot tools (`get_*`) automatically cached per username. After successful tool execution, Mysis caches result with game tick in `game_state_snapshots` table. System prompt includes compact state summary with recency metadata (e.g., "get_status - 2 ticks ago"). Reduces context size by 95% - 190KB map data appears once, then 2KB summaries. Cache cleared on logout (proxy intercepts logout tool). Keyed by username (not mysis_id) to support account switching.
+**Game state cache** (`internal/store/game_state.go`, `internal/core/mysis.go:1899-1938`): Snapshot tools (`get_*`) automatically cached per username. After successful tool execution, Mysis caches result with game tick in `game_state_snapshots` table. System prompt includes compact state summary with recency metadata (e.g., "get_status - 2 ticks ago"). Reduces context size by 95% - 190KB map data appears once, then 2KB summaries. Cache cleared on logout (proxy intercepts logout tool). Keyed by username (not mysis_id) to support account switching. `mysis_id` is an internal value, not a game state value, always hide this from the mysis.
 
 ## Non-obvious Patterns
 
@@ -35,6 +35,8 @@ TUI for orchestrating AI agents (Myses) that play SpaceMolt via MCP. Go 1.24.2, 
 **Context stats logged at 3 stages** (`internal/core/mysis.go:508-556`): After `getContextMemories()`, after `memoriesToMessages()`, before LLM call. Tracks memory count, message count, content bytes, reasoning bytes, role/source distribution. Used for debugging context bloat.
 
 **MCP proxy is nullable** (`internal/core/mysis.go:436-477`): If nil, Mysis can still chat but has no tools. Used for testing and offline mode. Tool list fetch failure is non-fatal.
+
+**MCP session auto-recovery** (`internal/core/mysis.go:621-637`): When `ListTools()` fails with "Session not initialized" (error -32600), triggers background reinitialization via `initializeMCP()`. Mysis continues with degraded functionality (local tools only) until reconnection completes. Handles SpaceMolt server restarts and session expiration without manual intervention.
 
 **WaitGroup tracks goroutines** (`internal/core/mysis.go:284-286`): Commander.wg incremented on Start(), decremented on run() exit. Allows graceful shutdown - Commander.Stop() waits for all Myses to finish current turn.
 
@@ -58,6 +60,8 @@ TUI for orchestrating AI agents (Myses) that play SpaceMolt via MCP. Go 1.24.2, 
 
 ## Where to Find Things
 
+- DB file for user `$HOME/.zoea-nova/zoea.db`
+- LOG file for user `$HOME/.zoea-nova/zoea.log`
 - Context composition logic: `internal/core/mysis.go:1237-1339`
 - Autonomous loop: `internal/core/mysis.go:1520-1566`
 - State transitions: `internal/core/mysis.go:220-359` (Start/Stop), `1022-1107` (setError/setIdle)
