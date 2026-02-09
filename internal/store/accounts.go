@@ -85,28 +85,36 @@ func (s *Store) ListAvailableAccounts() ([]*Account, error) {
 }
 
 func (s *Store) ClaimAccount() (*Account, error) {
+	now := time.Now().UTC()
 	var username, password string
 	var createdAt time.Time
 	var lastUsedAt sql.NullTime
 
+	// Atomically claim an account by updating in_use flag and returning the row
+	// This prevents race conditions where multiple myses claim the same account
 	err := s.db.QueryRow(`
-		SELECT username, password, created_at, last_used_at
-		FROM accounts
-		WHERE in_use = 0
-		ORDER BY created_at ASC
-		LIMIT 1
-	`).Scan(&username, &password, &createdAt, &lastUsedAt)
+		UPDATE accounts
+		SET in_use = 1, last_used_at = ?
+		WHERE username = (
+			SELECT username
+			FROM accounts
+			WHERE in_use = 0
+			ORDER BY created_at ASC
+			LIMIT 1
+		)
+		RETURNING username, password, created_at, last_used_at
+	`, now).Scan(&username, &password, &createdAt, &lastUsedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("no accounts available")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query available account: %w", err)
+		return nil, fmt.Errorf("claim account: %w", err)
 	}
 
 	acc := &Account{
 		Username:  username,
 		Password:  password,
-		InUse:     false,
+		InUse:     true,
 		CreatedAt: createdAt,
 	}
 
