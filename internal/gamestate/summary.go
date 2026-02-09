@@ -96,3 +96,67 @@ func formatPrimitive(value interface{}) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
+
+// SnapshotLinesTUI produces compact, TUI-friendly text lines suitable for narrow sidebars.
+// Unlike SnapshotLines which outputs full dotted paths (e.g. "ship.position.x: 100"),
+// this produces concise key-value pairs without nesting indicators.
+func SnapshotLinesTUI(content string) []string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil
+	}
+
+	var data interface{}
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&data); err != nil {
+		return []string{"(invalid JSON)"}
+	}
+
+	lines := make([]string, 0, 32)
+	walkValueTUI(data, "", &lines)
+	return lines
+}
+
+// walkValueTUI walks the JSON structure and produces compact TUI output.
+// For simple structures, produces "key: value".
+// For nested objects, flattens one level deep to preserve minimal context.
+func walkValueTUI(value interface{}, path string, lines *[]string) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		if len(v) == 0 {
+			appendLineTUI(path, "{}", lines)
+			return
+		}
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			// Build new path with one level of context
+			newPath := key
+			if path != "" {
+				newPath = path + "." + key
+			}
+			walkValueTUI(v[key], newPath, lines)
+		}
+	case []interface{}:
+		if len(v) == 0 {
+			appendLineTUI(path, "[]", lines)
+			return
+		}
+		// For arrays, show count rather than expanding all items
+		appendLineTUI(path, fmt.Sprintf("[%d items]", len(v)), lines)
+	default:
+		appendLineTUI(path, formatPrimitive(v), lines)
+	}
+}
+
+func appendLineTUI(key, value string, lines *[]string) {
+	if key == "" {
+		*lines = append(*lines, value)
+		return
+	}
+	*lines = append(*lines, key+": "+value)
+}

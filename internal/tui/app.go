@@ -202,10 +202,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			vpHeight = 5
 		}
 		// Viewport width must match the conversation log width calculation in focus.go
-		// Two-column layout: Sidebar (24) + Gap (2) + Conversation
-		// Conversation width = total - 24 - 2 = total - 26
+		// Two-column layout: Sidebar (33% of width) + Gap (2) + Conversation
+		// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
 		// Viewport content width = conversation - 2 (for scrollbar)
-		const sidebarWidth = 24
+		sidebarWidth := (msg.Width * 33) / 100
 		const columnGap = 2
 		conversationWidth := msg.Width - sidebarWidth - columnGap
 		m.viewport.Width = conversationWidth - 2 // -2 for scrollbar
@@ -957,8 +957,9 @@ func (m *Model) updateViewportContent() {
 	// Remember if user was at bottom before updating content
 	wasAtBottom := m.viewport.AtBottom()
 
-	// Two-column layout: Game State Sidebar (24 chars) | Conversation Log
-	const sidebarWidth = 24
+	// Two-column layout: Game State Sidebar | Conversation Log
+	// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
+	sidebarWidth := (m.width * 33) / 100
 	const columnGap = 2
 	conversationWidth := m.width - sidebarWidth - columnGap
 

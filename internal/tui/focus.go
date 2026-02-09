@@ -197,8 +197,9 @@ func RenderFocusViewWithViewport(mysis MysisInfo, vp viewport.Model, width int, 
 	sections = append(sections, infoPanel)
 
 	// Two-column layout: Game State Sidebar | Conversation Log
-	const sidebarWidth = 24 // Fixed width for game state sidebar (total including border)
-	const columnGap = 2     // Gap between columns
+	// Sidebar takes 33% of terminal width (multiply first to avoid precision loss)
+	sidebarWidth := (width * 33) / 100 // Total width including border
+	const columnGap = 2                // Gap between columns
 	conversationWidth := width - sidebarWidth - columnGap
 
 	// Conversation title with scroll indicator
@@ -791,8 +792,8 @@ func renderGameStateSidebar(snapshots []*store.GameStateSnapshot, currentTick in
 					recencyText := dimmedStyle.Render(fmt.Sprintf(" (%s)", recency))
 					lines = append(lines, toolHeader+recencyText)
 
-					// Extract and show compact info
-					linesRaw := gamestate.SnapshotLines(snapshot.Content)
+					// Extract and show compact info using TUI-specific formatter
+					linesRaw := gamestate.SnapshotLinesTUI(snapshot.Content)
 					for _, line := range linesRaw {
 						if line == "" {
 							continue
