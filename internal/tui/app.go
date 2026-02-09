@@ -1030,8 +1030,9 @@ func (m *Model) updateViewportContent() {
 	panelContentWidth := conversationWidth - 2 // -2 for scrollbar
 
 	var lines []string
-	for _, entry := range m.logs {
-		entryLines := renderLogEntryImpl(entry, panelContentWidth, m.verboseJSON, m.currentTick)
+	// Render logs in reverse order (newest first) so bottom of scroll shows newest
+	for i := len(m.logs) - 1; i >= 0; i-- {
+		entryLines := renderLogEntryImpl(m.logs[i], panelContentWidth, m.verboseJSON, m.currentTick)
 		lines = append(lines, entryLines...)
 	}
 
