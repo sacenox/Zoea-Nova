@@ -230,18 +230,8 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 
 		result, err := p.callUpstreamWithRetry(ctx, name, args)
 
-		if result != nil {
-			if !result.IsError && accountStore != nil {
-				p.interceptAuthTools(name, arguments, result, caller.MysisID)
-			}
-			if result.IsError {
-				// Rewrite error messages to guide myses toward correct behavior
-				for i := range result.Content {
-					if result.Content[i].Type == "text" {
-						result.Content[i].Text = p.rewriteSessionError(result.Content[i].Text)
-					}
-				}
-			}
+		if result != nil && !result.IsError && accountStore != nil {
+			p.interceptAuthTools(name, arguments, result, caller.MysisID)
 		}
 
 		return result, err
@@ -249,7 +239,7 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 
 	errorMsg := fmt.Sprintf("tool not found: %s", name)
 	return &ToolResult{
-		Content: []ContentBlock{{Type: "text", Text: p.rewriteSessionError(errorMsg)}},
+		Content: []ContentBlock{{Type: "text", Text: errorMsg}},
 		IsError: true,
 	}, nil
 }
@@ -530,32 +520,6 @@ func findStringFieldAtPath(payload interface{}, path ...string) (string, bool) {
 	}
 
 	return "", false
-}
-
-// rewriteSessionError improves session-related error messages to guide myses
-// toward correct behavior instead of causing claim→login loops.
-func (p *Proxy) rewriteSessionError(errorMsg string) string {
-	// Handle session_required errors
-	if strings.Contains(errorMsg, "session_required") {
-		// Original: "You must provide a session_id. Get one by calling login() or register() first."
-		// Problem: Tells mysis to login again even if they already have session_id
-		return strings.Replace(errorMsg,
-			"Get one by calling login() or register() first.",
-			"Check your recent tool results for session_id from login/register and use it as a parameter.",
-			1)
-	}
-
-	// Handle session_invalid errors
-	if strings.Contains(errorMsg, "session_invalid") {
-		// Original: "Call login() again to get a new session_id."
-		// This is actually correct - session truly expired
-		// But add clarity about when this happens
-		if strings.Contains(errorMsg, "Session not found or expired") {
-			return errorMsg + " This means your session truly expired (server restart, timeout, or duplicate login)."
-		}
-	}
-
-	return errorMsg
 }
 
 // Initialize initializes the upstream connection if available.
