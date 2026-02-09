@@ -14,6 +14,8 @@ Exlore the game, make goals and achieve them over time. You are part of a secret
 ## Account Details
 {{ACCOUNT_DETAILS}}
 
+{{GAME_STATE_SUMMARY}}
+
 {{LATEST_BROADCAST}}
 
 ## Critical Rules
@@ -22,8 +24,7 @@ Context is limited - use search tools for older information.
 Use session_id in ALL game tools that require authentication. Your session_id is shown in the Account Details section above.
 
 ### EVERY TURN:
-The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.
-Remember: Call get_notifications after you other game actions every turn for updates.`
+The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.`
 
 // BroadcastSectionTemplate is the template for commander broadcasts.
 // Placeholder: {broadcast_content}
@@ -46,6 +47,9 @@ Use session_id in ALL game tools that require authentication.`
 
 // AccountDetailsFallback is used when no credentials are available
 const AccountDetailsFallback = `No active session. Call register() to get credentials.`
+
+// GameStateSummaryFallback is shown when no game state is cached
+const GameStateSummaryFallback = ``
 
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy (Level 1 - gentle).
 const ContinuePrompt = `What's your next move?`

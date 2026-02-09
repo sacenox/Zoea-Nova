@@ -123,6 +123,7 @@ func main() {
 
 	mcpProxy := mcp.NewProxy(upstreamClient)
 	mcpProxy.SetAccountStore(&accountStoreAdapter{s})
+	mcpProxy.SetGameStateStore(s)
 	mcp.RegisterOrchestratorTools(mcpProxy, &commanderAdapter{commander})
 
 	// Initialize upstream MCP connection if configured

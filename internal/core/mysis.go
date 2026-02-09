@@ -651,6 +651,9 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 
 				a.updateActivityFromToolResult(result, execErr)
 
+				// Cache snapshot tool results for game state summary
+				a.cacheSnapshotToolResult(tc.Name, result, execErr)
+
 				// Store the tool result
 				resultContent := a.formatToolResult(tc.ID, tc.Name, result, execErr)
 				if err := a.store.AddMemory(a.id, store.MemoryRoleTool, store.MemorySourceTool, resultContent, "", ""); err != nil {
@@ -1712,7 +1715,119 @@ func (m *Mysis) buildSystemPrompt() string {
 
 	prompt = strings.Replace(prompt, "{{ACCOUNT_DETAILS}}", accountDetails, 1)
 
+	// Replace {{GAME_STATE_SUMMARY}} with cached game state
+	gameStateSummary := m.buildGameStateSummary()
+	prompt = strings.Replace(prompt, "{{GAME_STATE_SUMMARY}}", gameStateSummary, 1)
+
 	return prompt
+}
+
+// buildGameStateSummary creates a compact summary of cached game state.
+func (m *Mysis) buildGameStateSummary() string {
+	username := m.CurrentAccountUsername()
+	if username == "" {
+		return constants.GameStateSummaryFallback
+	}
+
+	snapshots, err := m.store.GetAllGameStateSnapshots(username)
+	if err != nil || len(snapshots) == 0 {
+		return constants.GameStateSummaryFallback
+	}
+
+	// Get current tick for recency calculation
+	currentTick := m.lastServerTick
+
+	var summary strings.Builder
+	summary.WriteString("\n## Cached Game State\n")
+	summary.WriteString(fmt.Sprintf("Account: %s\n\n", username))
+
+	// Group snapshots by category
+	statusTools := []string{"get_status", "get_player"}
+	shipTools := []string{"get_ship", "get_cargo"}
+	locationTools := []string{"get_system", "get_location", "get_poi"}
+	mapTools := []string{"get_map", "get_galaxy"}
+
+	writeSnapshotGroup := func(title string, toolNames []string) {
+		for _, snapshot := range snapshots {
+			for _, toolName := range toolNames {
+				if snapshot.ToolName == toolName {
+					recency := snapshot.RecencyMessage(currentTick)
+					summary.WriteString(fmt.Sprintf("### %s (%s)\n", toolName, recency))
+
+					// Parse and extract key fields for compact display
+					compactInfo := extractCompactInfo(snapshot.Content, toolName)
+					if compactInfo != "" {
+						summary.WriteString(compactInfo)
+						summary.WriteString("\n")
+					}
+					summary.WriteString("\n")
+				}
+			}
+		}
+	}
+
+	writeSnapshotGroup("Status", statusTools)
+	writeSnapshotGroup("Ship", shipTools)
+	writeSnapshotGroup("Location", locationTools)
+	writeSnapshotGroup("Map", mapTools)
+
+	// Add note about refreshing stale data
+	summary.WriteString("Note: Call get_notifications to see events since last update.\n")
+	summary.WriteString("Refresh any stale snapshots (>50 ticks old) before making decisions.\n")
+
+	return summary.String()
+}
+
+// extractCompactInfo extracts key information from a snapshot for compact display.
+func extractCompactInfo(content, toolName string) string {
+	// Parse JSON content
+	var data interface{}
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&data); err != nil {
+		return ""
+	}
+
+	var info strings.Builder
+
+	switch toolName {
+	case "get_status", "get_player":
+		if credits, ok := findIntField(data, "credits", "balance"); ok {
+			info.WriteString(fmt.Sprintf("- Credits: %d\n", credits))
+		}
+		if location, ok := findStringField(data, "location", "current_location"); ok {
+			info.WriteString(fmt.Sprintf("- Location: %s\n", location))
+		}
+		if ship, ok := findStringField(data, "ship", "ship_name"); ok {
+			info.WriteString(fmt.Sprintf("- Ship: %s\n", ship))
+		}
+
+	case "get_ship":
+		if hull, ok := findIntField(data, "hull", "hull_health"); ok {
+			info.WriteString(fmt.Sprintf("- Hull: %d\n", hull))
+		}
+		if fuel, ok := findIntField(data, "fuel", "fuel_level"); ok {
+			info.WriteString(fmt.Sprintf("- Fuel: %d\n", fuel))
+		}
+		if cargo, ok := findIntField(data, "cargo_used", "cargo"); ok {
+			info.WriteString(fmt.Sprintf("- Cargo: %d\n", cargo))
+		}
+
+	case "get_system", "get_location":
+		if system, ok := findStringField(data, "system", "system_name"); ok {
+			info.WriteString(fmt.Sprintf("- System: %s\n", system))
+		}
+		if faction, ok := findStringField(data, "faction", "controlling_faction"); ok {
+			info.WriteString(fmt.Sprintf("- Faction: %s\n", faction))
+		}
+
+	case "get_map", "get_galaxy":
+		if systemCount, ok := findIntField(data, "system_count", "systems"); ok {
+			info.WriteString(fmt.Sprintf("- Systems: %d\n", systemCount))
+		}
+	}
+
+	return info.String()
 }
 
 // rebuildSystemMemory rebuilds the system memory with current state
@@ -1778,6 +1893,48 @@ func (m *Mysis) updateActivityFromToolResult(result *mcp.ToolResult, err error) 
 		return
 	}
 
+}
+
+// cacheSnapshotToolResult stores successful snapshot tool results in the game state cache.
+func (m *Mysis) cacheSnapshotToolResult(toolName string, result *mcp.ToolResult, err error) {
+	// Only cache successful snapshot tools
+	if err != nil || result == nil || result.IsError {
+		return
+	}
+
+	// Only cache get_* tools
+	if !strings.HasPrefix(toolName, "get_") {
+		return
+	}
+
+	// Need active account to cache
+	username := m.CurrentAccountUsername()
+	if username == "" {
+		return
+	}
+
+	// Extract game tick from result
+	payload, ok := parseToolResultPayload(result)
+	if !ok {
+		return
+	}
+
+	gameTick, _ := findCurrentTick(payload)
+
+	// Get full result content
+	var content strings.Builder
+	for _, block := range result.Content {
+		if block.Type == "text" {
+			content.WriteString(block.Text)
+		}
+	}
+
+	if content.Len() == 0 {
+		return
+	}
+
+	// Store in cache (ignore errors - caching is best-effort)
+	_ = m.store.StoreGameStateSnapshot(username, toolName, content.String(), gameTick)
 }
 
 func (m *Mysis) setActivity(state ActivityState, until time.Time) {
@@ -1940,6 +2097,39 @@ func findFloatField(payload interface{}, keys ...string) (float64, bool) {
 	}
 
 	return 0, false
+}
+
+func findStringField(payload interface{}, keys ...string) (string, bool) {
+	queue := []interface{}{payload}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		switch value := current.(type) {
+		case map[string]interface{}:
+			for _, key := range keys {
+				if raw, ok := value[key]; ok {
+					if str, ok := raw.(string); ok {
+						return str, true
+					}
+				}
+			}
+
+			childKeys := make([]string, 0, len(value))
+			for key := range value {
+				childKeys = append(childKeys, key)
+			}
+			sort.Strings(childKeys)
+			for _, key := range childKeys {
+				queue = append(queue, value[key])
+			}
+		case []interface{}:
+			queue = append(queue, value...)
+		}
+	}
+
+	return "", false
 }
 
 func findCurrentTick(payload interface{}) (int64, bool) {

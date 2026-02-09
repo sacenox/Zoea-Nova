@@ -4,10 +4,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
--- Schema v7 → v8 Migration:
--- Added sender_id column to memories table for broadcast tracking.
+-- Schema v8 → v9 Migration:
+-- Added game_state_snapshots table for incremental game state caching.
 -- BREAKING CHANGE: Requires fresh database (make db-reset-accounts)
-INSERT OR REPLACE INTO schema_version (version) VALUES (8);
+INSERT OR REPLACE INTO schema_version (version) VALUES (9);
 
 CREATE TABLE IF NOT EXISTS myses (
     id TEXT PRIMARY KEY,
@@ -45,3 +45,15 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_accounts_in_use ON accounts(in_use);
+
+CREATE TABLE IF NOT EXISTS game_state_snapshots (
+	id TEXT PRIMARY KEY,
+	username TEXT NOT NULL,
+	tool_name TEXT NOT NULL,
+	content TEXT NOT NULL,
+	game_tick INTEGER,
+	captured_at INTEGER NOT NULL,
+	UNIQUE(username, tool_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_game_state_username ON game_state_snapshots(username);

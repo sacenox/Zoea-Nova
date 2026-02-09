@@ -18,6 +18,8 @@ TUI for orchestrating AI agents (Myses) that play SpaceMolt via MCP. Go 1.24.2, 
 
 **Orphaned tool call removal** (`internal/core/mysis.go:1429-1465`): Assistant messages with tool calls removed if no matching tool result exists. Prevents OpenAI API crashes from malformed sequences after context compression.
 
+**Game state cache** (`internal/store/game_state.go`, `internal/core/mysis.go:1899-1938`): Snapshot tools (`get_*`) automatically cached per username. After successful tool execution, Mysis caches result with game tick in `game_state_snapshots` table. System prompt includes compact state summary with recency metadata (e.g., "get_status - 2 ticks ago"). Reduces context size by 95% - 190KB map data appears once, then 2KB summaries. Cache cleared on logout (proxy intercepts logout tool). Keyed by username (not mysis_id) to support account switching.
+
 ## Non-obvious Patterns
 
 **Empty string triggers autonomous turn** (`internal/core/mysis.go:361-420`): `SendMessageFrom("", ...)` skips DB storage but processes turn. Used by `run()` loop for autonomous operation. Real messages always have content.

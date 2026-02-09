@@ -38,6 +38,11 @@ type Account struct {
 	Password string
 }
 
+type GameStateStore interface {
+	StoreGameStateSnapshot(username, toolName, content string, gameTick int64) error
+	DeleteGameStateSnapshotsForUsername(username string) error
+}
+
 // Proxy combines an upstream MCP client with local tool handlers.
 type Proxy struct {
 	mu              sync.RWMutex
@@ -46,6 +51,7 @@ type Proxy struct {
 	localHandlers   map[string]ToolHandler
 	contextHandlers map[string]ToolHandlerWithContext
 	accountStore    AccountStore
+	gameStateStore  GameStateStore
 }
 
 var (
@@ -100,6 +106,12 @@ func (p *Proxy) SetAccountStore(store AccountStore) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.accountStore = store
+}
+
+func (p *Proxy) SetGameStateStore(store GameStateStore) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.gameStateStore = store
 }
 
 // RegisterTool registers a local tool with the proxy.
@@ -347,6 +359,10 @@ func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResu
 
 	if username != "" {
 		_ = p.accountStore.ReleaseAccount(username)
+		// Clear game state cache on logout
+		if p.gameStateStore != nil {
+			_ = p.gameStateStore.DeleteGameStateSnapshotsForUsername(username)
+		}
 	}
 }
 
