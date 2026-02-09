@@ -4,10 +4,11 @@ CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
 
--- Schema v10 → v11 Migration:
--- Added accounts in_use/in_use_by consistency check.
+-- Schema v11 → v12 Migration:
+-- Renamed in_use_by to assigned_to (permanent account assignment)
+-- Removed in_use flag (redundant - assigned_to IS NOT NULL means in use)
 -- BREAKING CHANGE: Requires fresh database (make db-reset-accounts)
-INSERT OR REPLACE INTO schema_version (version) VALUES (11);
+INSERT OR REPLACE INTO schema_version (version) VALUES (12);
 
 CREATE TABLE IF NOT EXISTS myses (
     id TEXT PRIMARY KEY,
@@ -39,18 +40,13 @@ CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source);
 CREATE TABLE IF NOT EXISTS accounts (
 	username TEXT PRIMARY KEY,
 	password TEXT NOT NULL,
-	in_use BOOLEAN NOT NULL DEFAULT 0,
-	in_use_by TEXT,
+	assigned_to TEXT,
 	last_used_at DATETIME,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (in_use_by) REFERENCES myses(id) ON DELETE SET NULL,
-	CHECK (
-		(in_use = 0 AND in_use_by IS NULL) OR
-		(in_use = 1 AND in_use_by IS NOT NULL)
-	)
+	FOREIGN KEY (assigned_to) REFERENCES myses(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_accounts_in_use ON accounts(in_use);
+CREATE INDEX IF NOT EXISTS idx_accounts_assigned_to ON accounts(assigned_to);
 
 CREATE TABLE IF NOT EXISTS game_state_snapshots (
 	id TEXT PRIMARY KEY,

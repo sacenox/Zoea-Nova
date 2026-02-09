@@ -444,12 +444,24 @@ func (a *accountStoreAdapter) CreateAccount(username, password string, mysisID .
 	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
-func (a *accountStoreAdapter) MarkAccountInUse(username, mysisID string) error {
-	return a.store.MarkAccountInUse(username, mysisID)
+func (a *accountStoreAdapter) GetAccountByMysisID(mysisID string) (*mcp.Account, error) {
+	acc, err := a.store.GetAccountByMysisID(mysisID)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
+}
+
+func (a *accountStoreAdapter) AssignAccount(username, mysisID string) error {
+	return a.store.AssignAccount(username, mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAccount(username string) error {
 	return a.store.ReleaseAccount(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAccountByMysisID(mysisID string) error {
+	return a.store.ReleaseAccountByMysisID(mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAllAccounts() error {
@@ -1161,11 +1173,9 @@ func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
 		return
 	}
 
-	if m.currentAccountUsername != "" && m.currentAccountUsername != username {
-		if err := m.store.ReleaseAccount(m.currentAccountUsername); err != nil {
-			log.Error().Err(err).Str("username", m.currentAccountUsername).Msg("failed to release previous account")
-		}
-	}
+	// Under permanent assignment model, accounts don't switch
+	// If username differs from current, this is the first assignment
+	// No release needed - accounts are permanently assigned
 
 	m.currentAccountUsername = username
 	m.currentPassword = password
@@ -1173,8 +1183,8 @@ func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
 	m.mu.Unlock()
 
 	if storeRef != nil {
-		if err := storeRef.MarkAccountInUse(username, m.id); err != nil {
-			log.Error().Err(err).Str("username", username).Msg("failed to mark account in use")
+		if err := storeRef.AssignAccount(username, m.id); err != nil {
+			log.Error().Err(err).Str("username", username).Msg("failed to assign account")
 		}
 	}
 }
@@ -1183,14 +1193,13 @@ func (m *Mysis) releaseCurrentAccount() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.currentAccountUsername != "" {
-		if err := m.store.ReleaseAccount(m.currentAccountUsername); err != nil {
-			log.Error().Err(err).Str("username", m.currentAccountUsername).Msg("failed to release account")
-		}
-		m.currentAccountUsername = ""
-		m.currentPassword = ""
-		m.currentSessionID = ""
+	// Release the permanently assigned account for this mysis
+	if err := m.store.ReleaseAccountByMysisID(m.id); err != nil {
+		log.Error().Err(err).Str("mysis_id", m.id).Msg("failed to release account")
 	}
+	m.currentAccountUsername = ""
+	m.currentPassword = ""
+	m.currentSessionID = ""
 }
 
 // extractSessionID extracts session_id from tool result content

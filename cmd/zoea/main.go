@@ -249,12 +249,24 @@ func (a *accountStoreAdapter) CreateAccount(username, password string, mysisID .
 	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
 }
 
-func (a *accountStoreAdapter) MarkAccountInUse(username, mysisID string) error {
-	return a.store.MarkAccountInUse(username, mysisID)
+func (a *accountStoreAdapter) GetAccountByMysisID(mysisID string) (*mcp.Account, error) {
+	acc, err := a.store.GetAccountByMysisID(mysisID)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Account{Username: acc.Username, Password: acc.Password}, nil
+}
+
+func (a *accountStoreAdapter) AssignAccount(username, mysisID string) error {
+	return a.store.AssignAccount(username, mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAccount(username string) error {
 	return a.store.ReleaseAccount(username)
+}
+
+func (a *accountStoreAdapter) ReleaseAccountByMysisID(mysisID string) error {
+	return a.store.ReleaseAccountByMysisID(mysisID)
 }
 
 func (a *accountStoreAdapter) ReleaseAllAccounts() error {

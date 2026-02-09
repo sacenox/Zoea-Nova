@@ -28,8 +28,10 @@ type ToolHandlerWithContext func(ctx context.Context, caller CallerContext, argu
 
 type AccountStore interface {
 	CreateAccount(username, password string, mysisID ...string) (*Account, error)
-	MarkAccountInUse(username, mysisID string) error
+	GetAccountByMysisID(mysisID string) (*Account, error)
+	AssignAccount(username, mysisID string) error
 	ReleaseAccount(username string) error
+	ReleaseAccountByMysisID(mysisID string) error
 	ReleaseAllAccounts() error
 }
 
@@ -177,26 +179,44 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 
 	// Fall back to upstream
 	if p.upstream != nil {
-		// Intercept register - if we have available accounts, login with one instead
+		// Intercept register - check if mysis already has an assigned account
 		if name == "register" && accountStore != nil {
+			// Check if mysis already has a permanently assigned account
+			if assignedAccount, err := accountStore.GetAccountByMysisID(caller.MysisID); err == nil && assignedAccount != nil {
+				// Mysis already has an account - return error
+				errorMsg := fmt.Sprintf("Already have account. Use login(username=\"%s\", password=\"...\").", assignedAccount.Username)
+				return &ToolResult{
+					Content: []ContentBlock{{Type: "text", Text: errorMsg}},
+					IsError: true,
+				}, nil
+			}
+
+			// Try to claim an available account from pool
 			if poolAccount := p.tryClaimPoolAccount(caller.MysisID); poolAccount != nil {
-				// Login with pool account instead of registering
+				// Account claimed - login with pool account to get real session
 				loginArgs := map[string]interface{}{
 					"username": poolAccount.Username,
 					"password": poolAccount.Password,
 				}
 				result, err := p.callUpstreamWithRetry(ctx, "login", loginArgs)
 				if result != nil && !result.IsError {
-					// Inject password into result so mysis can extract it
-					// (login response doesn't include password, but register does)
+					// Transform login response to look like register response
+					// (inject password field so mysis can extract it)
 					p.injectPasswordIntoResult(result, poolAccount.Password)
-
-					if accountStore != nil {
-						// Mark account as in use
-						loginArgsJSON, _ := json.Marshal(loginArgs)
-						p.interceptAuthTools("login", loginArgsJSON, result, caller.MysisID)
-					}
 				}
+				return result, err
+			}
+		}
+
+		// Intercept login - substitute credentials with assigned account if mysis has one
+		if name == "login" && accountStore != nil {
+			if assignedAccount, err := accountStore.GetAccountByMysisID(caller.MysisID); err == nil && assignedAccount != nil {
+				// Mysis has assigned account - substitute credentials
+				loginArgs := map[string]interface{}{
+					"username": assignedAccount.Username,
+					"password": assignedAccount.Password,
+				}
+				result, err := p.callUpstreamWithRetry(ctx, "login", loginArgs)
 				return result, err
 			}
 		}
@@ -348,7 +368,7 @@ func (p *Proxy) handleLoginResponse(arguments json.RawMessage, result *ToolResul
 	}
 
 	if args.Username != "" {
-		_ = p.accountStore.MarkAccountInUse(args.Username, mysisID)
+		_ = p.accountStore.AssignAccount(args.Username, mysisID)
 	}
 }
 
@@ -364,8 +384,7 @@ func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResu
 	}
 
 	if username != "" {
-		_ = p.accountStore.ReleaseAccount(username)
-		// Clear game state cache on logout
+		// Clear game state cache on logout (but keep account assignment)
 		if p.gameStateStore != nil {
 			_ = p.gameStateStore.DeleteGameStateSnapshotsForUsername(username)
 		}
