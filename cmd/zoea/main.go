@@ -285,19 +285,6 @@ type commanderAdapter struct {
 	commander *core.Commander
 }
 
-func (a *commanderAdapter) ListMyses() []mcp.MysisInfo {
-	myses := a.commander.ListMyses()
-	result := make([]mcp.MysisInfo, len(myses))
-	for i, mysis := range myses {
-		result[i] = mcp.MysisInfo{
-			ID:        mysis.ID(),
-			Name:      mysis.Name(),
-			LastError: mysis.LastError(),
-		}
-	}
-	return result
-}
-
 func (a *commanderAdapter) MysisCount() int {
 	return a.commander.MysisCount()
 }
@@ -357,34 +344,6 @@ func (a *commanderAdapter) SearchReasoning(mysisID, query string, limit int) ([]
 		}
 	}
 	return results, nil
-}
-
-func (a *commanderAdapter) SearchBroadcasts(query string, limit int) ([]mcp.BroadcastResult, error) {
-	broadcasts, err := a.commander.Store().SearchBroadcasts(query, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	results := make([]mcp.BroadcastResult, len(broadcasts))
-	for i, b := range broadcasts {
-		results[i] = mcp.BroadcastResult{
-			Content:   b.Content,
-			CreatedAt: b.CreatedAt.Format("2006-01-02 15:04:05"),
-		}
-	}
-	return results, nil
-}
-
-func (a *commanderAdapter) ClaimAccount() (mcp.AccountInfo, error) {
-	acc, err := a.commander.Store().ClaimAccount()
-	if err != nil {
-		return mcp.AccountInfo{}, err
-	}
-
-	return mcp.AccountInfo{
-		Username: acc.Username,
-		Password: acc.Password,
-	}, nil
 }
 
 // runMCPTest tests the MCP connection and tool calling.
@@ -454,17 +413,7 @@ func runMCPTest(configPath string) {
 		fmt.Printf("\nTotal: %d tools (%d local, %d upstream)\n", len(tools), localCount, upstreamCount)
 	}
 
-	// Test calling a local tool
-	fmt.Println("\n--- Testing Local Tool Call ---")
-	fmt.Println("Calling: zoea_swarm_status")
-	result, err := mcpProxy.CallTool(ctx, mcp.CallerContext{}, "zoea_swarm_status", nil)
-	if err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-	} else if result.IsError {
-		fmt.Printf("TOOL ERROR: %s\n", result.Content[0].Text)
-	} else {
-		fmt.Printf("OK: %s\n", result.Content[0].Text)
-	}
+	// Test calling a local tool - removed zoea_swarm_status as it has been deleted
 
 	// Test calling an upstream tool if available
 	if mcpProxy.HasUpstream() {
@@ -502,10 +451,6 @@ func runMCPTest(configPath string) {
 // mockOrchestrator is a simple orchestrator for testing.
 type mockOrchestrator struct{}
 
-func (m *mockOrchestrator) ListMyses() []mcp.MysisInfo {
-	return []mcp.MysisInfo{}
-}
-
 func (m *mockOrchestrator) MysisCount() int {
 	return 0
 }
@@ -541,12 +486,4 @@ func (m *mockOrchestrator) SearchMessages(mysisID, query string, limit int) ([]m
 
 func (m *mockOrchestrator) SearchReasoning(mysisID, query string, limit int) ([]mcp.ReasoningResult, error) {
 	return []mcp.ReasoningResult{}, nil
-}
-
-func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]mcp.BroadcastResult, error) {
-	return []mcp.BroadcastResult{}, nil
-}
-
-func (m *mockOrchestrator) ClaimAccount() (mcp.AccountInfo, error) {
-	return mcp.AccountInfo{}, fmt.Errorf("not available in test mode")
 }

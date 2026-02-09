@@ -436,7 +436,7 @@ func TestContinuePromptContainsSearchReminder(t *testing.T) {
 // TestContinuePromptAddsDriftReminder removed - buildContinuePrompt() method removed.
 // Drift reminders are now part of the system prompt, not dynamically generated.
 
-func TestZoeaListMysesCompaction(t *testing.T) {
+func TestSnapshotCompaction(t *testing.T) {
 	s, bus, cleanup := setupMysisTest(t)
 	defer cleanup()
 
@@ -447,12 +447,12 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	// Add system prompt
 	s.AddMemory(stored.ID, store.MemoryRoleSystem, store.MemorySourceSystem, "System prompt", "", "")
 
-	// Add multiple zoea_list_myses tool results (should be compacted to keep only the latest)
+	// Add multiple get_status tool results (should be compacted to keep only the latest)
 	for i := 0; i < 5; i++ {
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "list myses", "", "")
-		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_1:zoea_list_myses:{}", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceDirect, "check status", "", "")
+		s.AddMemory(stored.ID, store.MemoryRoleAssistant, store.MemorySourceLLM, constants.ToolCallStoragePrefix+"call_1:get_status:{}", "", "")
 		s.AddMemory(stored.ID, store.MemoryRoleTool, store.MemorySourceTool,
-			fmt.Sprintf(`call_1:[{"id":"mysis-%d","name":"test-%d"}]`, i, i), "", "")
+			fmt.Sprintf(`call_1:{"status":"active","iteration":%d}`, i), "", "")
 	}
 
 	// Get context memories
@@ -462,25 +462,25 @@ func TestZoeaListMysesCompaction(t *testing.T) {
 	}
 
 	// With turn-aware composition + snapshot compression:
-	// - Historical context: latest tool loop from turns 0-3 (mysis-3)
-	// - Current turn: all of turn 4 (user + assistant + tool for mysis-4)
-	// - Compression: zoea_list_myses is a snapshot tool, so only the LATEST is kept (mysis-4)
-	// So we expect 1 tool result: mysis-4 (most recent)
-	listResults := 0
-	hasMysis4 := false
+	// - Historical context: latest tool loop from turns 0-3 (iteration 3)
+	// - Current turn: all of turn 4 (user + assistant + tool for iteration 4)
+	// - Compression: get_status is a snapshot tool, so only the LATEST is kept (iteration 4)
+	// So we expect 1 tool result: iteration 4 (most recent)
+	statusResults := 0
+	hasIteration4 := false
 	for _, m := range memories {
-		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"id":"mysis-`) {
-			listResults++
-			if strings.Contains(m.Content, `"id":"mysis-4"`) {
-				hasMysis4 = true
+		if m.Role == store.MemoryRoleTool && strings.Contains(m.Content, `"iteration":`) {
+			statusResults++
+			if strings.Contains(m.Content, `"iteration":4`) {
+				hasIteration4 = true
 			}
 		}
 	}
-	if listResults != 1 {
-		t.Errorf("expected 1 zoea_list_myses result after compression, got %d", listResults)
+	if statusResults != 1 {
+		t.Errorf("expected 1 get_status result after compression, got %d", statusResults)
 	}
-	if !hasMysis4 {
-		t.Error("expected mysis-4 result (latest snapshot after compression)")
+	if !hasIteration4 {
+		t.Error("expected iteration 4 result (latest snapshot after compression)")
 	}
 }
 

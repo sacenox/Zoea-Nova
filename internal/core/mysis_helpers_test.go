@@ -86,8 +86,6 @@ func TestIsSnapshotTool(t *testing.T) {
 		{"get_prefix", "get_status", true},
 		{"get_system", "get_system", true},
 		{"get_anything", "get_foo", true},
-		{"zoea_swarm_status", "zoea_swarm_status", true},
-		{"zoea_list_myses", "zoea_list_myses", true},
 		{"action_tool", "move_to", false},
 		{"mine_action", "mine_resources", false},
 		{"empty", "", false},
@@ -112,7 +110,6 @@ func TestExtractToolNameFromResult(t *testing.T) {
 	toolCallNames := map[string]string{
 		"call_123": "get_status",
 		"call_456": "mine_resources",
-		"call_789": "zoea_swarm_status",
 	}
 
 	tests := []struct {

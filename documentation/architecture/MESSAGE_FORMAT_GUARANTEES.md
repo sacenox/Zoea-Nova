@@ -52,13 +52,14 @@ When no real user message exists in the database, `getContextMemories()` adds a 
 ### Real User Messages (Reset Counter)
 
 1. **Commander Broadcast** - User types `b` in TUI and sends message to all myses
-2. **Mysis Broadcast** - One mysis uses `zoea_broadcast` tool to message swarm
-3. **Direct Message** - User types `m` in TUI and targets specific mysis
+2. **Direct Message** - User types `m` in TUI and targets specific mysis
 
 All real user messages:
 - Are stored in database with `role=user` and `source=broadcast|direct`
 - Reset encouragement counter to 0
 - Start idle myses automatically (broadcasts) or via API call (direct)
+
+**Note:** Myses cannot broadcast to each other. Only the Commander (via TUI) can send broadcast messages to the swarm.
 
 ### Synthetic Messages (Increment Counter)
 
@@ -254,7 +255,7 @@ Context is limited to the most recent 20 messages (`MaxContextMessages = 20`). W
 When `findLastUserPromptIndex` returns -1 (no user message in sliding window), `getContextMemories` performs a secondary check:
 
 1. Query database for most recent broadcast: `GetMostRecentBroadcast(mysisID)`
-2. If broadcast exists (even outside window OR from another mysis), include it in context
+2. If broadcast exists (even outside window), include it in context
 3. Reset encouragement counter to 0
 4. Mysis continues running with mission directive
 
@@ -262,8 +263,8 @@ When `findLastUserPromptIndex` returns -1 (no user message in sliding window), `
 
 **Global Fallback:** `GetMostRecentBroadcast` has two-tier lookup:
 1. First, search for broadcasts sent to this specific mysis
-2. If none found, search for most recent broadcast in entire system (global swarm mission)
-3. This ensures new myses created after a broadcast inherit the current mission
+2. If none found, search for most recent Commander broadcast in entire system (global swarm mission)
+3. This ensures new myses created after a Commander broadcast inherit the current mission
 
 **Benefits:**
 - Ensures autonomous operation: myses stay running as long as broadcasts exist

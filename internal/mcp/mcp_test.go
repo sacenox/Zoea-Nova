@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -175,16 +174,10 @@ func TestClientWithMockServer(t *testing.T) {
 }
 
 // mockOrchestrator is a test implementation of the Orchestrator interface.
-type mockOrchestrator struct {
-	myses []MysisInfo
-}
-
-func (m *mockOrchestrator) ListMyses() []MysisInfo {
-	return m.myses
-}
+type mockOrchestrator struct{}
 
 func (m *mockOrchestrator) MysisCount() int {
-	return len(m.myses)
+	return 2
 }
 
 func (m *mockOrchestrator) MaxMyses() int {
@@ -192,27 +185,17 @@ func (m *mockOrchestrator) MaxMyses() int {
 }
 
 func (m *mockOrchestrator) GetStateCounts() map[string]int {
-	counts := map[string]int{
-		"running": 0,
+	return map[string]int{
+		"running": 2,
 		"idle":    0,
 		"stopped": 0,
 		"errored": 0,
 	}
-	for _, mysis := range m.myses {
-		if mysis.LastError != nil {
-			counts["errored"]++
-		} else {
-			counts["running"]++
-		}
-	}
-	return counts
 }
 
 func (m *mockOrchestrator) SendMessageAsync(mysisID, message string) error {
-	for _, mysis := range m.myses {
-		if mysis.ID == mysisID {
-			return nil
-		}
+	if mysisID == "mysis-1" || mysisID == "mysis-2" {
+		return nil
 	}
 	return errors.New("mysis not found")
 }
@@ -233,21 +216,9 @@ func (m *mockOrchestrator) SearchReasoning(mysisID, query string, limit int) ([]
 	return []ReasoningResult{}, nil
 }
 
-func (m *mockOrchestrator) SearchBroadcasts(query string, limit int) ([]BroadcastResult, error) {
-	return []BroadcastResult{}, nil
-}
-
-func (m *mockOrchestrator) ClaimAccount() (AccountInfo, error) {
-	return AccountInfo{}, fmt.Errorf("not available in test mode")
-}
-
 func TestOrchestratorTools(t *testing.T) {
 	// Create mock orchestrator
-	orchestrator := &mockOrchestrator{
-		myses: []MysisInfo{
-			{ID: "mysis-1", Name: "test-mysis"},
-		},
-	}
+	orchestrator := &mockOrchestrator{}
 
 	// Create proxy and register tools
 	proxy := NewProxy(nil)
@@ -255,10 +226,11 @@ func TestOrchestratorTools(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test zoea_list_myses
-	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
+	// Test zoea_search_messages
+	args := json.RawMessage(`{"mysis_id": "mysis-1", "query": "test"}`)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_search_messages", args)
 	if err != nil {
-		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
+		t.Fatalf("CallTool(zoea_search_messages) error: %v", err)
 	}
 	if result.IsError {
 		t.Errorf("unexpected error: %s", result.Content[0].Text)
@@ -266,14 +238,9 @@ func TestOrchestratorTools(t *testing.T) {
 
 }
 
-func TestZoeaListMysesPayloadMinimal(t *testing.T) {
-	// Create mock orchestrator with test myses
-	orchestrator := &mockOrchestrator{
-		myses: []MysisInfo{
-			{ID: "mysis-1", Name: "test-mysis-1"},
-			{ID: "mysis-2", Name: "test-mysis-2"},
-		},
-	}
+func TestZoeaSearchMessagesPayload(t *testing.T) {
+	// Create mock orchestrator
+	orchestrator := &mockOrchestrator{}
 
 	// Create proxy and register tools
 	proxy := NewProxy(nil)
@@ -281,47 +248,18 @@ func TestZoeaListMysesPayloadMinimal(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Call zoea_list_myses
-	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_list_myses", nil)
+	// Call zoea_search_messages
+	args := json.RawMessage(`{"mysis_id": "mysis-1", "query": "test"}`)
+	result, err := proxy.CallTool(ctx, CallerContext{}, "zoea_search_messages", args)
 	if err != nil {
-		t.Fatalf("CallTool(zoea_list_myses) error: %v", err)
+		t.Fatalf("CallTool(zoea_search_messages) error: %v", err)
 	}
 	if result.IsError {
 		t.Fatalf("unexpected error: %s", result.Content[0].Text)
 	}
 
-	// Parse JSON result
-	var myses []map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &myses); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-
-	// Verify we have 2 myses
-	if len(myses) != 2 {
-		t.Fatalf("expected 2 myses, got %d", len(myses))
-	}
-
-	// Verify each mysis has only id and name fields
-	for i, mysis := range myses {
-		// Check required fields are present
-		if _, ok := mysis["id"]; !ok {
-			t.Errorf("mysis %d missing 'id' field", i)
-		}
-		if _, ok := mysis["name"]; !ok {
-			t.Errorf("mysis %d missing 'name' field", i)
-		}
-
-		// Check bloat fields are NOT present
-		if _, ok := mysis["provider"]; ok {
-			t.Errorf("mysis %d should not have 'provider' field (bloat)", i)
-		}
-		if _, ok := mysis["state"]; ok {
-			t.Errorf("mysis %d should not have 'state' field (bloat)", i)
-		}
-
-		// Verify only 2 fields total
-		if len(mysis) != 2 {
-			t.Errorf("mysis %d has %d fields, expected exactly 2 (id, name)", i, len(mysis))
-		}
+	// Verify we get a response (empty results are expected with empty mock)
+	if len(result.Content) == 0 {
+		t.Fatal("expected content in result")
 	}
 }

@@ -73,38 +73,6 @@ func TestSearchMemories(t *testing.T) {
 	}
 }
 
-func TestSearchBroadcasts(t *testing.T) {
-	s, cleanup := setupMemoriesTest(t)
-	defer cleanup()
-
-	mysis1, _ := s.CreateMysis("mysis1", "mock", "model", 0.7)
-	mysis2, _ := s.CreateMysis("mysis2", "mock", "model", 0.7)
-
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 1", "", "")
-	s.AddMemory(mysis2.ID, MemoryRoleUser, MemorySourceBroadcast, "Broadcast message 2", "", "")
-	s.AddMemory(mysis1.ID, MemoryRoleUser, MemorySourceDirect, "Direct message", "", "")
-
-	// Search for "Broadcast"
-	results, err := s.SearchBroadcasts("Broadcast", 10)
-	if err != nil {
-		t.Fatalf("SearchBroadcasts() error: %v", err)
-	}
-	// Should find both broadcast messages
-	if len(results) != 2 {
-		t.Errorf("expected 2 results, got %d", len(results))
-	}
-
-	// Search for "Direct"
-	results, err = s.SearchBroadcasts("Direct", 10)
-	if err != nil {
-		t.Fatalf("SearchBroadcasts() error: %v", err)
-	}
-	// Should NOT find direct message
-	if len(results) != 0 {
-		t.Errorf("expected 0 results, got %d", len(results))
-	}
-}
-
 func TestSearchReasoning(t *testing.T) {
 	s, cleanup := setupMemoriesTest(t)
 	defer cleanup()

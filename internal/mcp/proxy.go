@@ -94,10 +94,6 @@ func (p *Proxy) ListTools(ctx context.Context) ([]Tool, error) {
 	// Start with local tools
 	tools := make([]Tool, 0, len(p.localTools))
 	for _, t := range p.localTools {
-		// Filter out zoea_claim_account - not exposed to myses
-		if t.Name == "zoea_claim_account" {
-			continue
-		}
 		tools = append(tools, t)
 	}
 

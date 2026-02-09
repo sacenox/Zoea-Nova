@@ -22,7 +22,7 @@ Myses need game accounts to play SpaceMolt. We maintain a pool of accounts to co
 | Calls `register(username, empire)` | Pool is empty | Proxy passes to game server, stores new account | `session_id` (actually registered) |
 | Calls `login(username, password)` | Any | Proxy passes to game server, marks account in_use | `session_id` or error |
 | Calls `logout()` | Any | Proxy passes to game server, releases account | Success |
-| Lists tools | Any | `zoea_claim_account` filtered out | Only game tools visible |
+| Lists tools | Any | N/A - `zoea_claim_account` removed entirely | Only game tools visible |
 
 ---
 
@@ -33,7 +33,7 @@ Myses need game accounts to play SpaceMolt. We maintain a pool of accounts to co
 3. **Login passthrough:** Login calls always go to game server (no interception)
 4. **Account locking:** Successful login (real or substituted) marks account as in_use
 5. **Account release:** Logout releases account back to pool
-6. **Tool filtering:** `zoea_claim_account` hidden from tool list
+6. **Internal claiming:** Account claiming is handled internally by proxy shadowing `login`/`register` - no `zoea_claim_account` tool exists
 
 ---
 
@@ -60,7 +60,7 @@ Mysis: login() → Game: session_id → Proxy: mark_in_use → Mysis: PLAYING
 | Pool empty, mysis calls register | Mysis gets session_id, pool has 1 account (the new one) |
 | Mysis calls login with pool credentials | Mysis gets session_id, account marked in_use |
 | Mysis calls logout | Account released, pool gains 1 available account |
-| Mysis lists tools | `zoea_claim_account` not in list |
+| Mysis lists tools | Only game tools visible (no `zoea_claim_account` - tool removed) |
 
 ---
 
@@ -77,4 +77,4 @@ Mysis: login() → Game: session_id → Proxy: mark_in_use → Mysis: PLAYING
 - Token budget management
 - Structural JSON compaction
 - Tool call merging
-- Review of other `zoea_*` tools
+- Review of other `zoea_*` tools (note: `zoea_claim_account` was removed entirely)

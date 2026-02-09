@@ -220,19 +220,6 @@ Search a Mysis's past messages by text content.
 
 Returns matching messages with role, source, content, and timestamp.
 
-### zoea_search_broadcasts
-
-Search past swarm broadcasts by text content.
-
-```json
-{
-  "query": "enemy spotted",
-  "limit": 20
-}
-```
-
-Returns matching broadcasts with content and timestamp.
-
 ### zoea_search_reasoning
 
 Search a Mysis's past reasoning content by text.
@@ -299,9 +286,6 @@ func (s *Store) GetRecentMemories(mysisID string, limit int) ([]*Memory, error)
 
 // SearchMemories searches memories by content text (case-sensitive).
 func (s *Store) SearchMemories(mysisID, query string, limit int) ([]*Memory, error)
-
-// SearchBroadcasts searches broadcast messages by content text (case-sensitive).
-func (s *Store) SearchBroadcasts(query string, limit int) ([]*BroadcastMessage, error)
 ```
 
 ## Tradeoffs

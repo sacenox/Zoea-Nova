@@ -81,9 +81,9 @@ Active todo list of known issues, bugs, and planned improvements for Zoea Nova.
 
 - [x] **Track broadcast sender and suppress self-response** (2026-02-05) - Added sender_id to memories (schema v8), excluded sender from broadcast recipients, and updated focus view labels to distinguish swarm broadcasts from self broadcasts.
 
-- [x] **Tool payload bloat removal** (2026-02-04) - Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses).
+- [x] **Tool payload bloat removal** (2026-02-04) - Removed `provider` and `state` fields from MysisInfo struct and `zoea_list_myses` tool payload. Added `GetStateCounts()` method to Commander for `zoea_swarm_status`. Saves ~22 tokens per mysis, ~352 tokens for full swarm (16 myses). **Note:** Both `zoea_list_myses` and `zoea_swarm_status` tools were later removed entirely.
 
-- [x] **Context snapshot compaction** (2026-02-04) - Implemented snapshot compaction in `getContextMemories()` to keep only most recent result for each snapshot tool (get_ship, get_system, get_poi, get_nearby, get_cargo, zoea_swarm_status, zoea_list_myses). Added search tool reminders to SystemPrompt and ContinuePrompt. See `documentation/architecture/CONTEXT_COMPRESSION.md` for details.
+- [x] **Context snapshot compaction** (2026-02-04) - Implemented snapshot compaction in `getContextMemories()` to keep only most recent result for each snapshot tool (get_ship, get_system, get_poi, get_nearby, get_cargo). Added search tool reminders to SystemPrompt and ContinuePrompt. See `documentation/architecture/CONTEXT_COMPRESSION.md` for details.
 
 - [x] **Database reset with account backup** (2026-02-05) - Added `make db-reset-accounts` target to safely wipe database while preserving account credentials via export/import cycle.
 

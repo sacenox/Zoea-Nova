@@ -32,8 +32,6 @@ Recommendations
 
 - network activity indicator revision
 
-- remove zoea_list_mysis()
-
 - Investigate no content from AI messages in coversation log. only happens ocasionally.
 
 ```

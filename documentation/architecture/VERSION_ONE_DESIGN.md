@@ -128,7 +128,7 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 | Feature                  | Documented           | Implemented                  | Tested    | Match?        | Notes                              |
 | ------------------------ | -------------------- | ---------------------------- | --------- | ------------- | ---------------------------------- |
 | **Proxy architecture**   | ✅ Documented        | ✅ `proxy.go`                | ✅ Tested | ✅ YES        | -                                  |
-| **Local tools**          | ⚠️ Partial           | ✅ 7 tools                   | ✅ Tested | ⚠️ INCOMPLETE | Not all listed in docs             |
+| **Local tools**          | ⚠️ Partial           | ✅ 2 tools                   | ✅ Tested | ⚠️ INCOMPLETE | Not all listed in docs             |
 | **Upstream tools**       | ✅ Dynamic discovery | ✅ `ListTools()`             | ✅ Tested | ✅ YES        | -                                  |
 | **Offline mode**         | ✅ Documented        | ✅ `stub.go`                 | ✅ Tested | ✅ YES        | -                                  |
 | **Stub tools**           | ⚠️ 4 tools listed    | ✅ 5 tools                   | ✅ Tested | ⚠️ MISSING    | `get_notifications` not documented |
@@ -145,7 +145,7 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
    - **Fix:** Add `get_notifications` to `OFFLINE_MODE.md`
 
 2. **Local Tools Not Listed**
-   - **Implemented:** 7 `zoea_*` tools (list_myses, send_message, broadcast, search_messages, etc.)
+   - **Implemented:** 2 `zoea_*` tools (search_messages, search_reasoning)
    - **Documentation:** Not listed in offline mode docs
    - **Fix:** Add section listing all local tools
 
@@ -224,7 +224,7 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
    - **Fix:** Create `BROADCAST_ARCHITECTURE.md` explaining storage model
 
 3. **Search Methods Undocumented**
-   - **Implementation:** `SearchMemories`, `SearchReasoning`, `SearchBroadcasts`
+   - **Implementation:** `SearchMemories`, `SearchReasoning`
    - **Fix:** Document in store API reference
 
 4. **Two-Phase Account Claiming Undocumented**

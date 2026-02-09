@@ -1502,12 +1502,7 @@ func (m *Mysis) isSnapshotTool(toolName string) bool {
 	if strings.HasPrefix(toolName, "get_") {
 		return true
 	}
-	switch toolName {
-	case "zoea_swarm_status", "zoea_list_myses":
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 // run is the mysis main processing loop.
