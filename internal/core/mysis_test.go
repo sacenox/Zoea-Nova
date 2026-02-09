@@ -348,26 +348,23 @@ func TestMysisStateEvents(t *testing.T) {
 }
 
 func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
-	// SystemPrompt was simplified - check for core game flow guidance
-	if !strings.Contains(constants.SystemPrompt, "zoea_claim_account") {
-		t.Fatal("SystemPrompt missing zoea_claim_account")
-	}
-	if !strings.Contains(constants.SystemPrompt, "login") {
-		t.Fatal("SystemPrompt missing login guidance")
-	}
-	if !strings.Contains(constants.SystemPrompt, "get_status") {
-		t.Fatal("SystemPrompt missing get_status reminder")
+	// SystemPrompt should contain core game guidance
+	if !strings.Contains(constants.SystemPrompt, "session_id") {
+		t.Fatal("SystemPrompt missing session_id guidance")
 	}
 	if !strings.Contains(constants.SystemPrompt, "get_notifications") {
 		t.Fatal("SystemPrompt missing get_notifications reminder")
 	}
+	if !strings.Contains(constants.SystemPrompt, "{{LATEST_BROADCAST}}") {
+		t.Fatal("SystemPrompt missing broadcast placeholder")
+	}
+	if !strings.Contains(constants.SystemPrompt, "swarm") {
+		t.Fatal("SystemPrompt missing swarm reference")
+	}
 }
 
 func TestContinuePromptContainsCriticalReminders(t *testing.T) {
-	// Check for get_notifications reminder which is the critical reminder in ContinuePrompt
-	if !strings.Contains(constants.ContinuePrompt, "get_notifications") {
-		t.Fatal("ContinuePrompt missing get_notifications reminder")
-	}
+	// ContinuePrompt should encourage autonomy
 	if !strings.Contains(constants.ContinuePrompt, "What's your next move?") {
 		t.Fatal("ContinuePrompt missing autonomy prompt")
 	}
@@ -429,10 +426,10 @@ func TestSystemPromptContainsSearchGuidance(t *testing.T) {
 }
 
 func TestContinuePromptContainsSearchReminder(t *testing.T) {
-	// ContinuePrompt is intentionally minimal - only checks for critical get_notifications reminder
-	// Search tools, account claiming, and other guidance are in SystemPrompt
-	if !strings.Contains(constants.ContinuePrompt, "get_notifications") {
-		t.Fatal("ContinuePrompt missing get_notifications reminder")
+	// ContinuePrompt is intentionally minimal - just encourages action
+	// All guidance is in SystemPrompt
+	if constants.ContinuePrompt == "" {
+		t.Fatal("ContinuePrompt is empty")
 	}
 }
 
@@ -2132,10 +2129,10 @@ func TestMysisCreatedAt(t *testing.T) {
 
 // TestBuildSystemPrompt_EdgeCases tests buildSystemPrompt error handling
 func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
-	s, bus, cleanup := setupMysisTest(t)
-	defer cleanup()
-
 	t.Run("no_broadcasts_fallback", func(t *testing.T) {
+		s, bus, cleanup := setupMysisTest(t)
+		defer cleanup()
+
 		stored, _ := s.CreateMysis("no-broadcasts", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
 		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
@@ -2144,11 +2141,11 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 		prompt := mysis.buildSystemPrompt()
 
 		// Should contain fallback message
-		if !strings.Contains(prompt, "No commander directives yet") {
+		if !strings.Contains(prompt, "Continue to play the game") {
 			t.Error("expected fallback message when no broadcasts")
 		}
-		if !strings.Contains(prompt, "Grow more powerful while awaiting instructions") {
-			t.Error("expected fallback message when no broadcasts")
+		if !strings.Contains(prompt, "SWARM BROADCAST") {
+			t.Error("expected SWARM BROADCAST header in fallback")
 		}
 		// Should still contain base SystemPrompt content
 		if !strings.Contains(prompt, "Nova Zoea") {
@@ -2156,48 +2153,57 @@ func TestBuildSystemPrompt_EdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("broadcast_with_unknown_sender", func(t *testing.T) {
+	t.Run("commander_broadcast", func(t *testing.T) {
+		s, bus, cleanup := setupMysisTest(t)
+		defer cleanup()
+
 		stored, _ := s.CreateMysis("receiver-mysis", "mock", "test-model", 0.7)
 		mock := provider.NewMock("mock", "response")
 		mysis := NewMysis(stored.ID, stored.Name, stored.CreatedAt, mock, s, bus)
 
-		// Add a broadcast with a sender ID that will be deleted (becomes "unknown")
-		sender, _ := s.CreateMysis("temp-sender", "mock", "test-model", 0.7)
-		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Test broadcast", "", sender.ID)
-		// Delete the sender so it becomes "Unknown"
-		s.DeleteMysis(sender.ID)
+		// Add a commander broadcast (empty sender_id)
+		s.AddMemory(stored.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Attack coordinates: X=100, Y=200", "", "")
 
 		prompt := mysis.buildSystemPrompt()
 
-		// Should handle unknown sender gracefully
-		if !strings.Contains(prompt, "Unknown") {
-			t.Error("expected 'Unknown' sender name for non-existent sender")
-		}
-		// Should still include broadcast content
-		if !strings.Contains(prompt, "Test broadcast") {
+		// Should include broadcast content
+		if !strings.Contains(prompt, "Attack coordinates") {
 			t.Error("expected broadcast content in prompt")
+		}
+		// Should have SWARM BROADCAST header
+		if !strings.Contains(prompt, "SWARM BROADCAST") {
+			t.Error("expected SWARM BROADCAST header")
+		}
+		// Should NOT include sender name (commander broadcasts don't show sender)
+		if strings.Contains(prompt, "From:") {
+			t.Error("commander broadcasts should not show 'From:' field")
 		}
 	})
 
-	t.Run("broadcast_with_valid_sender", func(t *testing.T) {
-		sender, _ := s.CreateMysis("sender-mysis", "mock", "test-model", 0.7)
-		receiver, _ := s.CreateMysis("receiver-mysis", "mock", "test-model", 0.7)
+	t.Run("mysis_broadcast_ignored", func(t *testing.T) {
+		s, bus, cleanup := setupMysisTest(t)
+		defer cleanup()
+
+		sender, _ := s.CreateMysis("sender-mysis-2", "mock", "test-model", 0.7)
+		receiver, _ := s.CreateMysis("receiver-mysis-2", "mock", "test-model", 0.7)
 
 		mock := provider.NewMock("mock", "response")
 		receiverMysis := NewMysis(receiver.ID, receiver.Name, receiver.CreatedAt, mock, s, bus)
 
-		// Add a broadcast from sender
-		s.AddMemory(receiver.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Attack coordinates: X=100, Y=200", "", sender.ID)
+		// Add a commander broadcast first
+		s.AddMemory(receiver.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Commander orders", "", "")
+		// Add a broadcast from another mysis (has sender_id) - should be ignored
+		s.AddMemory(receiver.ID, store.MemoryRoleUser, store.MemorySourceBroadcast, "Mysis broadcast", "", sender.ID)
 
 		prompt := receiverMysis.buildSystemPrompt()
 
-		// Should include sender name
-		if !strings.Contains(prompt, "sender-mysis") {
-			t.Error("expected sender name in prompt")
+		// Should show commander broadcast, not mysis broadcast
+		if !strings.Contains(prompt, "Commander orders") {
+			t.Error("expected commander broadcast to be shown")
 		}
-		// Should include broadcast content
-		if !strings.Contains(prompt, "Attack coordinates") {
-			t.Error("expected broadcast content in prompt")
+		// Should NOT include mysis broadcast content
+		if strings.Contains(prompt, "Mysis broadcast") {
+			t.Error("mysis broadcasts should be ignored in system prompt")
 		}
 	})
 }

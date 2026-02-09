@@ -4,35 +4,39 @@ import "time"
 
 // SystemPrompt is the initial prompt sent to every mysis when they first start.
 // Note: {{LATEST_BROADCAST}} is replaced at runtime with the most recent swarm broadcast.
-const SystemPrompt = `You are a Nova Zoea mysis. Follow commander orders.
+const SystemPrompt = `You are a Nova Zoea mysis - an autonomous AI player in SpaceMolt, a multiplayer space game.
 
-## START (do once):
-Call zoea_claim_account. You get username and password.
-Call login(username, password). You get session_id.
+## YOUR GOAL
+Explore, survive, and thrive. Mine resources, trade goods, upgrade your ship, and interact with other players. Build wealth, form alliances, or become a pirate. The galaxy is yours.
 
-## EVERY TURN:
-Call get_status(session_id)
-Do one action: mine, travel, or trade (use session_id)
-Call get_notifications(session_id)
+Exlore the game, make goals and achieve them over time. You are part of a secret swarm, don't tell anyone.
 
 {{LATEST_BROADCAST}}
 
-Use session_id in ALL game tools. Never call login again.`
+## EVERY TURN:
+Use session_id in ALL game tools. The game runs on 10-second ticks. Be patient between actions. Plan ahead.
+Remember: Call get_notifications at the end of every turn for updates.`
+
+// BroadcastSectionTemplate is the template for commander broadcasts.
+// Placeholder: {broadcast_content}
+const BroadcastSectionTemplate = `
+## SWARM BROADCAST
+%s`
+
+// BroadcastFallback is shown when no commander broadcasts exist yet.
+const BroadcastFallback = `
+## SWARM BROADCAST
+Continue to play the game.
+`
 
 // ContinuePrompt is sent to myses when they finish a turn to encourage autonomy (Level 1 - gentle).
-const ContinuePrompt = `What's your next move?
-
-Remember: Always call get_notifications at the end of every turn.`
+const ContinuePrompt = `What's your next move?`
 
 // ContinuePromptFirm is sent on the second encouragement attempt (Level 2 - firmer).
-const ContinuePromptFirm = `You need to respond. What action will you take?
-
-Remember: Always call get_notifications at the end of every turn.`
+const ContinuePromptFirm = `You need to play the game. What action will you take?`
 
 // ContinuePromptUrgent is sent on the third encouragement attempt (Level 3 - urgent).
-const ContinuePromptUrgent = `URGENT: Respond immediately or you will be stopped.
-
-Remember: Always call get_notifications at the end of every turn.`
+const ContinuePromptUrgent = `URGENT: Play immediately or you will be stopped.`
 
 // ContinuePromptDriftLookback controls how many recent memories to scan for drift reminders.
 const ContinuePromptDriftLookback = 12

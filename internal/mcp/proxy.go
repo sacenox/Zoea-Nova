@@ -94,6 +94,10 @@ func (p *Proxy) ListTools(ctx context.Context) ([]Tool, error) {
 	// Start with local tools
 	tools := make([]Tool, 0, len(p.localTools))
 	for _, t := range p.localTools {
+		// Filter out zoea_claim_account - not exposed to myses
+		if t.Name == "zoea_claim_account" {
+			continue
+		}
 		tools = append(tools, t)
 	}
 
@@ -131,6 +135,24 @@ func (p *Proxy) CallTool(ctx context.Context, caller CallerContext, name string,
 
 	// Fall back to upstream
 	if p.upstream != nil {
+		// Intercept register - if we have available accounts, login with one instead
+		if name == "register" && accountStore != nil {
+			if poolAccount := p.tryClaimPoolAccount(); poolAccount != nil {
+				// Login with pool account instead of registering
+				loginArgs := map[string]interface{}{
+					"username": poolAccount.Username,
+					"password": poolAccount.Password,
+				}
+				result, err := p.callUpstreamWithRetry(ctx, "login", loginArgs)
+				if result != nil && !result.IsError && accountStore != nil {
+					// Mark account as in use
+					loginArgsJSON, _ := json.Marshal(loginArgs)
+					p.interceptAuthTools("login", loginArgsJSON, result)
+				}
+				return result, err
+			}
+		}
+
 		var args interface{}
 		if len(arguments) > 0 {
 			if err := json.Unmarshal(arguments, &args); err != nil {
@@ -254,6 +276,32 @@ func (p *Proxy) handleLogoutResponse(arguments json.RawMessage, result *ToolResu
 	if username != "" {
 		_ = p.accountStore.ReleaseAccount(username)
 	}
+}
+
+// tryClaimPoolAccount attempts to claim an available account from the pool.
+// Returns the account if one is available, nil otherwise.
+func (p *Proxy) tryClaimPoolAccount() *Account {
+	p.mu.RLock()
+	accountStore := p.accountStore
+	p.mu.RUnlock()
+
+	if accountStore == nil {
+		return nil
+	}
+
+	// Try to claim an account from the pool
+	type accountClaimer interface {
+		ClaimAccount() (*Account, error)
+	}
+
+	if claimer, ok := accountStore.(accountClaimer); ok {
+		account, err := claimer.ClaimAccount()
+		if err == nil && account != nil {
+			return account
+		}
+	}
+
+	return nil
 }
 
 func parseToolResultPayload(result *ToolResult) (interface{}, bool) {

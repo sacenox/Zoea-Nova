@@ -1570,33 +1570,28 @@ func (m *Mysis) buildSystemPrompt() string {
 	a := m
 	base := constants.SystemPrompt
 
-	// Get most recent broadcast (any sender)
-	broadcasts, err := a.store.GetRecentBroadcasts(1)
-	if err != nil || len(broadcasts) == 0 {
-		// No broadcasts yet - show fallback
-		fallback := "\n## Swarm Status\nNo commander directives yet. Grow more powerful while awaiting instructions.\n"
-		return strings.Replace(base, "{{LATEST_BROADCAST}}", fallback, 1)
+	// Get most recent commander broadcast (sender_id is empty for commander broadcasts)
+	broadcasts, err := a.store.GetRecentBroadcasts(10) // Get more to filter for commander broadcasts
+	if err != nil {
+		return strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
 	}
 
-	broadcast := broadcasts[0]
-
-	// Get sender name
-	senderName := "Unknown"
-	if broadcast.SenderID != "" {
-		if mysis, err := a.store.GetMysis(broadcast.SenderID); err == nil && mysis != nil {
-			senderName = mysis.Name
+	// Find the most recent commander broadcast (empty sender_id)
+	var commanderBroadcast *store.BroadcastMessage
+	for _, b := range broadcasts {
+		if b.SenderID == "" {
+			commanderBroadcast = b
+			break
 		}
 	}
 
-	// Format broadcast section
-	broadcastSection := fmt.Sprintf(`
-## Latest Commander Broadcast
-From: %s
-Message: %s
+	if commanderBroadcast == nil {
+		// No commander broadcasts yet - show fallback
+		return strings.Replace(base, "{{LATEST_BROADCAST}}", constants.BroadcastFallback, 1)
+	}
 
-Follow swarm directives. Coordinate your actions with the swarm's goals.`,
-		senderName,
-		broadcast.Content)
+	// Format broadcast section (only content, no sender name)
+	broadcastSection := fmt.Sprintf(constants.BroadcastSectionTemplate, commanderBroadcast.Content)
 
 	return strings.Replace(base, "{{LATEST_BROADCAST}}", broadcastSection, 1)
 }

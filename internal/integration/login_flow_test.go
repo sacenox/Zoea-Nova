@@ -9,10 +9,11 @@ import (
 	"github.com/xonecas/zoea-nova/internal/store"
 )
 
-// TestLoginFlowIntegration verifies the complete login flow after ClaimAccount() locking removal:
-// 1. zoea_claim_account returns credentials but does NOT lock the account
+// TestLoginFlowIntegration verifies the complete login flow:
+// 1. Account pre-populated in store (via CreateAccount)
 // 2. Mysis uses credentials with the game's login tool
 // 3. handleLoginResponse intercepts the successful login and marks account in_use
+// Note: This test uses ClaimAccount() for setup, but myses no longer call zoea_claim_account
 func TestLoginFlowIntegration(t *testing.T) {
 	// Setup store
 	s, err := store.OpenMemory()
@@ -49,8 +50,8 @@ func TestLoginFlowIntegration(t *testing.T) {
 	proxy := mcp.NewProxy(upstream)
 	proxy.SetAccountStore(&accountStoreAdapter{s})
 
-	// STEP 1: Mysis calls zoea_claim_account
-	// This should return credentials WITHOUT locking the account
+	// STEP 1: Test setup - get account credentials
+	// (In production, myses would call register() or have pre-known credentials)
 	claimed, err := s.ClaimAccount()
 	if err != nil {
 		t.Fatalf("ClaimAccount() failed: %v", err)
