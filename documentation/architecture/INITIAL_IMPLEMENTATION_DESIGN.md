@@ -54,7 +54,7 @@ Scrollable conversation viewport showing full message history with role-based st
 
 ## Configuration
 
-- **Environment Variables:** Runtime overrides (`ZOEA_MAX_MYSES`, `ZOEA_MCP_ENDPOINT`, `ZOEA_OLLAMA_ENDPOINT`, `ZOEA_OLLAMA_MODEL`, `ZOEA_OLLAMA_TEMPERATURE`, `ZOEA_OLLAMA_RATE_LIMIT`, `ZOEA_OLLAMA_RATE_BURST`, `ZOEA_OPENCODE_ENDPOINT`, `ZOEA_OPENCODE_MODEL`, `ZOEA_OPENCODE_TEMPERATURE`, `ZOEA_OPENCODE_RATE_LIMIT`, `ZOEA_OPENCODE_RATE_BURST`).
+- **Environment Variables:** Runtime overrides (`ZOEA_MAX_MYSES`, `ZOEA_MCP_ENDPOINT`, `ZOEA_OLLAMA_ENDPOINT`, `ZOEA_OLLAMA_MODEL`, `ZOEA_OLLAMA_TEMPERATURE`, `ZOEA_OPENCODE_ENDPOINT`, `ZOEA_OPENCODE_MODEL`, `ZOEA_OPENCODE_TEMPERATURE`).
 - **Config File:** `config.toml` in project root for defaults and structure. Parsed via `github.com/BurntSushi/toml`.
 - **Credentials:** Stored in `$HOME/.zoea-nova/credentials.json`. Contains API keys for LLM providers. File permissions should be `0600`.
 
@@ -67,15 +67,11 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 
 [providers.opencode_zen]
 endpoint = "https://api.opencode.ai/v1"
 model = "glm-4.7-free"
 temperature = 0.7
-rate_limit = 10.0
-rate_burst = 5
 
 [mcp]
 upstream = "https://game.spacemolt.com/mcp"

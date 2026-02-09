@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 // TestOllamaProvider_Stream tests basic streaming functionality
@@ -182,52 +180,6 @@ func TestOllamaProvider_Stream_EmptyChunks(t *testing.T) {
 	}
 }
 
-// TestOllamaProvider_Stream_RateLimit tests rate limiting in streaming
-func TestOllamaProvider_Stream_RateLimit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		flusher := w.(http.Flusher)
-
-		fmt.Fprintf(w, "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
-		flusher.Flush()
-		fmt.Fprintf(w, "data: [DONE]\n\n")
-		flusher.Flush()
-	}))
-	defer server.Close()
-
-	limiter := rate.NewLimiter(2, 1) // 2 requests per second
-	provider := NewOllamaWithTemp("ollama", server.URL, "test", 0.7, limiter)
-
-	ctx := context.Background()
-	messages := []Message{{Role: "user", Content: "test"}}
-
-	start := time.Now()
-
-	// First call - should not be rate limited
-	ch1, err := provider.Stream(ctx, messages)
-	if err != nil {
-		t.Fatalf("First Stream() failed: %v", err)
-	}
-	for range ch1 {
-		// Drain channel
-	}
-
-	// Second call - should be rate limited
-	ch2, err := provider.Stream(ctx, messages)
-	if err != nil {
-		t.Fatalf("Second Stream() failed: %v", err)
-	}
-	for range ch2 {
-		// Drain channel
-	}
-
-	elapsed := time.Since(start)
-	// With rate limit of 2/sec, second call should wait ~500ms
-	if elapsed < 400*time.Millisecond {
-		t.Errorf("Expected rate limiting delay, got %v", elapsed)
-	}
-}
-
 // TestOllamaProvider_Stream_ServerError tests handling of HTTP errors
 func TestOllamaProvider_Stream_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -349,44 +301,6 @@ func TestOpenCodeProvider_Stream_Cancellation(t *testing.T) {
 
 	if chunks >= 10 {
 		t.Errorf("Expected timeout after few chunks, got %d chunks", chunks)
-	}
-}
-
-// TestOpenCodeProvider_Stream_RateLimit tests rate limiting
-func TestOpenCodeProvider_Stream_RateLimit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		flusher := w.(http.Flusher)
-
-		fmt.Fprintf(w, "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":1234567890,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
-		flusher.Flush()
-		fmt.Fprintf(w, "data: [DONE]\n\n")
-		flusher.Flush()
-	}))
-	defer server.Close()
-
-	limiter := rate.NewLimiter(2, 1)
-	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test", "key", 0.7, limiter)
-
-	ctx := context.Background()
-	messages := []Message{{Role: "user", Content: "test"}}
-
-	start := time.Now()
-
-	// Make two stream calls
-	for i := 0; i < 2; i++ {
-		ch, err := provider.Stream(ctx, messages)
-		if err != nil {
-			t.Fatalf("Stream() call %d failed: %v", i+1, err)
-		}
-		for range ch {
-			// Drain channel
-		}
-	}
-
-	elapsed := time.Since(start)
-	if elapsed < 400*time.Millisecond {
-		t.Errorf("Expected rate limiting delay, got %v", elapsed)
 	}
 }
 

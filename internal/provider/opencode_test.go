@@ -392,7 +392,7 @@ func TestOpenCode_PreservesConversationHistory(t *testing.T) {
 	defer server.Close()
 
 	// Create provider with mock server
-	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test-model", "test-key", 0.7, nil)
+	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test-model", "test-key", 0.7)
 
 	// Create messages simulating the failure scenario
 	messages := []Message{
@@ -436,7 +436,7 @@ func TestOpenCode_StreamParameterSetCorrectly(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test-model", "test-key", 0.7, nil)
+	provider := NewOpenCodeWithTemp("opencode_zen", server.URL, "test-model", "test-key", 0.7)
 
 	messages := []Message{
 		{Role: "user", Content: "Test"},

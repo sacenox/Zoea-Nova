@@ -50,7 +50,8 @@ var (
 	ErrToolRetryExhausted = errors.New("mcp tool call failed after retries")
 )
 
-var toolRetryDelays = []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
+// Retry delays increased to respect SpaceMolt's "Try again in 5 seconds" rate limit
+var toolRetryDelays = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
 
 // NewProxy creates a new MCP proxy.
 func NewProxy(upstream UpstreamClient) *Proxy {
@@ -187,11 +188,24 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 	for attempt := 0; attempt <= len(toolRetryDelays); attempt++ {
 		if attempt > 0 {
 			delay := toolRetryDelays[attempt-1]
-			log.Warn().
-				Str("tool", name).
-				Int("attempt", attempt).
-				Dur("delay", delay).
-				Msg("Retrying MCP tool call after error")
+
+			// Check if error is a 429 rate limit
+			is429 := lastErr != nil && (strings.Contains(lastErr.Error(), "429") || strings.Contains(lastErr.Error(), "Rate limited"))
+
+			if is429 {
+				log.Warn().
+					Str("tool", name).
+					Int("attempt", attempt).
+					Dur("delay", delay).
+					Err(lastErr).
+					Msg("MCP tool rate limited - waiting before retry")
+			} else {
+				log.Warn().
+					Str("tool", name).
+					Int("attempt", attempt).
+					Dur("delay", delay).
+					Msg("Retrying MCP tool call after error")
+			}
 
 			select {
 			case <-time.After(delay):
@@ -202,6 +216,13 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 
 		result, err := p.upstream.CallTool(ctx, name, args)
 		if err == nil {
+			// Log successful call at Info level for visibility
+			if attempt > 0 {
+				log.Info().
+					Str("tool", name).
+					Int("attempt", attempt+1).
+					Msg("MCP tool call succeeded after retry")
+			}
 			return result, nil
 		}
 
@@ -211,6 +232,13 @@ func (p *Proxy) callUpstreamWithRetry(ctx context.Context, name string, args int
 
 		lastErr = err
 	}
+
+	// Log final failure with more context
+	log.Error().
+		Str("tool", name).
+		Int("total_attempts", len(toolRetryDelays)+1).
+		Err(lastErr).
+		Msg("MCP tool call failed after all retries")
 
 	return nil, fmt.Errorf("%w: %v", ErrToolRetryExhausted, lastErr)
 }

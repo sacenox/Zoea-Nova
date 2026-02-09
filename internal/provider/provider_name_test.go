@@ -17,7 +17,7 @@ func TestProviderNameFromConfig(t *testing.T) {
 			name:       "Ollama with custom name",
 			configName: "ollama-qwen",
 			factoryFunc: func(name string) ProviderFactory {
-				return NewOllamaFactory(name, "http://localhost:11434", 1.0, 2)
+				return NewOllamaFactory(name, "http://localhost:11434")
 			},
 			expectedName: "ollama-qwen",
 		},
@@ -25,7 +25,7 @@ func TestProviderNameFromConfig(t *testing.T) {
 			name:       "Ollama with another custom name",
 			configName: "ollama-llama",
 			factoryFunc: func(name string) ProviderFactory {
-				return NewOllamaFactory(name, "http://localhost:11434", 1.0, 2)
+				return NewOllamaFactory(name, "http://localhost:11434")
 			},
 			expectedName: "ollama-llama",
 		},
@@ -33,7 +33,7 @@ func TestProviderNameFromConfig(t *testing.T) {
 			name:       "OpenCode with custom name",
 			configName: "zen-nano",
 			factoryFunc: func(name string) ProviderFactory {
-				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key", 5.0, 3)
+				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key")
 			},
 			expectedName: "zen-nano",
 		},
@@ -41,7 +41,7 @@ func TestProviderNameFromConfig(t *testing.T) {
 			name:       "OpenCode with another custom name",
 			configName: "zen-pickle",
 			factoryFunc: func(name string) ProviderFactory {
-				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key", 5.0, 3)
+				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key")
 			},
 			expectedName: "zen-pickle",
 		},
@@ -49,7 +49,7 @@ func TestProviderNameFromConfig(t *testing.T) {
 			name:       "OpenCode with default name",
 			configName: "opencode_zen",
 			factoryFunc: func(name string) ProviderFactory {
-				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key", 5.0, 3)
+				return NewOpenCodeFactory(name, "https://opencode.ai/zen/v1", "test-key")
 			},
 			expectedName: "opencode_zen",
 		},
@@ -77,8 +77,8 @@ func TestProviderNameFromConfig(t *testing.T) {
 // different provider names, proving the name is not hardcoded.
 func TestProviderNameNotHardcoded(t *testing.T) {
 	// Create two Ollama factories with different names
-	factory1 := NewOllamaFactory("ollama-qwen", "http://localhost:11434", 1.0, 2)
-	factory2 := NewOllamaFactory("ollama-llama", "http://localhost:11434", 1.0, 2)
+	factory1 := NewOllamaFactory("ollama-qwen", "http://localhost:11434")
+	factory2 := NewOllamaFactory("ollama-llama", "http://localhost:11434")
 
 	if factory1.Name() == factory2.Name() {
 		t.Errorf("Different config names should produce different factory names, both returned %q", factory1.Name())
@@ -101,8 +101,8 @@ func TestProviderNameNotHardcoded(t *testing.T) {
 	}
 
 	// Same test for OpenCode providers
-	factory3 := NewOpenCodeFactory("zen-nano", "https://opencode.ai/zen/v1", "key", 5.0, 3)
-	factory4 := NewOpenCodeFactory("zen-pickle", "https://opencode.ai/zen/v1", "key", 5.0, 3)
+	factory3 := NewOpenCodeFactory("zen-nano", "https://opencode.ai/zen/v1", "key")
+	factory4 := NewOpenCodeFactory("zen-pickle", "https://opencode.ai/zen/v1", "key")
 
 	if factory3.Name() == factory4.Name() {
 		t.Errorf("Different config names should produce different factory names, both returned %q", factory3.Name())

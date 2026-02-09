@@ -9,7 +9,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 func setupIntegrationCommander(t *testing.T) (*core.Commander, *store.Store, func()) {
@@ -25,8 +24,7 @@ func setupIntegrationCommander(t *testing.T) (*core.Commander, *store.Store, fun
 	bus := core.NewEventBus(100)
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactory("mock", "mock response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{

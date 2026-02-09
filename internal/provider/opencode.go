@@ -13,7 +13,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	openai "github.com/sashabaranov/go-openai"
-	"golang.org/x/time/rate"
 )
 
 // openCodeRequest is a custom request struct to ensure stream:false is serialized
@@ -35,7 +34,6 @@ type OpenCodeProvider struct {
 	httpClient  *http.Client
 	model       string
 	temperature float64
-	limiter     *rate.Limiter
 }
 
 var opencodeRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * time.Second}
@@ -59,10 +57,10 @@ var opencodeModelEndpoints = map[string]string{
 
 // NewOpenCode creates a new OpenCode Zen provider.
 func NewOpenCode(endpoint, model, apiKey string) *OpenCodeProvider {
-	return NewOpenCodeWithTemp("opencode_zen", endpoint, model, apiKey, 0.7, nil)
+	return NewOpenCodeWithTemp("opencode_zen", endpoint, model, apiKey, 0.7)
 }
 
-func NewOpenCodeWithTemp(name string, endpoint, model, apiKey string, temperature float64, limiter *rate.Limiter) *OpenCodeProvider {
+func NewOpenCodeWithTemp(name string, endpoint, model, apiKey string, temperature float64) *OpenCodeProvider {
 	config := openai.DefaultConfig(apiKey)
 	baseURL := strings.TrimRight(endpoint, "/")
 	config.BaseURL = baseURL
@@ -75,7 +73,6 @@ func NewOpenCodeWithTemp(name string, endpoint, model, apiKey string, temperatur
 		httpClient:  &http.Client{},
 		model:       model,
 		temperature: temperature,
-		limiter:     limiter,
 	}
 }
 
@@ -198,10 +195,14 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 			}
 		}
 
-		if p.limiter != nil {
-			if err := p.limiter.Wait(ctx); err != nil {
-				return nil, err
-			}
+		// Log at Info level for first attempt, Debug for retries
+		if attempt == 0 {
+			log.Info().
+				Str("provider", p.name).
+				Str("model", req.Model).
+				Int("message_count", len(req.Messages)).
+				Int("tool_count", len(req.Tools)).
+				Msg("OpenCode request started")
 		}
 
 		log.Debug().
@@ -295,13 +296,25 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 			Int("choice_count", len(decoded.Choices)).
 			Msg("OpenCode response decoded")
 
+		// Log successful request at Info level for visibility
+		log.Info().
+			Str("provider", p.name).
+			Str("model", p.model).
+			Int("status", resp.StatusCode).
+			Int("attempt", attempt+1).
+			Int("message_count", len(req.Messages)).
+			Int("choice_count", len(decoded.Choices)).
+			Msg("OpenCode request successful")
+
 		return &decoded, nil
 	}
 
 	// All retries exhausted
 	log.Error().
 		Str("provider", p.name).
+		Str("model", p.model).
 		Int("max_retries", maxRetries).
+		Int("total_attempts", maxRetries+1).
 		Err(lastErr).
 		Msg("OpenCode request failed after all retries")
 	return nil, fmt.Errorf("request failed after %d retries: %w", maxRetries, lastErr)
@@ -311,11 +324,6 @@ func (p *OpenCodeProvider) createChatCompletion(ctx context.Context, req openai.
 func (p *OpenCodeProvider) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
 	if opencodeEndpointForModel(p.model) != opencodeChatCompletionsEndpoint {
 		return nil, fmt.Errorf("opencode model %q does not support streaming via chat completions endpoint", p.model)
-	}
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return nil, err
-		}
 	}
 
 	stream, err := p.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{

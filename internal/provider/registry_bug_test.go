@@ -22,8 +22,6 @@ func TestZenNanoRegistration(t *testing.T) {
 				Model:       "gpt-5-nano",
 				APIKeyName:  "opencode_zen",
 				Temperature: 0.7,
-				RateLimit:   1.0,
-				RateBurst:   2,
 			},
 		},
 	}
@@ -36,7 +34,7 @@ func TestZenNanoRegistration(t *testing.T) {
 	// This is EXACTLY what initProviders does
 	for name, provCfg := range cfg.Providers {
 		if strings.Contains(provCfg.Endpoint, "localhost:11434") || strings.Contains(provCfg.Endpoint, "/ollama") {
-			factory := NewOllamaFactory(name, provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			factory := NewOllamaFactory(name, provCfg.Endpoint)
 			registry.RegisterFactory(name, factory)
 			t.Logf("Registered Ollama provider: %s", name)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
@@ -47,7 +45,7 @@ func TestZenNanoRegistration(t *testing.T) {
 			}
 			apiKey := creds.GetAPIKey(keyName)
 			if apiKey != "" {
-				factory := NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				factory := NewOpenCodeFactory(name, provCfg.Endpoint, apiKey)
 				registry.RegisterFactory(name, factory)
 				t.Logf("Registered OpenCode provider: %s (using key: %s)", name, keyName)
 			}

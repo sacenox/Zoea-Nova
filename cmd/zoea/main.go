@@ -237,7 +237,7 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 		// Detect provider type by endpoint
 		if strings.Contains(provCfg.Endpoint, "localhost:11434") || strings.Contains(provCfg.Endpoint, "/ollama") {
 			// Ollama-based provider
-			factory := provider.NewOllamaFactory(name, provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			factory := provider.NewOllamaFactory(name, provCfg.Endpoint)
 			registry.RegisterFactory(name, factory)
 		} else if strings.Contains(provCfg.Endpoint, "opencode.ai") {
 			// OpenCode-based provider
@@ -248,7 +248,7 @@ func initProviders(cfg *config.Config, creds *config.Credentials) *provider.Regi
 			}
 			apiKey := creds.GetAPIKey(keyName)
 			if apiKey != "" {
-				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey)
 				registry.RegisterFactory(name, factory)
 			}
 		}

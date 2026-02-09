@@ -31,8 +31,6 @@ type ProviderConfig struct {
 	Model       string  `toml:"model"`
 	APIKeyName  string  `toml:"api_key_name"`
 	Temperature float64 `toml:"temperature"`
-	RateLimit   float64 `toml:"rate_limit"`
-	RateBurst   int     `toml:"rate_burst"`
 }
 
 // MCPConfig holds MCP proxy settings.
@@ -109,13 +107,6 @@ func validateProviderConfig(name string, cfg ProviderConfig) []error {
 
 	if cfg.Temperature < 0.0 || cfg.Temperature > 2.0 {
 		errs = append(errs, fmt.Errorf("providers.%s.temperature=%v must be between 0.0 and 2.0", name, cfg.Temperature))
-	}
-
-	if cfg.RateLimit <= 0 {
-		errs = append(errs, fmt.Errorf("providers.%s.rate_limit=%v must be greater than 0", name, cfg.RateLimit))
-	}
-	if cfg.RateBurst < 1 {
-		errs = append(errs, fmt.Errorf("providers.%s.rate_burst=%d must be at least 1", name, cfg.RateBurst))
 	}
 
 	return errs

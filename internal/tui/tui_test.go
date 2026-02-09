@@ -13,7 +13,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 // ansiRegex matches ANSI escape codes
@@ -36,10 +35,9 @@ func setupTestModel(t *testing.T) (Model, func()) {
 	eventCh := bus.Subscribe()
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("ollama-qwen", provider.NewMockFactoryWithLimiter("ollama-qwen", "mock response", limiter))
-	reg.RegisterFactory("zen-nano", provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
-	reg.RegisterFactory("zen-pickle", provider.NewMockFactoryWithLimiter("zen-pickle", "mock response", limiter))
+	reg.RegisterFactory("ollama-qwen", provider.NewMockFactory("ollama-qwen", "mock response"))
+	reg.RegisterFactory("zen-nano", provider.NewMockFactory("zen-nano", "mock response"))
+	reg.RegisterFactory("zen-pickle", provider.NewMockFactory("zen-pickle", "mock response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
@@ -47,9 +45,9 @@ func setupTestModel(t *testing.T) (Model, func()) {
 			DefaultProvider: "ollama-qwen",
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"zen-pickle":  {Endpoint: "http://mock", Model: "big-pickle", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7},
+			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7},
+			"zen-pickle":  {Endpoint: "http://mock", Model: "big-pickle", Temperature: 0.7},
 		},
 	}
 

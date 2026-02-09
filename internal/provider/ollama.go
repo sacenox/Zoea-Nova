@@ -13,7 +13,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	openai "github.com/sashabaranov/go-openai"
-	"golang.org/x/time/rate"
 )
 
 // OllamaProvider implements the Provider interface for Ollama.
@@ -24,7 +23,6 @@ type OllamaProvider struct {
 	httpClient  *http.Client
 	model       string
 	temperature float64
-	limiter     *rate.Limiter
 }
 
 var ollamaRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * time.Second}
@@ -32,10 +30,10 @@ var ollamaRetryDelays = []time.Duration{5 * time.Second, 10 * time.Second, 15 * 
 // NewOllama creates a new Ollama provider.
 // Ollama exposes an OpenAI-compatible API at /v1.
 func NewOllama(endpoint, model string) *OllamaProvider {
-	return NewOllamaWithTemp("ollama", endpoint, model, 0.7, nil)
+	return NewOllamaWithTemp("ollama", endpoint, model, 0.7)
 }
 
-func NewOllamaWithTemp(name string, endpoint, model string, temperature float64, limiter *rate.Limiter) *OllamaProvider {
+func NewOllamaWithTemp(name string, endpoint, model string, temperature float64) *OllamaProvider {
 	config := openai.DefaultConfig("")
 	baseURL := strings.TrimRight(endpoint, "/") + "/v1"
 	config.BaseURL = baseURL
@@ -47,7 +45,6 @@ func NewOllamaWithTemp(name string, endpoint, model string, temperature float64,
 		httpClient:  &http.Client{},
 		model:       model,
 		temperature: temperature,
-		limiter:     limiter,
 	}
 }
 
@@ -222,10 +219,12 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 			}
 		}
 
-		if p.limiter != nil {
-			if err := p.limiter.Wait(ctx); err != nil {
-				return nil, err
-			}
+		// Log at Info level for first attempt, Debug for retries
+		if attempt == 0 {
+			log.Info().
+				Str("provider", "ollama").
+				Str("model", p.model).
+				Msg("Ollama request started")
 		}
 
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -284,12 +283,22 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 			return nil, fmt.Errorf("decode response: %w", err)
 		}
 
+		// Log successful request at Info level for visibility
+		log.Info().
+			Str("provider", "ollama").
+			Str("model", p.model).
+			Int("status", resp.StatusCode).
+			Int("attempt", attempt+1).
+			Msg("Ollama request successful")
+
 		return &decoded, nil
 	}
 
 	log.Error().
 		Str("provider", "ollama").
+		Str("model", p.model).
 		Int("max_retries", maxRetries).
+		Int("total_attempts", maxRetries+1).
 		Err(lastErr).
 		Msg("Ollama request failed after all retries")
 	return nil, fmt.Errorf("request failed after %d retries: %w", maxRetries, lastErr)
@@ -297,12 +306,6 @@ func (p *OllamaProvider) createChatCompletion(ctx context.Context, req ollamaCha
 
 // Stream sends messages and returns a channel that streams response chunks.
 func (p *OllamaProvider) Stream(ctx context.Context, messages []Message) (<-chan StreamChunk, error) {
-	if p.limiter != nil {
-		if err := p.limiter.Wait(ctx); err != nil {
-			return nil, err
-		}
-	}
-
 	stream, err := p.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:       p.model,
 		Messages:    toOpenAIMessages(messages),

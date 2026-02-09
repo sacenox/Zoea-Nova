@@ -21,8 +21,6 @@ These models are free during their beta period:
 endpoint = "https://opencode.ai/zen/v1"
 model = "glm-4.7-free"
 temperature = 0.7
-rate_limit = 10.0
-rate_burst = 5
 ```
 
 **Important:** The endpoint must be `https://opencode.ai/zen/v1` (not `https://api.opencode.ai/...`).

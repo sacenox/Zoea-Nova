@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 func TestRegistry(t *testing.T) {
@@ -382,25 +380,6 @@ func TestToOllamaMessagesSerializesEmptyContent(t *testing.T) {
 
 	if !strings.Contains(string(data), `"content":""`) {
 		t.Fatalf("expected content field to be serialized, got %s", string(data))
-	}
-}
-
-func TestMockProviderRateLimit(t *testing.T) {
-	limiter := rate.NewLimiter(5, 1)
-	mock := NewMock("test", "ok").WithLimiter(limiter)
-
-	ctx := context.Background()
-	messages := []Message{{Role: "user", Content: "Hi"}}
-
-	start := time.Now()
-	for i := 0; i < 2; i++ {
-		if _, err := mock.Chat(ctx, messages); err != nil {
-			t.Fatalf("Chat() error: %v", err)
-		}
-	}
-	elapsed := time.Since(start)
-	if elapsed < 180*time.Millisecond {
-		t.Fatalf("expected rate limiting delay, got %v", elapsed)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 // setupStateMachineTest creates a minimal test environment for state transition testing.
@@ -30,8 +29,7 @@ func setupStateMachineTest(t *testing.T) (*Commander, func()) {
 	bus := NewEventBus(100)
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactory("mock", "mock response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{

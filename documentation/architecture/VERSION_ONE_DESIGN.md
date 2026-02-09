@@ -275,7 +275,7 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 | **Environment variables**   | ❌ Not documented | ✅ 13 vars                    | ✅ Tested | ⚠️ MISSING | All `ZOEA_*` vars |
 | **Credentials file**        | ❌ Not documented | ✅ `credentials.json`         | ✅ Tested | ⚠️ MISSING | API keys          |
 | **Default provider**        | ❌ Not documented | ✅ `default_provider`         | ✅ Tested | ⚠️ MISSING | In swarm section  |
-| **Rate limiting**           | ❌ Not documented | ✅ `rate_limit`, `rate_burst` | ✅ Tested | ⚠️ MISSING | Per-provider      |
+
 | **Provider auto-detection** | ❌ Not documented | ✅ By endpoint URL            | ✅ Tested | ⚠️ MISSING | String matching   |
 | **Validation rules**        | ❌ Not documented | ✅ Comprehensive              | ✅ Tested | ⚠️ MISSING | Bounds checking   |
 
@@ -289,9 +289,7 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
    - **Implementation:** `~/.zoea-nova/credentials.json` with 0600 permissions
    - **Fix:** Document in README.md and configuration guide
 
-3. **Rate Limiting Not Documented**
-   - **Implementation:** Per-provider `rate_limit` and `rate_burst` settings
-   - **Fix:** Document in configuration guide
+
 
 ---
 
@@ -388,7 +386,6 @@ This document serves as the **single source of truth** for what Zoea Nova v0.5.0
 
 9. Fix or remove flaky E2E tests
 10. Add MCP offline mode tool tests
-11. Add provider rate limiting tests
 
 ---
 

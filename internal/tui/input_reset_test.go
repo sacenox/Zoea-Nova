@@ -9,7 +9,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/core"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 // TestInputReset_DirectMessage verifies that the input box resets after sending a direct message.
@@ -314,17 +313,15 @@ func setupTestModelWithSlowProvider(t *testing.T) (Model, func()) {
 	eventCh := bus.Subscribe()
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
 
 	// Create a mock factory that returns a provider with a 5-second delay
 	slowFactory := &slowMockFactory{
 		name:     "ollama-qwen",
 		response: "mock response",
-		limiter:  limiter,
 		delay:    5 * time.Second,
 	}
 	reg.RegisterFactory("ollama-qwen", slowFactory)
-	reg.RegisterFactory("zen-nano", provider.NewMockFactoryWithLimiter("zen-nano", "mock response", limiter))
+	reg.RegisterFactory("zen-nano", provider.NewMockFactory("zen-nano", "mock response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
@@ -332,8 +329,8 @@ func setupTestModelWithSlowProvider(t *testing.T) (Model, func()) {
 			DefaultProvider: "ollama-qwen",
 		},
 		Providers: map[string]config.ProviderConfig{
-			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
-			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7, RateLimit: 1000, RateBurst: 1000},
+			"ollama-qwen": {Endpoint: "http://mock", Model: "qwen3:8b", Temperature: 0.7},
+			"zen-nano":    {Endpoint: "http://mock", Model: "gpt-5-nano", Temperature: 0.7},
 		},
 	}
 
@@ -360,7 +357,6 @@ func setupTestModelWithSlowProvider(t *testing.T) (Model, func()) {
 type slowMockFactory struct {
 	name     string
 	response string
-	limiter  *rate.Limiter
 	delay    time.Duration
 }
 
@@ -368,7 +364,6 @@ func (f *slowMockFactory) Name() string { return f.name }
 
 func (f *slowMockFactory) Create(model string, temperature float64) provider.Provider {
 	p := provider.NewMock(f.name, f.response)
-	p.WithLimiter(f.limiter)
 	p.SetDelay(f.delay)
 	return p
 }

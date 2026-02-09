@@ -10,7 +10,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 // setupNotificationTest creates a test environment for notification testing
@@ -27,8 +26,7 @@ func setupNotificationTest(t *testing.T) (*Commander, *store.Store, *EventBus, f
 	bus := NewEventBus(100)
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactory("mock", "mock response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{

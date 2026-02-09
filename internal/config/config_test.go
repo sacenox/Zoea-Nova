@@ -23,8 +23,6 @@ max_myses = 32
 endpoint = "http://custom:11434"
 model = "mistral"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 
 [mcp]
 upstream = "https://custom.mcp/endpoint"
@@ -61,8 +59,6 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
 temperature = 0.5
-rate_limit = 2.0
-rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -75,38 +71,6 @@ rate_burst = 3
 
 	if cfg.Providers["ollama"].Temperature != 0.5 {
 		t.Errorf("expected temperature=0.5, got %v", cfg.Providers["ollama"].Temperature)
-	}
-}
-
-func TestLoadWithRateLimit(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	content := `
-[swarm]
-max_myses = 16
-
-[providers.ollama]
-endpoint = "http://localhost:11434"
-model = "qwen3:4b"
-temperature = 0.7
-rate_limit = 3.5
-rate_burst = 4
-`
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-
-	cfg, err := Load(configPath)
-	if err != nil {
-		t.Fatalf("Load() error: %v", err)
-	}
-
-	if cfg.Providers["ollama"].RateLimit != 3.5 {
-		t.Errorf("expected rate_limit=3.5, got %v", cfg.Providers["ollama"].RateLimit)
-	}
-	if cfg.Providers["ollama"].RateBurst != 4 {
-		t.Errorf("expected rate_burst=4, got %d", cfg.Providers["ollama"].RateBurst)
 	}
 }
 
@@ -170,8 +134,6 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:4b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 
 [mcp]
 upstream = "https://default.mcp/endpoint"
@@ -290,8 +252,6 @@ max_myses = 16
 endpoint = "http://file-endpoint"
 model = "file-model"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -328,8 +288,6 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -451,85 +409,6 @@ model = "qwen3:4b"
 	}
 }
 
-func TestLoadRateLimitBounds(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	tests := []struct {
-		name      string
-		rateLimit float64
-	}{
-		{"zero", 0.0},
-		{"negative", -1.0},
-		{"negative_fraction", -0.5},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			content := fmt.Sprintf(`
-[providers.ollama]
-endpoint = "http://localhost:11434"
-model = "qwen3:4b"
-rate_limit = %v
-`, tt.rateLimit)
-
-			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-				t.Fatalf("failed to write test config: %v", err)
-			}
-
-			_, err := Load(configPath)
-			if err == nil {
-				t.Fatal("expected validation error for rate_limit <= 0")
-			}
-			if !strings.Contains(err.Error(), "rate_limit") {
-				t.Fatalf("expected rate_limit validation error, got %v", err)
-			}
-			if !strings.Contains(err.Error(), "must be greater than 0") {
-				t.Fatalf("expected bounds message, got %v", err)
-			}
-		})
-	}
-}
-
-func TestLoadRateBurstBounds(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
-
-	tests := []struct {
-		name      string
-		rateBurst int
-	}{
-		{"zero", 0},
-		{"negative", -1},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			content := fmt.Sprintf(`
-[providers.ollama]
-endpoint = "http://localhost:11434"
-model = "qwen3:4b"
-rate_burst = %d
-`, tt.rateBurst)
-
-			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-				t.Fatalf("failed to write test config: %v", err)
-			}
-
-			_, err := Load(configPath)
-			if err == nil {
-				t.Fatal("expected validation error for rate_burst < 1")
-			}
-			if !strings.Contains(err.Error(), "rate_burst") {
-				t.Fatalf("expected rate_burst validation error, got %v", err)
-			}
-			if !strings.Contains(err.Error(), "must be at least 1") {
-				t.Fatalf("expected bounds message, got %v", err)
-			}
-		})
-	}
-}
-
 func TestLoadDefaultProvider(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
@@ -543,8 +422,6 @@ default_provider = "ollama-qwen"
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -572,8 +449,6 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 
 [mcp]
 upstream = "https://mcp.example.com"
@@ -616,8 +491,6 @@ max_myses = 16
 endpoint = "http://localhost:11434"
 model = "qwen3:8b"
 temperature = 0.7
-rate_limit = 2.0
-rate_burst = 3
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)

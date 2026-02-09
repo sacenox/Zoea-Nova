@@ -10,7 +10,6 @@ import (
 	"github.com/xonecas/zoea-nova/internal/mcp"
 	"github.com/xonecas/zoea-nova/internal/provider"
 	"github.com/xonecas/zoea-nova/internal/store"
-	"golang.org/x/time/rate"
 )
 
 func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
@@ -26,9 +25,8 @@ func setupCommanderTest(t *testing.T) (*Commander, *EventBus, func()) {
 	bus := NewEventBus(100)
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "mock response", limiter))
-	reg.RegisterFactory("ollama", provider.NewMockFactoryWithLimiter("ollama", "ollama response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactory("mock", "mock response"))
+	reg.RegisterFactory("ollama", provider.NewMockFactory("ollama", "ollama response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{
@@ -513,8 +511,7 @@ func TestCommanderLoadMyses(t *testing.T) {
 	defer bus.Close()
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
-	reg.RegisterFactory("mock", provider.NewMockFactoryWithLimiter("mock", "response", limiter))
+	reg.RegisterFactory("mock", provider.NewMockFactory("mock", "response"))
 
 	cfg := &config.Config{
 		Swarm: config.SwarmConfig{MaxMyses: 16},
@@ -550,16 +547,13 @@ func TestBroadcastDoesNotBlockOnBusyMysis(t *testing.T) {
 	defer bus.Close()
 
 	reg := provider.NewRegistry()
-	limiter := rate.NewLimiter(rate.Limit(1000), 1000)
 
 	// Create a slow provider that will block for 2 seconds
 	slowProvider := provider.NewMock("slow", "slow response").
-		WithLimiter(limiter).
 		SetDelay(2 * time.Second)
 
 	// Create a fast provider for the other mysis
-	fastProvider := provider.NewMock("fast", "fast response").
-		WithLimiter(limiter)
+	fastProvider := provider.NewMock("fast", "fast response")
 
 	// Register custom factories that return our specific providers
 	reg.RegisterFactory("slow", &customMockFactory{

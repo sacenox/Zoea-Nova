@@ -49,14 +49,14 @@ func TestCreateMysisWithZenNano(t *testing.T) {
 		t.Logf("Processing provider: %s (endpoint: %s)", name, provCfg.Endpoint)
 
 		if provCfg.Endpoint == "http://localhost:11434" {
-			factory := provider.NewOllamaFactory(name, provCfg.Endpoint, provCfg.RateLimit, provCfg.RateBurst)
+			factory := provider.NewOllamaFactory(name, provCfg.Endpoint)
 			registry.RegisterFactory(name, factory)
 			t.Logf("  ✓ Registered as Ollama: %s", name)
 		} else if provCfg.Endpoint == "https://opencode.ai/zen/v1" {
 			apiKey := creds.GetAPIKey("opencode_zen")
 			t.Logf("  API key for opencode_zen: %s", apiKey)
 			if apiKey != "" {
-				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey, provCfg.RateLimit, provCfg.RateBurst)
+				factory := provider.NewOpenCodeFactory(name, provCfg.Endpoint, apiKey)
 				registry.RegisterFactory(name, factory)
 				t.Logf("  ✓ Registered as OpenCode: %s", name)
 			} else {
