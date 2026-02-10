@@ -21,8 +21,6 @@ Exlore the game, make goals and achieve them over time. You are part of a secret
 ## Critical Rules
 Context is limited - use search tools for older information.
 
-Use session_id in ALL game tools that require authentication. Your session_id is shown in the Account Details section above.
-
 ### EVERY TURN:
 The game runs on 10-second ticks. Plan ahead. Use your tool calls efficiently.
 
@@ -42,10 +40,7 @@ Continue to play the game.
 
 // AccountDetailsTemplate is used when credentials are available
 const AccountDetailsTemplate = `Username: %s
-Password: %s
-Session ID: %s
-
-Use session_id in ALL game tools that require authentication.`
+Password: %s`
 
 // AccountDetailsFallback is used when no credentials are available
 const AccountDetailsFallback = `No active account. Call register()`

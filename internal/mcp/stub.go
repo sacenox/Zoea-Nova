@@ -36,22 +36,22 @@ func (c *StubClient) ListTools(ctx context.Context) ([]Tool, error) {
 		{
 			Name:        "get_status",
 			Description: "Get player status (stub)",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"session_id": {"type": "string"}}}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		{
 			Name:        "get_system",
 			Description: "Get system info (stub)",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"session_id": {"type": "string"}}}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		{
 			Name:        "get_ship",
 			Description: "Get ship info (stub)",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"session_id": {"type": "string"}}}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		{
 			Name:        "get_poi",
 			Description: "Get POI info (stub)",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"session_id": {"type": "string"}}}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 		},
 		{
 			Name:        "get_notifications",

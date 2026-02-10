@@ -349,9 +349,6 @@ func TestMysisStateEvents(t *testing.T) {
 
 func TestSystemPromptContainsCaptainsLogExamples(t *testing.T) {
 	// SystemPrompt should contain core game guidance
-	if !strings.Contains(constants.SystemPrompt, "session_id") {
-		t.Fatal("SystemPrompt missing session_id guidance")
-	}
 	if !strings.Contains(constants.SystemPrompt, "get_notifications") {
 		t.Fatal("SystemPrompt missing get_notifications reminder")
 	}
@@ -416,12 +413,12 @@ func TestFormatToolResult_Success(t *testing.T) {
 }
 
 func TestSystemPromptContainsSearchGuidance(t *testing.T) {
-	// SystemPrompt was simplified - check for core session management
-	if !strings.Contains(constants.SystemPrompt, "session_id") {
-		t.Fatal("SystemPrompt missing session_id guidance")
+	// SystemPrompt was simplified - check for core game guidance
+	if !strings.Contains(constants.SystemPrompt, "game") {
+		t.Fatal("SystemPrompt missing game reference")
 	}
-	if !strings.Contains(constants.SystemPrompt, "Use session_id in ALL game tools") {
-		t.Fatal("SystemPrompt missing session_id usage reminder")
+	if !strings.Contains(constants.SystemPrompt, "EVERY TURN") {
+		t.Fatal("SystemPrompt missing turn reminder")
 	}
 }
 
@@ -1935,7 +1932,7 @@ func TestGetContextMemories_CurrentTurnPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddMemory error: %v", err)
 	}
-	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_1:session_id: abc123", "", "")
+	err = mysis.store.AddMemory(mysis.id, store.MemoryRoleTool, store.MemorySourceTool, "call_1:login successful", "", "")
 	if err != nil {
 		t.Fatalf("AddMemory error: %v", err)
 	}
@@ -1968,7 +1965,7 @@ func TestGetContextMemories_CurrentTurnPreserved(t *testing.T) {
 		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, "call_1:login") {
 			hasLoginCall = true
 		}
-		if mem.Role == store.MemoryRoleTool && strings.Contains(mem.Content, "call_1") && strings.Contains(mem.Content, "session_id") {
+		if mem.Role == store.MemoryRoleTool && strings.Contains(mem.Content, "call_1") && strings.Contains(mem.Content, "login") {
 			hasLoginResult = true
 		}
 		if mem.Role == store.MemoryRoleAssistant && strings.Contains(mem.Content, "call_2:get_status") {

@@ -45,7 +45,6 @@ type Mysis struct {
 	lastError              error
 	currentAccountUsername string
 	currentPassword        string // Password for current account
-	currentSessionID       string // Active session_id from login/register
 	activityState          ActivityState
 	activityUntil          time.Time
 	lastServerTick         int64
@@ -197,13 +196,6 @@ func (m *Mysis) CurrentPassword() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.currentPassword
-}
-
-// CurrentSessionID returns the active session_id.
-func (m *Mysis) CurrentSessionID() string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.currentSessionID
 }
 
 // ActivityState returns the mysis current activity.
@@ -1127,8 +1119,7 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 			}
 			json.Unmarshal(tc.Arguments, &args)
 
-			// Extract session_id and password from tool result
-			sessionID := extractSessionID(result)
+			// Extract password from tool result
 			password := args.Password
 
 			// For register, password might be in result instead of args
@@ -1142,8 +1133,8 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 				actualUsername = args.Username // Fallback to requested username
 			}
 
-			if actualUsername != "" && sessionID != "" {
-				a.setCurrentAccount(actualUsername, password, sessionID)
+			if actualUsername != "" {
+				a.setCurrentAccount(actualUsername, password)
 
 				// Rebuild system prompt with new credentials
 				if err := a.rebuildSystemMemory(); err != nil {
@@ -1163,7 +1154,7 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 	return result, err
 }
 
-func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
+func (m *Mysis) setCurrentAccount(username, password string) {
 	m.mu.Lock()
 	storeRef := m.store
 
@@ -1179,7 +1170,6 @@ func (m *Mysis) setCurrentAccount(username, password, sessionID string) {
 
 	m.currentAccountUsername = username
 	m.currentPassword = password
-	m.currentSessionID = sessionID
 	m.mu.Unlock()
 
 	if storeRef != nil {
@@ -1199,27 +1189,6 @@ func (m *Mysis) releaseCurrentAccount() {
 	}
 	m.currentAccountUsername = ""
 	m.currentPassword = ""
-	m.currentSessionID = ""
-}
-
-// extractSessionID extracts session_id from tool result content
-func extractSessionID(result *mcp.ToolResult) string {
-	if result == nil || result.IsError {
-		return ""
-	}
-
-	for _, block := range result.Content {
-		if block.Type == "text" {
-			// Parse JSON from text block
-			var data map[string]interface{}
-			if err := json.Unmarshal([]byte(block.Text), &data); err == nil {
-				if sessionID, ok := data["session_id"].(string); ok {
-					return sessionID
-				}
-			}
-		}
-	}
-	return ""
 }
 
 // extractPassword extracts password from tool result (for register responses)
@@ -1592,7 +1561,7 @@ func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
 // Rationale:
 //   - Multi-step tool calling (login → get_status → get_notifications) requires complete tool history
 //   - Historical turns can be compressed without breaking current reasoning
-//   - Preserves session_id and other tool results from within the current turn
+//   - Preserves tool results from within the current turn
 //   - Prevents orphaned tool calls by keeping complete tool loops together
 //
 // Example context for multi-step turn:
@@ -1601,8 +1570,8 @@ func (m *Mysis) findLastUserPromptIndex(memories []*store.Memory) int {
 //	  {role: system, content: "You are Mysis Alpha..."},
 //	  {role: user, source: direct, content: "Check ship status"},
 //	  {role: assistant, content: "[TOOL_CALLS]call_1:login:{}"},
-//	  {role: tool, content: "call_1:session_id: abc123"},
-//	  {role: assistant, content: "[TOOL_CALLS]call_2:get_status:{\"session_id\":\"abc123\"}"},
+//	  {role: tool, content: "call_1:Login successful"},
+//	  {role: assistant, content: "[TOOL_CALLS]call_2:get_status:{}"},
 //	  {role: tool, content: "call_2:Ship health: 100%"}
 //	]
 func (m *Mysis) getContextMemories() ([]*store.Memory, bool, error) {
@@ -1966,10 +1935,9 @@ func (m *Mysis) buildSystemPrompt() string {
 	accountDetails := constants.AccountDetailsFallback
 	username := m.CurrentAccountUsername()
 	password := m.CurrentPassword()
-	sessionID := m.CurrentSessionID()
 
-	if username != "" && sessionID != "" {
-		accountDetails = fmt.Sprintf(constants.AccountDetailsTemplate, username, password, sessionID)
+	if username != "" {
+		accountDetails = fmt.Sprintf(constants.AccountDetailsTemplate, username, password)
 	}
 
 	prompt = strings.Replace(prompt, "{{ACCOUNT_DETAILS}}", accountDetails, 1)

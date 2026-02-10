@@ -207,7 +207,6 @@ func TestStubClient_CallTool_WithArguments(t *testing.T) {
 	ctx := context.Background()
 
 	args := map[string]interface{}{
-		"session_id": "test_session",
 		"some_param": "test_value",
 	}
 
