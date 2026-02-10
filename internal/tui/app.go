@@ -984,11 +984,15 @@ func (m *Model) loadMysisLogs() {
 		return
 	}
 
-	// Filter out broadcast messages from conversation log
+	// Filter out broadcast and system messages from conversation log
 	var filteredLogs []LogEntry
 	for _, mem := range memories {
 		// Skip broadcast messages (both sent and received)
 		if mem.Source == store.MemorySourceBroadcast {
+			continue
+		}
+		// Skip system messages (system prompts)
+		if mem.Role == store.MemoryRoleSystem {
 			continue
 		}
 		senderName := m.mysisNameByID(mem.SenderID)
