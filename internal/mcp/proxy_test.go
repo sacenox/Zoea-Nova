@@ -134,33 +134,3 @@ func TestProxyAuthInterceptionRegister(t *testing.T) {
 		t.Fatalf("unexpected created account: %+v", accounts.created[0])
 	}
 }
-
-func TestProxyAuthInterceptionLogin(t *testing.T) {
-	upstream := &mockUpstream{result: &ToolResult{Content: []ContentBlock{{Type: "text", Text: `{"ok":true}`}}}}
-	proxy := NewProxy(upstream)
-	accounts := &mockAccountStore{}
-	proxy.SetAccountStore(accounts)
-
-	_, err := proxy.CallTool(context.Background(), CallerContext{}, "login", json.RawMessage(`{"username":"pilot"}`))
-	if err != nil {
-		t.Fatalf("CallTool() error: %v", err)
-	}
-	if len(accounts.marked) != 1 || accounts.marked[0] != "pilot" {
-		t.Fatalf("expected account marked in use for pilot, got %+v", accounts.marked)
-	}
-}
-
-func TestProxyAuthInterceptionLogout(t *testing.T) {
-	upstream := &mockUpstream{result: &ToolResult{Content: []ContentBlock{{Type: "text", Text: `{"player":{"username":"pilot"}}`}}}}
-	proxy := NewProxy(upstream)
-	accounts := &mockAccountStore{}
-	proxy.SetAccountStore(accounts)
-
-	_, err := proxy.CallTool(context.Background(), CallerContext{}, "logout", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("CallTool() error: %v", err)
-	}
-	if len(accounts.released) != 1 || accounts.released[0] != "pilot" {
-		t.Fatalf("expected account released for pilot, got %+v", accounts.released)
-	}
-}

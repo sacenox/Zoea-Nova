@@ -19,21 +19,11 @@ install: build
 	cp bin/zoea $(HOME)/.zoea-nova/bin/zoea
 
 test:
-	go test -race -timeout=60s -coverprofile=coverage.out ./internal/config ./internal/core ./internal/integration ./internal/mcp ./internal/provider ./internal/store
-	go test -timeout=30s -coverprofile=coverage-tui.out ./internal/tui
+	go test -race -timeout=60s -coverprofile=coverage.out ./internal/**
 	go tool cover -func=coverage.out
 	@echo ""
-	@echo "TUI package coverage:"
-	@go tool cover -func=coverage-tui.out | grep "^total:"
-
-test-integration:
-	go test -v ./internal/tui -run TestIntegration -count=1
-
-check-upstream-version:
-	@echo "Config upstream version:"
-	@rg "upstream_version" config.toml
-	@echo "Remote upstream version:"
-	@curl -s https://www.spacemolt.com/api.md | rg -o "gameserver v[0-9.]+"
+	@echo "package coverage:"
+	@go tool cover -func=coverage.out | grep "^total:"
 
 clean:
 	rm -rf bin/ coverage.out

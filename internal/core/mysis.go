@@ -521,9 +521,6 @@ func (m *Mysis) Stop() error {
 	a.cancel = nil
 	a.mu.Unlock()
 
-	// Release resources
-	a.releaseCurrentAccount()
-
 	// Close provider HTTP client
 	if a.provider != nil {
 		if err := a.provider.Close(); err != nil {
@@ -646,7 +643,6 @@ func (m *Mysis) SendMessageFrom(content string, source store.MemorySource, sende
 					Str("mysis", a.name).
 					Err(err).
 					Msg("MCP connection lost - releasing account")
-				a.releaseCurrentAccount()
 				if rebuildErr := a.rebuildSystemMemory(); rebuildErr != nil {
 					log.Error().Err(rebuildErr).Msg("failed to rebuild system memory after MCP session loss")
 				}
@@ -1104,7 +1100,6 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 			Str("tool", tc.Name).
 			Err(err).
 			Msg("MCP connection lost during tool call - releasing account")
-		a.releaseCurrentAccount()
 		if rebuildErr := a.rebuildSystemMemory(); rebuildErr != nil {
 			log.Error().Err(rebuildErr).Msg("failed to rebuild system memory after MCP session loss")
 		}
@@ -1140,13 +1135,6 @@ func (m *Mysis) executeToolCall(ctx context.Context, mcpProxy *mcp.Proxy, tc pro
 				if err := a.rebuildSystemMemory(); err != nil {
 					log.Error().Err(err).Msg("failed to rebuild system memory after login")
 				}
-			}
-		case "logout":
-			a.releaseCurrentAccount()
-
-			// Rebuild system prompt to clear credentials
-			if err := a.rebuildSystemMemory(); err != nil {
-				log.Error().Err(err).Msg("failed to rebuild system memory after logout")
 			}
 		}
 	}
@@ -1391,9 +1379,6 @@ func (m *Mysis) setError(err error) {
 
 	// Emit state change event
 	a.emitStateChange(oldState, MysisStateErrored)
-
-	// Release account (if any) to allow restart
-	a.releaseCurrentAccount()
 
 	// Emit error event
 	a.publishCriticalEvent(Event{
@@ -2476,9 +2461,6 @@ func (m *Mysis) setErrorState(err error) {
 			Msg("failed to update mysis state to errored")
 	}
 	a.emitStateChange(oldState, MysisStateErrored)
-
-	// Release account (if any) to allow restart
-	a.releaseCurrentAccount()
 
 	a.publishCriticalEvent(Event{
 		Type:      EventMysisError,
