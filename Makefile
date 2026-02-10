@@ -1,4 +1,4 @@
-.PHONY: fmt build run test test-integration install clean db-reset-accounts check-upstream-version
+.PHONY: fmt build run test test-integration install clean db-reset-accounts check-upstream-version mcp_client
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -34,3 +34,7 @@ db-reset-accounts:
 	rm -f $(DB_PATH) $(DB_PATH)-shm $(DB_PATH)-wal
 	sqlite3 $(DB_PATH) < internal/store/schema.sql
 	test -s $(ACCOUNTS_EXPORT) && sqlite3 $(DB_PATH) < $(ACCOUNTS_EXPORT) || true
+
+mcp_client:
+	go build -o bin/mcp_client ./cmd/mcp_client
+	./bin/mcp_client
